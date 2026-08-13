@@ -1,0 +1,71 @@
+{
+ "slug": "sticky-header",
+ "table": {
+  "snapshotId": "msr7ckr0-10lkk6q2-1",
+  "url": "http://127.0.0.1:56650/sticky-header.html",
+  "title": "sticky header 覆盖目标",
+  "pageHash": "u1daof",
+  "items": [
+   {
+    "ref": "e1",
+    "role": "button",
+    "name": "Global search",
+    "path": []
+   },
+   {
+    "ref": "e5",
+    "role": "button",
+    "name": "Export CSV",
+    "path": [
+     "Summary"
+    ]
+   }
+  ],
+  "truncated": false,
+  "degraded": false,
+  "ambiguity": 0,
+  "stats": {
+   "elementsScanned": 14,
+   "candidates": 5,
+   "visible": 5,
+   "emitted": 5,
+   "shadowRoots": 0,
+   "emptyName": 0,
+   "modalScoped": false,
+   "ms": {
+    "walk": 1.2,
+    "visibility": 0.1,
+    "semantics": 2.7,
+    "name": 2,
+    "total": 4
+   }
+  }
+ },
+ "targets": [
+  {
+   "id": "sticky-target",
+   "goal": "export csv",
+   "group": "occlusion",
+   "descriptor": {
+    "role": "button",
+    "name": "Export CSV"
+   },
+   "trueRect": [
+    16,
+    156,
+    90,
+    23
+   ],
+   "ack": {
+    "resolved": "e5",
+    "rect": [
+     16,
+     156,
+     90,
+     23
+    ],
+    "scrolled": false
+   }
+  }
+ ]
+}

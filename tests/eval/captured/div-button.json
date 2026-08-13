@@ -1,0 +1,65 @@
+{
+ "slug": "div-button",
+ "table": {
+  "snapshotId": "msr7clnh-ogz3c5ld-1",
+  "url": "http://127.0.0.1:56650/div-button.html",
+  "title": "无 aria 的 div 按钮",
+  "pageHash": "d1i61b",
+  "items": [
+   {
+    "ref": "e4",
+    "role": "generic",
+    "name": "Publish draft",
+    "path": [
+     "Toolbar"
+    ]
+   }
+  ],
+  "truncated": false,
+  "degraded": false,
+  "ambiguity": 0,
+  "stats": {
+   "elementsScanned": 12,
+   "candidates": 4,
+   "visible": 4,
+   "emitted": 4,
+   "shadowRoots": 0,
+   "emptyName": 0,
+   "modalScoped": false,
+   "ms": {
+    "walk": 0.7,
+    "visibility": 0.1,
+    "semantics": 3.1,
+    "name": 2.5,
+    "total": 3.9
+   }
+  }
+ },
+ "targets": [
+  {
+   "id": "divbtn",
+   "goal": "publish the draft",
+   "group": "div-button",
+   "descriptor": {
+    "role": "generic",
+    "name": "Publish draft"
+   },
+   "trueRect": [
+    16,
+    113,
+    1248,
+    17
+   ],
+   "ack": {
+    "resolved": "e4",
+    "rect": [
+     16,
+     113,
+     1248,
+     17
+    ],
+    "scrolled": false
+   }
+  }
+ ]
+}

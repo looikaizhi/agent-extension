@@ -1,0 +1,228 @@
+{
+ "shadow-nested": [
+  {
+   "id": "deep-scale",
+   "goal": "scale the node pool",
+   "group": "shadow",
+   "descriptor": {
+    "role": "button",
+    "name": "Scale"
+   }
+  }
+ ],
+ "shadow-slot": [
+  {
+   "id": "slotted-go",
+   "goal": "rotate credentials",
+   "group": "shadow",
+   "descriptor": {
+    "role": "button",
+    "name": "Go"
+   }
+  }
+ ],
+ "iframe-same-origin": [
+  {
+   "id": "outer-only",
+   "goal": "outer action",
+   "group": "iframe",
+   "descriptor": {
+    "role": "button",
+    "name": "Outer action"
+   }
+  }
+ ],
+ "modal-dialog": [
+  {
+   "id": "modal-confirm",
+   "goal": "delete forever",
+   "group": "modal",
+   "descriptor": {
+    "role": "button",
+    "name": "Delete forever"
+   }
+  }
+ ],
+ "inert-subtree": [
+  {
+   "id": "active-next",
+   "goal": "go to next step",
+   "group": "inert",
+   "descriptor": {
+    "role": "button",
+    "name": "Next"
+   }
+  }
+ ],
+ "virtual-scroll": [
+  {
+   "id": "vs-row",
+   "goal": "inspect run 42",
+   "group": "virtual",
+   "descriptor": {
+    "role": "button",
+    "name": "Inspect run 42"
+   }
+  }
+ ],
+ "content-visibility": [
+  {
+   "id": "cv-visible",
+   "goal": "copy the sample",
+   "group": "content-visibility",
+   "descriptor": {
+    "role": "button",
+    "name": "Copy sample"
+   }
+  }
+ ],
+ "sticky-header": [
+  {
+   "id": "sticky-target",
+   "goal": "export csv",
+   "group": "occlusion",
+   "descriptor": {
+    "role": "button",
+    "name": "Export CSV"
+   }
+  }
+ ],
+ "canvas-only": [
+  {
+   "id": "canvas-sibling",
+   "goal": "download the data",
+   "group": "canvas",
+   "descriptor": {
+    "role": "button",
+    "name": "Download data"
+   }
+  }
+ ],
+ "div-button": [
+  {
+   "id": "divbtn",
+   "goal": "publish the draft",
+   "group": "div-button",
+   "descriptor": {
+    "role": "generic",
+    "name": "Publish draft"
+   }
+  }
+ ],
+ "aria-labelledby-chain": [
+  {
+   "id": "labelledby",
+   "goal": "revoke the production key",
+   "group": "aria",
+   "descriptor": {
+    "role": "button",
+    "name": "Revoke production key"
+   }
+  }
+ ],
+ "dup-across-sections": [
+  {
+   "id": "dup-webhooks",
+   "goal": "copy the webhook secret",
+   "group": "duplicate",
+   "descriptor": {
+    "role": "button",
+    "name": "Copy",
+    "scope": "Webhooks"
+   }
+  }
+ ],
+ "dup-table-rows": [
+  {
+   "id": "row-stop",
+   "goal": "stop instance i-bbb222",
+   "group": "duplicate",
+   "descriptor": {
+    "role": "button",
+    "name": "Stop",
+    "scope": "i-bbb222"
+   }
+  }
+ ],
+ "dup-unresolvable": [
+  {
+   "id": "nth-second",
+   "goal": "copy the second token",
+   "group": "duplicate",
+   "descriptor": {
+    "role": "button",
+    "name": "Copy",
+    "nth": 2
+   },
+   "adversarial": true,
+   "note": "刻意构造成 (path,role,name) 不可能唯一；正确行为是落到 nth"
+  }
+ ],
+ "rtl": [
+  {
+   "id": "rtl-save",
+   "goal": "save the changes",
+   "group": "i18n",
+   "descriptor": {
+    "role": "button",
+    "name": "حفظ التغييرات"
+   }
+  }
+ ],
+ "dark-mode": [
+  {
+   "id": "dark-apply",
+   "goal": "apply the theme",
+   "group": "theming",
+   "descriptor": {
+    "role": "button",
+    "name": "Apply theme"
+   }
+  }
+ ],
+ "icon-only": [
+  {
+   "id": "icon-trash",
+   "goal": "delete the file",
+   "group": "icon",
+   "descriptor": {
+    "role": "button",
+    "name": "Delete file"
+   }
+  }
+ ],
+ "hidden-variants": [
+  {
+   "id": "visible-one",
+   "goal": "confirm",
+   "group": "visibility",
+   "descriptor": {
+    "role": "button",
+    "name": "Confirm"
+   }
+  }
+ ],
+ "long-names": [
+  {
+   "id": "long-a",
+   "goal": "apply retention immediately",
+   "group": "truncation",
+   "descriptor": {
+    "role": "button",
+    "name": "immediately",
+    "nameMatch": "contains"
+   }
+  }
+ ],
+ "popover-open": [
+  {
+   "id": "popover-item",
+   "goal": "sign out",
+   "group": "popover",
+   "descriptor": {
+    "role": "button",
+    "name": "Sign out"
+   }
+  }
+ ]
+}

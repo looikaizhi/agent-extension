@@ -1,0 +1,63 @@
+{
+ "slug": "shadow-slot",
+ "table": {
+  "snapshotId": "msr7chu7-il8azq88-1",
+  "url": "http://127.0.0.1:56650/shadow-slot.html",
+  "title": "slot 分发",
+  "pageHash": "pizmpl",
+  "items": [
+   {
+    "ref": "e4",
+    "role": "button",
+    "name": "Go",
+    "path": []
+   }
+  ],
+  "truncated": false,
+  "degraded": false,
+  "ambiguity": 0,
+  "stats": {
+   "elementsScanned": 16,
+   "candidates": 4,
+   "visible": 4,
+   "emitted": 4,
+   "shadowRoots": 1,
+   "emptyName": 0,
+   "modalScoped": false,
+   "ms": {
+    "walk": 1.2,
+    "visibility": 0.1,
+    "semantics": 2.2,
+    "name": 1.7,
+    "total": 3.5
+   }
+  }
+ },
+ "targets": [
+  {
+   "id": "slotted-go",
+   "goal": "rotate credentials",
+   "group": "shadow",
+   "descriptor": {
+    "role": "button",
+    "name": "Go"
+   },
+   "trueRect": [
+    16,
+    128,
+    34,
+    23
+   ],
+   "ack": {
+    "resolved": "e4",
+    "rect": [
+     16,
+     128,
+     34,
+     23
+    ],
+    "scrolled": false
+   }
+  }
+ ]
+}

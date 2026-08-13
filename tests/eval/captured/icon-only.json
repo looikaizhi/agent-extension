@@ -1,0 +1,73 @@
+{
+ "slug": "icon-only",
+ "table": {
+  "snapshotId": "msr7cow2-vglkux18-1",
+  "url": "http://127.0.0.1:56650/icon-only.html",
+  "title": "纯图标按钮（svg title 兜底）",
+  "pageHash": "24xd0r",
+  "items": [
+   {
+    "ref": "e4",
+    "role": "button",
+    "name": "Delete file",
+    "path": [
+     "Actions"
+    ]
+   },
+   {
+    "ref": "e5",
+    "role": "button",
+    "name": "Rename file",
+    "path": [
+     "Actions"
+    ]
+   }
+  ],
+  "truncated": false,
+  "degraded": false,
+  "ambiguity": 0,
+  "stats": {
+   "elementsScanned": 17,
+   "candidates": 5,
+   "visible": 5,
+   "emitted": 5,
+   "shadowRoots": 0,
+   "emptyName": 0,
+   "modalScoped": false,
+   "ms": {
+    "walk": 1.7,
+    "visibility": 0.3,
+    "semantics": 3.6,
+    "name": 2.5,
+    "total": 5.6
+   }
+  }
+ },
+ "targets": [
+  {
+   "id": "icon-trash",
+   "goal": "delete the file",
+   "group": "icon",
+   "descriptor": {
+    "role": "button",
+    "name": "Delete file"
+   },
+   "trueRect": [
+    16,
+    113,
+    32,
+    25
+   ],
+   "ack": {
+    "resolved": "e4",
+    "rect": [
+     16,
+     113,
+     32,
+     25
+    ],
+    "scrolled": false
+   }
+  }
+ ]
+}

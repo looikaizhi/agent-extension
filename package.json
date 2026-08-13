@@ -1,0 +1,40 @@
+{
+  "name": "page-guide",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip",
+    "postinstall": "wxt prepare",
+    "typecheck": "wxt prepare && tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "wxt build && node tests/e2e/smoke.mjs",
+    "verify": "npm run typecheck && npm run test && npm run e2e",
+    "measure": "wxt build && node tests/e2e/measure.mjs",
+    "eval": "wxt build && node tests/eval/capture.mjs && node --experimental-strip-types tests/eval/score.mjs",
+    "eval:score": "node --experimental-strip-types tests/eval/score.mjs"
+  },
+  "dependencies": {
+    "dom-accessibility-api": "0.7.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/aria-query": "5.0.4",
+    "@types/chrome": "^0.1.12",
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitest/browser": "^4.1.10",
+    "@wxt-dev/module-react": "^1.2.2",
+    "aria-query": "5.3.2",
+    "playwright": "^1.62.1",
+    "playwright-core": "^1.62.1",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.10",
+    "wxt": "0.21.3"
+  }
+}

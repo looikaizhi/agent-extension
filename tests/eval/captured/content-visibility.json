@@ -1,0 +1,73 @@
+{
+ "slug": "content-visibility",
+ "table": {
+  "snapshotId": "msr7ckaq-pwbuxuzh-1",
+  "url": "http://127.0.0.1:56650/content-visibility.html",
+  "title": "content-visibility:auto",
+  "pageHash": "50n2dv",
+  "items": [
+   {
+    "ref": "e4",
+    "role": "button",
+    "name": "Copy sample",
+    "path": [
+     "Visible part"
+    ]
+   },
+   {
+    "ref": "e7",
+    "role": "button",
+    "name": "Copy deferred",
+    "path": [
+     "Deferred"
+    ]
+   }
+  ],
+  "truncated": false,
+  "degraded": false,
+  "ambiguity": 0,
+  "stats": {
+   "elementsScanned": 14,
+   "candidates": 7,
+   "visible": 7,
+   "emitted": 7,
+   "shadowRoots": 0,
+   "emptyName": 0,
+   "modalScoped": false,
+   "ms": {
+    "walk": 1.2,
+    "visibility": 0.2,
+    "semantics": 3.4,
+    "name": 2.4,
+    "total": 4.8
+   }
+  }
+ },
+ "targets": [
+  {
+   "id": "cv-visible",
+   "goal": "copy the sample",
+   "group": "content-visibility",
+   "descriptor": {
+    "role": "button",
+    "name": "Copy sample"
+   },
+   "trueRect": [
+    16,
+    113,
+    100,
+    23
+   ],
+   "ack": {
+    "resolved": "e4",
+    "rect": [
+     16,
+     113,
+     100,
+     23
+    ],
+    "scrolled": false
+   }
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>slot 分发</title>
+<style>body{font:14px system-ui;margin:0;padding:16px}section{margin:12px 0}
+button,a{font:inherit}h2{font-size:15px;margin:8px 0}</style></head><body>
+
+<main><h1>Settings</h1>
+<slot-card><span slot="label">Rotate credentials</span><button data-eval="slotted-go">Go</button></slot-card></main>
+<script>
+customElements.define('slot-card', class extends HTMLElement { connectedCallback(){
+  this.attachShadow({mode:'open'}).innerHTML =
+    '<section role="region" aria-label="Credentials"><h2><slot name="label"></slot></h2><slot></slot></section>';
+}});
+</script>
+</body></html>

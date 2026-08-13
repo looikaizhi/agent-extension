@@ -1,0 +1,63 @@
+{
+ "slug": "canvas-only",
+ "table": {
+  "snapshotId": "msr7cl7g-i50b0lq6-1",
+  "url": "http://127.0.0.1:56650/canvas-only.html",
+  "title": "canvas 绘制，无可抽取控件",
+  "pageHash": "1v6v6mt",
+  "items": [
+   {
+    "ref": "e4",
+    "role": "button",
+    "name": "Download data",
+    "path": []
+   }
+  ],
+  "truncated": false,
+  "degraded": false,
+  "ambiguity": 0,
+  "stats": {
+   "elementsScanned": 12,
+   "candidates": 4,
+   "visible": 4,
+   "emitted": 4,
+   "shadowRoots": 0,
+   "emptyName": 0,
+   "modalScoped": false,
+   "ms": {
+    "walk": 1.1,
+    "visibility": 0.3,
+    "semantics": 2.8,
+    "name": 1.9,
+    "total": 4.2
+   }
+  }
+ },
+ "targets": [
+  {
+   "id": "canvas-sibling",
+   "goal": "download the data",
+   "group": "canvas",
+   "descriptor": {
+    "role": "button",
+    "name": "Download data"
+   },
+   "trueRect": [
+    16,
+    248,
+    112,
+    23
+   ],
+   "ack": {
+    "resolved": "e4",
+    "rect": [
+     16,
+     248,
+     112,
+     23
+    ],
+    "scrolled": false
+   }
+  }
+ ]
+}

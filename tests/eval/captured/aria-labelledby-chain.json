@@ -1,0 +1,65 @@
+{
+ "slug": "aria-labelledby-chain",
+ "table": {
+  "snapshotId": "msr7cm3v-ilcbv20a-1",
+  "url": "http://127.0.0.1:56650/aria-labelledby-chain.html",
+  "title": "aria-labelledby 链",
+  "pageHash": "1yuitjy",
+  "items": [
+   {
+    "ref": "e4",
+    "role": "button",
+    "name": "Revoke production key",
+    "path": [
+     "API keys"
+    ]
+   }
+  ],
+  "truncated": false,
+  "degraded": false,
+  "ambiguity": 0,
+  "stats": {
+   "elementsScanned": 13,
+   "candidates": 4,
+   "visible": 4,
+   "emitted": 4,
+   "shadowRoots": 0,
+   "emptyName": 0,
+   "modalScoped": false,
+   "ms": {
+    "walk": 1.6,
+    "visibility": 0.2,
+    "semantics": 3.3,
+    "name": 2.1,
+    "total": 5.1
+   }
+  }
+ },
+ "targets": [
+  {
+   "id": "labelledby",
+   "goal": "revoke the production key",
+   "group": "aria",
+   "descriptor": {
+    "role": "button",
+    "name": "Revoke production key"
+   },
+   "trueRect": [
+    163,
+    124,
+    16,
+    6
+   ],
+   "ack": {
+    "resolved": "e4",
+    "rect": [
+     163,
+     124,
+     16,
+     6
+    ],
+    "scrolled": false
+   }
+  }
+ ]
+}

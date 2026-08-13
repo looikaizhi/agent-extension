@@ -1,0 +1,73 @@
+{
+ "slug": "rtl",
+ "table": {
+  "snapshotId": "msr7cnzy-i0njlfbr-1",
+  "url": "http://127.0.0.1:56650/rtl.html",
+  "title": "RTL 布局",
+  "pageHash": "1pb5kh9",
+  "items": [
+   {
+    "ref": "e4",
+    "role": "button",
+    "name": "حفظ التغييرات",
+    "path": [
+     "الحساب"
+    ]
+   },
+   {
+    "ref": "e5",
+    "role": "button",
+    "name": "إلغاء",
+    "path": [
+     "الحساب"
+    ]
+   }
+  ],
+  "truncated": false,
+  "degraded": false,
+  "ambiguity": 0,
+  "stats": {
+   "elementsScanned": 12,
+   "candidates": 5,
+   "visible": 5,
+   "emitted": 5,
+   "shadowRoots": 0,
+   "emptyName": 0,
+   "modalScoped": false,
+   "ms": {
+    "walk": 1.5,
+    "visibility": 0.1,
+    "semantics": 4.8,
+    "name": 3.2,
+    "total": 6.4
+   }
+  }
+ },
+ "targets": [
+  {
+   "id": "rtl-save",
+   "goal": "save the changes",
+   "group": "i18n",
+   "descriptor": {
+    "role": "button",
+    "name": "حفظ التغييرات"
+   },
+   "trueRect": [
+    1166,
+    119,
+    98,
+    24
+   ],
+   "ack": {
+    "resolved": "e4",
+    "rect": [
+     1166,
+     119,
+     98,
+     24
+    ],
+    "scrolled": false
+   }
+  }
+ ]
+}

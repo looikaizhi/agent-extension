@@ -1,0 +1,18 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>嵌套 shadow DOM</title>
+<style>body{font:14px system-ui;margin:0;padding:16px}section{margin:12px 0}
+button,a{font:inherit}h2{font-size:15px;margin:8px 0}</style></head><body>
+
+<main><h1>Clusters</h1>
+<outer-panel></outer-panel></main>
+<script>
+customElements.define('inner-card', class extends HTMLElement { connectedCallback(){
+  this.attachShadow({mode:'open'}).innerHTML =
+    '<section role="region" aria-label="Nodes"><h2>Node pool</h2>'+
+    '<button data-eval="deep-scale">Scale</button></section>';
+}});
+customElements.define('outer-panel', class extends HTMLElement { connectedCallback(){
+  this.attachShadow({mode:'open'}).innerHTML =
+    '<section role="region" aria-label="Cluster A"><h2>Cluster A</h2><inner-card></inner-card></section>';
+}});
+</script>
+</body></html>

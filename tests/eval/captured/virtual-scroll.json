@@ -1,0 +1,65 @@
+{
+ "slug": "virtual-scroll",
+ "table": {
+  "snapshotId": "msr7cjtw-k4nrzunf-1",
+  "url": "http://127.0.0.1:56650/virtual-scroll.html",
+  "title": "虚拟滚动：只渲染窗口内的行",
+  "pageHash": "1tljrjs",
+  "items": [
+   {
+    "ref": "e4",
+    "role": "button",
+    "name": "Inspect run 42",
+    "path": [
+     "Recent"
+    ]
+   }
+  ],
+  "truncated": false,
+  "degraded": false,
+  "ambiguity": 0,
+  "stats": {
+   "elementsScanned": 14,
+   "candidates": 4,
+   "visible": 4,
+   "emitted": 4,
+   "shadowRoots": 0,
+   "emptyName": 0,
+   "modalScoped": false,
+   "ms": {
+    "walk": 0.8,
+    "visibility": 0.1,
+    "semantics": 2.2,
+    "name": 1.5,
+    "total": 3.1
+   }
+  }
+ },
+ "targets": [
+  {
+   "id": "vs-row",
+   "goal": "inspect run 42",
+   "group": "virtual",
+   "descriptor": {
+    "role": "button",
+    "name": "Inspect run 42"
+   },
+   "trueRect": [
+    16,
+    181,
+    110,
+    23
+   ],
+   "ack": {
+    "resolved": "e4",
+    "rect": [
+     16,
+     181,
+     110,
+     23
+    ],
+    "scrolled": false
+   }
+  }
+ ]
+}

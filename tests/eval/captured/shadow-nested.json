@@ -1,0 +1,66 @@
+{
+ "slug": "shadow-nested",
+ "table": {
+  "snapshotId": "msr7ch7n-9v0pb1bb-1",
+  "url": "http://127.0.0.1:56650/shadow-nested.html",
+  "title": "嵌套 shadow DOM",
+  "pageHash": "1n4ei6y",
+  "items": [
+   {
+    "ref": "e6",
+    "role": "button",
+    "name": "Scale",
+    "path": [
+     "Nodes",
+     "Node pool"
+    ]
+   }
+  ],
+  "truncated": false,
+  "degraded": false,
+  "ambiguity": 0,
+  "stats": {
+   "elementsScanned": 16,
+   "candidates": 6,
+   "visible": 6,
+   "emitted": 6,
+   "shadowRoots": 2,
+   "emptyName": 0,
+   "modalScoped": false,
+   "ms": {
+    "walk": 3.5,
+    "visibility": 1.1,
+    "semantics": 7.3,
+    "name": 5,
+    "total": 11.9
+   }
+  }
+ },
+ "targets": [
+  {
+   "id": "deep-scale",
+   "goal": "scale the node pool",
+   "group": "shadow",
+   "descriptor": {
+    "role": "button",
+    "name": "Scale"
+   },
+   "trueRect": [
+    16,
+    169,
+    49,
+    21
+   ],
+   "ack": {
+    "resolved": "e6",
+    "rect": [
+     16,
+     169,
+     49,
+     21
+    ],
+    "scrolled": false
+   }
+  }
+ ]
+}

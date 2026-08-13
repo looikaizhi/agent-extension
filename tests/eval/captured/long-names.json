@@ -1,0 +1,74 @@
+{
+ "slug": "long-names",
+ "table": {
+  "snapshotId": "msr7cps3-ecbim2tb-1",
+  "url": "http://127.0.0.1:56650/long-names.html",
+  "title": "超长名字必须截断但仍可区分",
+  "pageHash": "l33r4p",
+  "items": [
+   {
+    "ref": "e4",
+    "role": "button",
+    "name": "Apply the ninety day retention policy to every bucket in this project immediately",
+    "path": [
+     "Retention"
+    ]
+   },
+   {
+    "ref": "e5",
+    "role": "button",
+    "name": "Apply the ninety day retention policy to every bucket in this project after review",
+    "path": [
+     "Retention"
+    ]
+   }
+  ],
+  "truncated": false,
+  "degraded": false,
+  "ambiguity": 0,
+  "stats": {
+   "elementsScanned": 12,
+   "candidates": 5,
+   "visible": 5,
+   "emitted": 5,
+   "shadowRoots": 0,
+   "emptyName": 0,
+   "modalScoped": false,
+   "ms": {
+    "walk": 0.9,
+    "visibility": 0.2,
+    "semantics": 2.7,
+    "name": 1.9,
+    "total": 3.8
+   }
+  }
+ },
+ "targets": [
+  {
+   "id": "long-a",
+   "goal": "apply retention immediately",
+   "group": "truncation",
+   "descriptor": {
+    "role": "button",
+    "name": "immediately",
+    "nameMatch": "contains"
+   },
+   "trueRect": [
+    16,
+    113,
+    529,
+    23
+   ],
+   "ack": {
+    "resolved": "e4",
+    "rect": [
+     16,
+     113,
+     529,
+     23
+    ],
+    "scrolled": false
+   }
+  }
+ ]
+}

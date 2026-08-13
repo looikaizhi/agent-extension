@@ -1,0 +1,65 @@
+{
+ "slug": "hidden-variants",
+ "table": {
+  "snapshotId": "msr7cpc5-mcavea3q-1",
+  "url": "http://127.0.0.1:56650/hidden-variants.html",
+  "title": "各种不可见形态都必须排除",
+  "pageHash": "1miyn5b",
+  "items": [
+   {
+    "ref": "e4",
+    "role": "button",
+    "name": "Confirm",
+    "path": [
+     "Real"
+    ]
+   }
+  ],
+  "truncated": false,
+  "degraded": false,
+  "ambiguity": 0,
+  "stats": {
+   "elementsScanned": 18,
+   "candidates": 9,
+   "visible": 4,
+   "emitted": 4,
+   "shadowRoots": 0,
+   "emptyName": 0,
+   "modalScoped": false,
+   "ms": {
+    "walk": 1.2,
+    "visibility": 0.2,
+    "semantics": 2.8,
+    "name": 1.9,
+    "total": 4.2
+   }
+  }
+ },
+ "targets": [
+  {
+   "id": "visible-one",
+   "goal": "confirm",
+   "group": "visibility",
+   "descriptor": {
+    "role": "button",
+    "name": "Confirm"
+   },
+   "trueRect": [
+    16,
+    113,
+    68,
+    23
+   ],
+   "ack": {
+    "resolved": "e4",
+    "rect": [
+     16,
+     113,
+     68,
+     23
+    ],
+    "scrolled": false
+   }
+  }
+ ]
+}
