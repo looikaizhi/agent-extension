@@ -23,8 +23,14 @@ export interface ProviderConfig {
   baseURL: string;
   model: string;
   apiKey: string;
-  /** P-05: the user's quota is unknowable to us, so the knob is theirs. */
-  maxConcurrency: number;
+  /**
+   * Drives `budgetFor()` (`src/core/extractor/project.ts`), which sizes every
+   * element table sent to the model. Clamped in `loadConfig()`, not just on
+   * the form-save path, because a stored value can be corrupted or missing
+   * without ever going through the form (an S0-era config, a hand-edited
+   * `chrome.storage.local`).
+   */
+  contextWindow: number;
 }
 
 export interface Preset {
@@ -110,12 +116,31 @@ export const DEFAULT_CONFIG: ProviderConfig = {
   baseURL: PRESETS[0]!.baseURL,
   model: PRESETS[0]!.models[0]!,
   apiKey: '',
-  maxConcurrency: 2,
+  contextWindow: 32_000,
 };
+
+/** Below common local-model context windows (4k-class); anything under this
+ *  is almost certainly a mistyped value, not a deliberate choice. */
+const MIN_CONTEXT_WINDOW = 4_000;
+/** An order of magnitude past the largest context window obtainable today —
+ *  only here to catch an extra zero or two typed by mistake. `budgetFor`
+ *  stops responding to this number past 64,000 anyway, so this bound is not
+ *  meant to be a precise product ceiling. */
+const MAX_CONTEXT_WINDOW = 2_000_000;
+
+/** Non-numeric (missing, `NaN`, a string) gives no usable direction, so it
+ *  falls back to the default rather than being clamped toward anything. A
+ *  number outside the bounds is clamped to the nearer bound instead — the
+ *  user did pick a direction, and clamping honors that instead of silently
+ *  discarding it. */
+function normalizeContextWindow(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return DEFAULT_CONFIG.contextWindow;
+  return Math.min(MAX_CONTEXT_WINDOW, Math.max(MIN_CONTEXT_WINDOW, v));
+}
 
 export async function loadConfig(): Promise<ProviderConfig> {
   const v = (await chrome.storage.local.get(KEY))[KEY] as Partial<ProviderConfig> | undefined;
-  return { ...DEFAULT_CONFIG, ...v };
+  return { ...DEFAULT_CONFIG, ...v, contextWindow: normalizeContextWindow(v?.contextWindow) };
 }
 
 export const saveConfig = (c: ProviderConfig): Promise<void> =>

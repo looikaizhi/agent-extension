@@ -23,6 +23,8 @@ export interface UINode {
   rowLabel?: string;
   /** Credential / payment / 2FA input. Listed (diagnosis needs it) but never highlightable. */
   sensitive?: true;
+  /** Absolute destination for link-like elements — see `PromptItem.href`. */
+  href?: string;
   /** Interactive only through the focusability fallback — a `<div tabindex="0">`
    *  acting as a button. Its role is 'generic', so projection would otherwise
    *  drop it and the whole div-button family could never be guided to. */
@@ -95,7 +97,44 @@ export interface PromptItem {
   state?: UIState[];
   /** Only when (path, role, name) is still not unique. */
   nth?: number;
+  /**
+   * Present only when the name is **not** text the user can read on screen.
+   *
+   * The test is visibility, not accessible-name status: `placeholder` renders
+   * as grey text in an empty input, so it is exempt like `label` / `content`.
+   * `alt` is not exempt — an icon button's alt text is never painted, so the
+   * model still needs the flag or it will say "click the button that says X"
+   * about text nobody can see.
+   *
+   * `aria-label` fails that same visibility test and is exempt anyway. That is
+   * a deliberate carve-out on a second axis: an author writes an `aria-label`
+   * for a human to hear, so it is nearly always sound prose, whereas `title` /
+   * testid / href are machine strings. Flagging `aria-label` would fire on the
+   * majority of icon buttons and drown the flag in noise.
+   *
+   * Serialised as a single bit (see `toPromptText`) — spelling out which
+   * fallback it was would cost ~40x the tokens for something the model does
+   * not need to know.
+   */
+  nameSource?: NameSource;
   sensitive?: true;
+  /**
+   * Where this control leads, absolute, for link-like elements only.
+   *
+   * Present so the **host** can tell a same-site step from one that leaves the
+   * site *before* the user commits to it (07's P-2) — the promise is "you see
+   * the destination before you go", which is impossible without knowing it.
+   *
+   * The page is the only honest source. The model cannot supply it (S-07: it
+   * outputs refs, never URLs), and asking it to would invite exactly the
+   * fabrication S-01's adversarial fixtures exist to catch.
+   *
+   * **Never serialised into the prompt** (`toPromptText`, and `href.spec.ts`
+   * asserts it): deciding is the service worker's job (design doc §8.3), the
+   * model has no use for it, and a screen of links would cost real tokens to
+   * tell it something it must not act on.
+   */
+  href?: string;
 }
 
 export interface PromptTable {

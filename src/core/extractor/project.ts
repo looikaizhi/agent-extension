@@ -69,7 +69,22 @@ export function describeAll(view: LocatorView, budget: ProjectBudget): readonly 
       path: pathOf(node, byRef, headings),
     };
     if (node.state) item.state = node.state;
+    // Marked when the name is not text the user can read on screen — not the
+    // same split as accessible-name status. `placeholder` renders as grey
+    // text in an empty input, so it stays unmarked alongside `label` /
+    // `content`; `alt` does not, because an icon's alt text is never painted.
+    if (
+      node.nameSource !== 'aria-label' &&
+      node.nameSource !== 'aria-labelledby' &&
+      node.nameSource !== 'label' &&
+      node.nameSource !== 'content' &&
+      node.nameSource !== 'placeholder'
+    )
+      item.nameSource = node.nameSource;
     if (node.sensitive) item.sensitive = true;
+    // Carried to the host, never to the model — `toPromptText` does not
+    // serialise it and `href.spec.ts` asserts that it never will.
+    if (node.href) item.href = node.href;
     return { node, item };
   });
 
@@ -220,7 +235,7 @@ function headingsBefore(view: LocatorView, byRef: Map<Ref, UINode>): Map<Ref, st
 }
 
 /**
- * Grouping path. Serialised as group headers by `toPromptYaml`, not as a
+ * Grouping path. Serialised as group headers by `toPromptText`, not as a
  * per-node field: 150 nodes × 7 tokens ≈ 1050 tokens versus ~15 groups × 6
  * tokens ≈ 90 for the same information.
  */
@@ -277,20 +292,52 @@ function ambiguityOf(items: readonly PromptItem[]): number {
   return +((dup / items.length) * 100).toFixed(1);
 }
 
-/** Group-header serialisation. Step 2 owns the prompt, but the shape is fixed here. */
-export function toPromptYaml(table: PromptTable): string {
+/**
+ * The text actually sent to the model. Group-header serialisation: `path` is
+ * written once per run of items that share it, not repeated per item.
+ *
+ * One item per line, keys unnamed: `ref role "name"` rather than
+ * `ref: e1  role: link  name: "x"`. The named form repeats three key names on
+ * every line — measured at 150 items, 7623 characters. This form drops them:
+ * 4366 characters for the same 150 items, a 43% cut, with zero information
+ * loss.
+ *
+ * Two marks carry information the shape alone can't: `~` before the name
+ * means the name is not text the user can read on screen — it came from a
+ * fallback (`title`, `href`, testid, …), so the model is describing the
+ * control by a string nobody sees painted. `!secret` means this is a
+ * credential input; unmarked, the model will propose it as a step, and S-03
+ * hard-rejects it at the render boundary — the user sees a step silently
+ * vanish instead of never being offered it.
+ *
+ * Headers follow document order, not a `path`-keyed bucket: a header is
+ * written once per *contiguous run* of items that share a `path`, so a
+ * `path` that gets interrupted by a different one and then resumes (A, B,
+ * A) prints its header twice. That is deliberate, not an oversight —
+ * bucketing by `path` would reorder the items to make the runs contiguous,
+ * and document order is itself information the model uses: it mirrors how
+ * the page reads and is exactly what `score()` prioritises. An extra header
+ * line costs a handful of tokens; silently reordering controls costs the
+ * thing document order exists to preserve.
+ */
+export function toPromptText(table: PromptTable): string {
   const lines: string[] = [];
-  let lastPath = '\0';
+  let lastPath: string | undefined;
   for (const it of table.items) {
     const p = it.path.join('›');
     if (p !== lastPath) {
       lastPath = p;
       if (p) lines.push(`## ${it.path.join(' › ')}`);
     }
-    const bits = [`ref: ${it.ref}`, `role: ${it.role}`, `name: ${JSON.stringify(it.name)}`];
-    if (it.nth !== undefined) bits.push(`nth: ${it.nth}`);
-    if (it.state?.length) bits.push(`state: [${it.state.join(', ')}]`);
-    lines.push(`- ${bits.join('  ')}`);
+    const mark = it.nameSource ? '~' : '';
+    const tail = [
+      it.nth !== undefined ? `#${it.nth}` : '',
+      it.state?.length ? `[${it.state.join(',')}]` : '',
+      it.sensitive ? '!secret' : '',
+    ]
+      .filter(Boolean)
+      .join(' ');
+    lines.push(`${it.ref} ${it.role} ${mark}${JSON.stringify(it.name)}${tail ? ` ${tail}` : ''}`);
   }
   return lines.join('\n');
 }

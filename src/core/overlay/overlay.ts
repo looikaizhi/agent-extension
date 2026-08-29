@@ -33,6 +33,10 @@ export type OverlayStatus =
   | 'offscreen_down'
   | 'occluded'
   | 'lost'
+  /** The target is gone *because the user just used it* — the page is moving
+   *  and the next step is being worked out. A distinct state from `lost`
+   *  because the two are opposites: this one means the step succeeded. */
+  | 'settling'
   | 'ambiguous';
 
 export interface StepView {
@@ -40,6 +44,8 @@ export interface StepView {
   total: number;
   title: string;
   detail?: string;
+  /** For an `input` step: the text to type. Shown, never typed. */
+  value?: string;
   /** What the step was looking for. Shown on the lost screen: "找不到目标" with
    *  no object is unactionable, and the person most likely to be reading it is
    *  the one who wrote the descriptor. */
@@ -151,6 +157,11 @@ export class Overlay {
     this.root.querySelector('.step-n')!.textContent = `步骤 ${step.index + 1} / ${step.total}`;
     this.root.querySelector('.title')!.textContent = step.title;
     this.root.querySelector('.detail')!.textContent = step.detail ?? '';
+    // The suggested text sits next to the box, in a field the user copies from
+    // by reading it. Nothing here writes into the page.
+    const val = this.root.querySelector('.value') as HTMLElement;
+    val.textContent = step.value ? `输入：${step.value}` : '';
+    val.style.display = step.value ? '' : 'none';
     this.root.querySelector('.looking')!.textContent = step.looking ?? '';
   }
 
@@ -304,6 +315,7 @@ const NOTICE: Partial<Record<OverlayStatus, string>> = {
   offscreen_down: '目标在下方 ↓',
   occluded: '目标被其他内容遮挡',
   lost: '找不到这一步的目标，页面可能已经变化。',
+  settling: '这一步完成了，正在看新页面…',
   ambiguous: '这一步的目标是下列几个之一，请按说明判断。',
 };
 
@@ -337,6 +349,8 @@ const TEMPLATE = `
   .step-n { font-size: 11px; letter-spacing: .09em; opacity: .55; margin-bottom: 4px; }
   .title { font-weight: 600; margin-bottom: 4px; }
   .detail { font-size: 13px; opacity: .82; }
+  .value { font-size: 13px; margin-top: 4px; padding: 3px 6px; border-radius: 4px;
+           background: rgba(255,255,255,.12); font-family: ui-monospace, monospace; }
   .notice { font-size: 12px; color: #ffca6b; margin-top: 6px; }
   .notice:empty { display: none; }
   .looking { font-size: 11.5px; opacity: .6; margin-top: 4px; font-family: ui-monospace, monospace; }
@@ -363,10 +377,11 @@ const TEMPLATE = `
   <div class="step-n"></div>
   <div class="title"></div>
   <div class="detail"></div>
+  <div class="value"></div>
   <div class="notice"></div>
   <div class="looking"></div>
   <div class="row step-actions">
-    <button class="btn-next primary">下一步</button>
+    <button class="btn-next primary" title="把焦点移到目标上，之后按回车或空格即可触发——扩展不代你操作">跳到目标</button>
     <button class="btn-skip">跳过</button>
     <button class="btn-exit">结束</button>
   </div>

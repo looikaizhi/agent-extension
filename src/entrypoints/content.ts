@@ -1,4 +1,5 @@
-import { extract } from '@/core/extractor/extract';
+import { extract, extractPageHash } from '@/core/extractor/extract';
+import { pageStructureChanged } from '@/core/extractor/fingerprint';
 import { fullTable, project } from '@/core/extractor/project';
 import { registry } from '@/core/extractor/registry';
 import { bindStep } from '@/core/packs/bind';
@@ -29,6 +30,10 @@ export default defineContentScript({
   main() {
     let overlay: Overlay | null = null;
     let tracker: TargetTracker | null = null;
+    /** The element the current step is pointing at, for `onNext` to hand the
+     *  keyboard to. Kept beside `tracker` because both are per-step and both
+     *  are cleared by `teardown`. */
+    let targetEl: HTMLElement | null = null;
     /** The one step currently on screen. There is no flow here, by design. */
     let current: HighlightCommand | null = null;
     let off: (() => void) | null = null;
@@ -60,7 +65,19 @@ export default defineContentScript({
         // The renderer reports what the user did and stops there. Choosing the
         // next step is the flow owner's job — this process does not survive a
         // navigation, so it must not hold anything it cannot rebuild.
-        onNext: () => report('STEP_CONFIRMED'),
+        // Hands the keyboard to the target and stops there. The activation is
+        // still the user's: a focused button or link fires on Enter/Space, and
+        // that keystroke is a real user gesture the page can trust — an
+        // `el.click()` from here would be the extension acting, which is the
+        // one thing this product does not do («只指路，不开车», CONTEXT.md).
+        //
+        // It does *not* report `STEP_CONFIRMED`: the button no longer claims
+        // the step was done, so it must not say so. The existing activation
+        // listener below already reports the moment the user really fires it.
+        onNext: () => {
+          targetEl?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          targetEl?.focus({ preventScroll: true });
+        },
         onSkip: () => report('STEP_SKIPPED'),
         onExit: () => {
           if (current) emit({ type: 'SESSION_ENDED', sessionId: current.sessionId, reason: 'user_closed' });
@@ -79,10 +96,32 @@ export default defineContentScript({
     /** Removes the activation listener for the step currently on screen. */
     let unwatchActivation: (() => void) | null = null;
 
+    /**
+     * How long 「这一步完成了，正在看新页面…」 may stand before it stops being
+     * true.
+     *
+     * Nothing in this file can make the next step arrive, and there are live
+     * paths where it never does: a re-plan that cannot read the page it landed
+     * on returns silently, and so does one that has run out of model calls.
+     * Without a deadline the user is left reading a progress message with no
+     * buttons under it, which is worse than the failure screen it replaced —
+     * that screen at least carries 重试 and 结束.
+     */
+    const SETTLING_GRACE_MS = 5000;
+    let settleTimer = 0;
+
+    function stopSettling(): void {
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = 0;
+    }
+
     function teardown(): void {
       unwatchActivation?.();
       unwatchActivation = null;
+      stopSettling();
+      targetEl = null;
       stopWatching();
+      stopWatchingPageStructure();
       tracker?.detach();
       tracker = null;
       overlay?.hide();
@@ -135,7 +174,7 @@ export default defineContentScript({
      * succeeded. The lost screen is a *rendered* state — it carries the only
      * buttons the user has at that moment — so the command that produced it has
      * to stay adopted. Reverting it left the overlay showing a step the content
-     * script no longer remembered, and 下一步 / 跳过 / 结束 all silently did
+     * script no longer remembered, and 跳到目标 / 跳过 / 结束 all silently did
      * nothing. Only a refusal that paints nothing may leave no trace.
      */
     async function render(): Promise<{ res: ContentResponse<'HIGHLIGHT'>; painted: boolean }> {
@@ -165,6 +204,19 @@ export default defineContentScript({
           // step already known to be ambiguous. Honour it; rebinding here would
           // silently substitute our own idea of the target for theirs.
           candidates = declared;
+        } else if (cmd.mode === 'explain') {
+          // ADR 0006: a QA reference is a point-in-time assertion ("the one I
+          // read just then"), not a durable intent like a guide Step. Rebinding
+          // by descriptor here would silently swap in whatever element happens
+          // to match now — right role, right name, wrong moment — and paint it
+          // with the same confidence as the original, which is the exact shape
+          // of L-4. So `explain` trusts only the snapshot it was given: if the
+          // fast path above did not resolve, the snapshot is stale — full stop,
+          // not "let's go look again". This must not fall through to the
+          // unbound/`lost` screen below either: that screen means "never found
+          // it", `snapshot_stale` means "found it once, not anymore" — a
+          // different fact than the renderer owes the user a different way.
+          return { res: failed('snapshot_stale'), painted: false };
         } else {
           const rebound = bindHere(step);
           el = rebound.el;
@@ -217,9 +269,35 @@ export default defineContentScript({
       initial: 'shown' | 'ambiguous',
     ): void {
       tracker?.detach();
+      // Someone took over: whatever this step becomes now, it is no longer the
+      // previous step waiting for a successor.
+      stopSettling();
+      // Whether the user has fired *this* target since it was attached. The
+      // activation listener below is the only writer, and every re-attach
+      // starts a fresh target, so this can never carry a previous step's
+      // answer forward.
+      let used = false;
       tracker = new TargetTracker({
         paint: (rects, status) => ui.paint(rects, initial === 'ambiguous' ? 'ambiguous' : status),
         onLost: (reason) => {
+          // A target that vanished because the user just used it is not a
+          // target we failed to find — it is a step that succeeded. On the DOM
+          // the two are identical (the element is simply gone), which is why
+          // pressing a link on github.com painted the "找不到这一步的目标"
+          // screen ~50ms after the click and left it up for the whole second
+          // the next plan took to arrive.
+          if (used) {
+            ui.paint([], 'settling');
+            stopSettling();
+            settleTimer = setTimeout(() => {
+              settleTimer = 0;
+              if (!current) return;
+              ui.paint([], 'lost');
+              const late = current.step.ref ?? step.ref;
+              if (late) emit({ type: 'TARGET_LOST', sessionId: current.sessionId, ref: late, reason });
+            }, SETTLING_GRACE_MS) as unknown as number;
+            return;
+          }
           ui.paint([], 'lost');
           // Read from `current`, never from a captured step: one tracker used to
           // be built for the whole flow and reported step 0's ref forever.
@@ -229,10 +307,12 @@ export default defineContentScript({
         isOccluded: (t) => ui.isOccluded(t),
       });
       tracker.attach(el, also);
+      targetEl = el instanceof HTMLElement ? el : null;
 
-      // Watch the target being used. The card's 「下一步」 stays, but a user who
-      // does exactly what we asked should not then have to tell us they did —
-      // the page already said so.
+      // Watch the target being used. This is now the *only* thing that reports
+      // a step done: 「跳到目标」 hands over the keyboard and claims nothing, so
+      // whether the step actually happened is answered by the page, never by a
+      // button the user pressed for a different reason.
       //
       // §2.3 U-03 says "不自动跳步", and this does not break it: the rule exists
       // to stop the guide advancing on *no* evidence. Advancing on the evidence
@@ -241,7 +321,12 @@ export default defineContentScript({
       // Listening is not acting. The listener is passive and never cancels.
       unwatchActivation?.();
       if (ADVANCING_ACTIONS.has(step.expectedUserAction)) {
-        const onActivate = () => report('STEP_CONFIRMED');
+        const onActivate = () => {
+          // Set before reporting, because the target can be torn out of the DOM
+          // by the very handler this click is about to run.
+          used = true;
+          report('STEP_CONFIRMED');
+        };
         el.addEventListener('click', onActivate, { capture: true, once: true, passive: true });
         unwatchActivation = () => el.removeEventListener('click', onActivate, { capture: true });
       }
@@ -331,6 +416,69 @@ export default defineContentScript({
       schedule();
     }
 
+    /**
+     * 05-route-and-steps.md's Seam: a second, independent subscription on top
+     * of the same DOM-observation machinery `TargetTracker` already uses.
+     * `TargetTracker` watches one highlighted element; this watches whatever
+     * landmark/heading nodes feed `pageFingerprint` — the exact "一小撮
+     * landmark/heading 节点" the Seam names, reached here not by writing a
+     * second, narrower DOM scanner but by recomputing the *existing*
+     * `pageFingerprint` (already, by construction, insensitive to anything
+     * else — `core/extractor/fingerprint.ts`'s own doc comment) after any
+     * mutation and comparing against the last hash *this content script*
+     * reported. `pageStructureChanged` is the one-line decision; this
+     * function is only the DOM plumbing around it.
+     *
+     * Debounced rather than run on every mutation: `TargetTracker`'s own doc
+     * comment notes a `MutationObserver` can fire hundreds of times a second
+     * on a busy console page, and this watcher's own check is far from free
+     * enough to run at that rate. Uses `extractPageHash()`, never `extract()`
+     * — see that function's own doc comment for why calling the *full*,
+     * registry-committing extraction from an unrelated background watcher
+     * would silently break every other live `HIGHLIGHT` on the page.
+     */
+    const STRUCTURE_DEBOUNCE_MS = 400;
+    let structureWatch: (() => void) | null = null;
+    let lastReportedPageHash: string | null = null;
+
+    function watchPageStructure(): void {
+      if (structureWatch) return; // already watching this session
+      lastReportedPageHash = extractPageHash();
+      let timer = 0;
+
+      const check = () => {
+        timer = 0;
+        if (!current) return; // session ended while the debounce was pending
+        const hash = extractPageHash();
+        if (!pageStructureChanged(lastReportedPageHash, hash)) return;
+        lastReportedPageHash = hash;
+        emit({ type: 'PAGE_STRUCTURE_CHANGED', sessionId: current.sessionId, pageHash: hash });
+      };
+
+      const mo = new MutationObserver(() => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(check, STRUCTURE_DEBOUNCE_MS) as unknown as number;
+      });
+      mo.observe(document, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ['aria-expanded', 'hidden', 'aria-hidden', 'class', 'style', 'role'],
+      });
+
+      structureWatch = () => {
+        mo.disconnect();
+        if (timer) clearTimeout(timer);
+        timer = 0;
+      };
+    }
+
+    function stopWatchingPageStructure(): void {
+      structureWatch?.();
+      structureWatch = null;
+      lastReportedPageHash = null;
+    }
+
     const rectOf = (el: Element): Rect => {
       const r = el.getBoundingClientRect();
       return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)];
@@ -343,6 +491,7 @@ export default defineContentScript({
         total: cmd.progress.total,
         title: cmd.step.title,
         detail: cmd.step.detail,
+        value: cmd.step.value,
         looking: `找的是：${d.role}｜${d.name}${d.scope ? `（在「${d.scope}」内）` : ''}${d.nth !== undefined ? `（第 ${d.nth} 个）` : ''}`,
       };
     }
@@ -466,6 +615,12 @@ export default defineContentScript({
           const previous = current;
           const mine = req.command;
           current = mine;
+          // Starts once per session (idempotent — see the guard inside), and
+          // keeps running across every subsequent step of the same guide, not
+          // just this one command: §5.3's re-planning trigger has to notice a
+          // structural change no matter which step happens to be on screen
+          // when it happens.
+          watchPageStructure();
           const { res, painted } = await render();
           if (!painted && current === mine) current = previous;
           // Keep looking while the step is on screen but unresolved.

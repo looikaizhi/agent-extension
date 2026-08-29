@@ -56,10 +56,37 @@ h2 {
   white-space: nowrap;
 }
 
-.ask {
+.ask,
+.qa {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.qa-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 11px;
+  background: var(--card);
+  border-radius: 7px;
+}
+.qa-answer p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.qa-answer.error {
+  border: 1px solid var(--warn);
+}
+.qa-answer.error p {
+  color: var(--warn);
+}
+.qa-options {
+  margin: 0;
+  padding-left: 18px;
+}
+.qa-options li {
+  margin: 2px 0;
 }
 input {
   width: 100%;
@@ -206,6 +233,30 @@ button.primary {
   font-size: 12px;
 }
 
+.route {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px;
+  background: var(--card);
+  border-radius: 7px;
+}
+.route-hops {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+.route-hops li {
+  margin: 2px 0;
+}
+.axes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .log {
   font-size: 11px;
   color: var(--muted);
@@ -216,4 +267,40 @@ button.primary {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* CL-1：引导停在一个待澄清的问题上。与 .route 同一张卡片的观感，但不是路标
+   ——它是"现在轮到你说话了"，所以留在 route 上方、单独成块。 */
+.clarify {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 11px;
+  background: var(--card);
+  border-radius: 7px;
+}
+.clarify .hint {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* 让 agent 的判断过程可见：为什么挑这个控件、走过哪几步。 */
+.route .why {
+  margin: 0;
+  font-size: 12px;
+}
+.route h3 {
+  margin: 4px 0 0;
+  font-size: 12px;
+  opacity: 0.75;
+}
+.route .walked {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+.route .walked i {
+  opacity: 0.6;
+  font-style: normal;
 }

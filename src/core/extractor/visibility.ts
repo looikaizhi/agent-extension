@@ -49,18 +49,36 @@ export function withinBands(
  * When a modal is open the user is almost always stuck *in it* — extracting the
  * background is guaranteed-wrong. ~15 lines, and far cheaper than hit-testing
  * every candidate.
+ *
+ * Every candidate is held to `isVisible`, because that premise is the whole
+ * justification: a modal nobody can see traps nobody. The last family is the
+ * one that needed it. `dialog[open]:modal` and `[popover]:popover-open` are
+ * browser-enforced states, but `role="dialog" aria-modal="true"` is only an
+ * author's claim, and shipping a permanently-present `display: none` modal
+ * template is ordinary practice.
+ *
+ * Measured on github.com/search?q=n8n: GitHub's hovercard container
+ * `<div role="dialog" aria-modal="true" class="Popover js-hovercard-content">`
+ * sits in the document at `display: none` on every results page, so all 197
+ * controls were scoped into an empty shell — `elementsScanned` came back as
+ * `1`, the shell itself. The guide then re-planned against a page it read as
+ * offering nothing. github.com's home page and repo pages do not render that
+ * container, which is why one site behaved differently page by page.
  */
 export function findModalScope(root: Document | ShadowRoot): Element | null {
   for (const el of root.querySelectorAll('dialog[open]')) {
-    if (el.matches(':modal') && !isOurs(el)) return el;
+    if (el.matches(':modal') && !isOurs(el) && isVisible(el)) return el;
   }
   for (const el of root.querySelectorAll('[popover]:popover-open')) {
-    if (!isOurs(el)) return el;
+    if (!isOurs(el) && isVisible(el)) return el;
   }
-  return root.querySelector(
+  for (const el of root.querySelectorAll(
     '[role="dialog"][aria-modal="true"]:not([data-page-guide]),' +
       '[role="alertdialog"][aria-modal="true"]:not([data-page-guide])',
-  );
+  )) {
+    if (isVisible(el)) return el;
+  }
+  return null;
 }
 
 /**

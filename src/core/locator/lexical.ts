@@ -46,7 +46,13 @@ const CJK = /[一-鿿぀-ヿ가-힯]/;
  * CJK runs are dropped from the space-split set once their bigrams are added,
  * or the untokenised run would sit in the denominator diluting every hit.
  */
-function tokensOf(s: string): Set<string> {
+/**
+ * Exported for `agent/plan/validate.ts`'s CL-4 check:
+ * "does any word of the model's `route[0]` text leave a trace in the
+ * current table's `name`/`path`" needs the exact same CJK-aware splitting
+ * this scorer already has tuned — no reason for a second implementation.
+ */
+export function tokensOf(s: string): Set<string> {
   const out = new Set(s.split(' ').filter((w) => w.length > 1 && !CJK.test(w)));
   if (CJK.test(s)) {
     for (const run of s.split(/[^一-鿿぀-ヿ가-힯]+/)) {

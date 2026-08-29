@@ -19,11 +19,33 @@ function fnv1a(s: string): string {
  * sequence whenever this changes, so a hash that reacts to every button
  * appearing after an async load would invalidate the guide constantly.
  */
-export function pageFingerprint(nodes: readonly UINode[]): string {
+/**
+ * Only `role`/`name` are ever read below — widened from `readonly UINode[]`
+ * so a registry-free, landmark/heading-only caller
+ * (`extract.ts`'s `extractPageHash`) can hand this function bare `{role,
+ * name}` pairs without fabricating the rest of a `UINode`'s fields. Every
+ * existing `UINode[]` caller still satisfies this structurally — nothing
+ * about accepting *less* required data narrows what already worked. */
+export function pageFingerprint(nodes: readonly Pick<UINode, 'role' | 'name'>[]): string {
   const structure = nodes
     .filter((n) => LANDMARK_ROLES.has(n.role) || n.role === 'heading')
     .slice(0, 24)
     .map((n) => `${n.role}|${n.name}`)
     .join('\n');
   return fnv1a(`${location.origin}${location.pathname}\n${structure}`);
+}
+
+/**
+ * 05-route-and-steps.md's Gotchas, first layer: "连内容脚本都不应该在明知
+ * 没变的情况下发消息". `pageFingerprint` is already, by construction,
+ * insensitive to anything other than landmark/heading structure (this file's
+ * own doc comment above) — so the decision of whether a freshly computed hash
+ * is worth reporting is nothing more than string inequality. Pulled out as
+ * its own named export purely so it is unit-testable without a live
+ * `document`/`location` (`pageFingerprint` itself needs both); the content
+ * script's own `MutationObserver` wiring that calls this is 05's e2e-only
+ * half (slices 7/10), never unit-tested directly.
+ */
+export function pageStructureChanged(previousHash: string | null, nextHash: string): boolean {
+  return previousHash !== nextHash;
 }

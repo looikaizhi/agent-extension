@@ -125,6 +125,21 @@ export function extract(profile: ExtractProfile, frameId = 0): LocatorView {
     // guided to. Caught by the eval corpus, not by any test.
     if (interactive && !PRIMARY_INTERACTIVE_ROLES.has(role)) node.focusable = true;
 
+    // Where a link leads, absolute — the host's only way to tell a same-site
+    // step from one that leaves the site *before* the user commits to it
+    // (07's P-2). Read from the element, because the page is the only honest
+    // source: the model outputs refs and never URLs (S-07).
+    //
+    // `el.href` on an anchor is already resolved against the document, which
+    // is what makes a relative `/help` usable here. A `javascript:` or bare
+    // `#fragment` destination is not a navigation and is deliberately skipped
+    // — asking the user to confirm leaving the site to go nowhere would train
+    // them to dismiss the card without reading it.
+    if (c.el instanceof HTMLAnchorElement && c.el.href) {
+      const raw = c.el.getAttribute('href') ?? '';
+      if (!raw.startsWith('#') && !/^javascript:/i.test(raw)) node.href = c.el.href;
+    }
+
     const row = rowLabelOf(c.el);
     if (row) node.rowLabel = row;
 
@@ -171,6 +186,54 @@ export function extract(profile: ExtractProfile, frameId = 0): LocatorView {
     degraded: truncated.walk || truncated.semantics,
     stats,
   };
+}
+
+/**
+ * A registry-free companion to `extract()`, computing exactly the hash a full
+ * extraction's `LocatorView.pageHash` would carry (`pageFingerprint`, same
+ * landmark/heading filter) — without ever calling `registry.stage`/`registry.
+ * commit`.
+ *
+ * Why this cannot just be "`extract()`, then read `.pageHash`": `registry` is
+ * one global generation, not scoped per caller (`registry.ts`'s own doc
+ * comment) — `extract()` unconditionally commits a fresh one on every call.
+ * §5.3's re-planning trigger has to re-check the page's structural hash on
+ * every DOM mutation, from a background watcher that has no idea whether a
+ * guide step or a QA highlight currently has something resolved against
+ * whatever generation is live right now. Calling `extract()` for that would
+ * silently invalidate all of it — a background structure check landing
+ * between two unrelated `HIGHLIGHT` commands would make the next one fail
+ * with a stale-snapshot refusal for a reason nobody watching would ever
+ * connect back to a page-structure poll.
+ *
+ * Reuses the exact same candidate discovery `extract()` itself uses (`walk`:
+ * shadow-DOM traversal, modal scoping, the watchdog budget) and the same
+ * `resolveRole`/`resolveName` — this is *not* a second, independently-tuned
+ * scanner (05's Gotchas: "S2 不需要、也不应该重新发明一个更敏感或更迟钝的指
+ * 纹算法"). It only omits everything downstream of role/name that solely
+ * interactive elements need (state, sensitivity, rect, `rowLabel`, refs) and
+ * the registry commit itself — nothing here can ever be resolved back to a
+ * live element, which is exactly right: nothing that calls this needs one.
+ */
+export function extractPageHash(): string {
+  const t0 = performance.now();
+  const stats: ExtractStats = {
+    elementsScanned: 0, candidates: 0, visible: 0, emitted: 0, shadowRoots: 0, emptyName: 0, modalScoped: false,
+    ms: { total: 0, walk: 0, visibility: 0, semantics: 0, name: 0 },
+  };
+  const modal = findModalScope(document);
+  const scope: Document | Element = modal ?? document;
+  const candidates: Candidate[] = [];
+  walk(scope, 0, candidates, stats, t0, { walk: false });
+
+  const nodes: { role: string; name: string }[] = [];
+  for (const c of candidates) {
+    if (!isVisible(c.el)) continue;
+    const role = resolveRole(c.el);
+    if (!LANDMARK_ROLES.has(role) && role !== 'heading') continue;
+    nodes.push({ role, name: resolveName(c.el, RAW_NAME_MAX).name });
+  }
+  return pageFingerprint(nodes);
 }
 
 /**
