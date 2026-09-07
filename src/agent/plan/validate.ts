@@ -8,12 +8,23 @@ import type { Check } from '@/agent/host/thread';
 import type { GuideStep, UserAction } from '@/shared/protocol';
 import type { Ref } from '@/shared/types';
 
-/** R-d's membership set. A `Set<string>` (not `Set<UserAction>`) so `.has`
- *  accepts the model's raw, unnarrowed `string` without a cast at the call
- *  site — the `satisfies` clause is what keeps this list honest against the
- *  real `UserAction` union. */
+/**
+ * R-d's membership set. A `Set<string>` (not `Set<UserAction>`) so `.has`
+ * accepts the model's raw, unnarrowed `string` without a cast at the call site.
+ *
+ * A **subset** of `UserAction`: `observe` is still a legal action for a step
+ * *we* author — the QA path builds one directly — but it is not one the model
+ * may propose. The `satisfies` clause stays regardless; it only asks for
+ * assignability, so a subset passes while a typo still fails to compile. It is the only
+ * action with no completion signal (`content.ts`'s `ADVANCING_ACTIONS`), so a
+ * single-step plan carrying it freezes the thread: the reducer notices nothing
+ * happened, says so once, and never re-plans. Measured across 80 live actions,
+ * the model reached for it 7 times — 4 of them saying, in the step's own `why`,
+ * that the goal was already visible on the page. That is a `done`, and taking
+ * `observe` away leaves the three tools that all have an exit.
+ */
 const USER_ACTIONS = new Set<string>(
-  ['click', 'input', 'select', 'toggle', 'scroll', 'observe'] satisfies UserAction[],
+  ['click', 'input', 'select', 'toggle', 'scroll'] satisfies UserAction[],
 );
 
 // `ok.envelope` is now the full five-shape `Envelope` (contract.ts). 01 left
@@ -160,9 +171,22 @@ export function toGuideStep(stepEnvelope: GuideStepIntent, table: PromptTable): 
  * compare, and there could not be: the ref space is a different snapshot's.
  */
 export function judgeArrival(expect: GuideExpectAfter, table: PromptTable): Check {
-  if (!expect.must_contain) return 'skipped';
-  const want = expect.must_contain;
-  return table.items.some((i) => i.role === want.role && norm(i.name) === norm(want.name)) ? 'pass' : 'unknown';
+  // Role alone is not evidence. A model that knows it will land on *a link*
+  // but cannot say which one has told us almost nothing — "does this page have
+  // any link" passes on nearly every page, and a `pass` that always passes
+  // devalues the whole `Check` axis. So this is `skipped`: not checked, rather
+  // than checked against something that cannot fail.
+  //
+  // The alternative was to keep refusing the envelope outright, which is what
+  // `contract.ts` used to do. That is worse in the direction ADR 0007 names —
+  // strict mode forces every property to be present, so demanding a name the
+  // model does not have is an invitation to invent one, and a made-up
+  // expectation is worse than no expectation. Accept the honest "I don't know",
+  // and decline to grade it.
+  const name = expect.must_contain?.name;
+  if (name === undefined) return 'skipped';
+  const role = expect.must_contain!.role;
+  return table.items.some((i) => i.role === role && norm(i.name) === norm(name)) ? 'pass' : 'unknown';
 }
 
 /** Every reason a thread can be parked on a question (design doc §5.8). What

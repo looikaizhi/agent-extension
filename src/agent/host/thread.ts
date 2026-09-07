@@ -125,7 +125,7 @@ export interface ThreadState {
   /** Parallel to `steps`. */
   outcomes: readonly (Outcome | undefined)[];
   /** Every step already shown, oldest first, across every replan. Never
-   *  reset — see `GuideHistoryEntry`. This is what the next `buildGuidePrompt`
+   *  reset — see `GuideHistoryEntry`. This is what the next user message
    *  reads so the model is told where the user has already been. */
   history: readonly GuideHistoryEntry[];
   status: 'active' | RunStatus;

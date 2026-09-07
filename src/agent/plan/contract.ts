@@ -53,8 +53,23 @@ export interface ClarifyEnvelope {
  * valid. No `ref` and no control name: there is nothing to point at, which is
  * the whole content of the message.
  */
+/**
+ * What the model is claiming as proof that the goal is reached, chosen from a
+ * closed list before it writes `why`.
+ *
+ * The same forcing function `previous_step` uses, for the same reason: a free
+ * sentence lets "I can see it" and "I assume so" read identically, and the
+ * live failures were all the second kind wearing the first one's words. It
+ * also makes the mistake countable — the trace records which kind was claimed,
+ * so the next run can say which kind is unreliable instead of guessing.
+ */
+export const DONE_EVIDENCE = ['content_on_page', 'page_address', 'step_completed'] as const;
+export type DoneEvidence = (typeof DONE_EVIDENCE)[number];
+
 export interface DoneEnvelope {
   intent: 'done';
+  /** Absent only on envelopes stored before this field existed. */
+  evidence?: DoneEvidence;
   why: string;
 }
 
@@ -77,7 +92,7 @@ export interface GuideRouteHop {
  *  expectation, or omit `expect_after` entirely (§5.4: "宁可不给，也不要瞎编"). */
 export interface GuideExpectAfter {
   via_ref: Ref;
-  must_contain?: { role: string; name: string };
+  must_contain?: { role: string; name?: string };
 }
 
 export interface GuideStepIntent {
@@ -99,8 +114,19 @@ export interface GuideStepIntent {
   expect_after?: GuideExpectAfter;
 }
 
+/** The model's own reading of what the last step accomplished. Required by
+ *  the schema, so a well-formed `guide` always carries one. */
+const GUIDE_PREVIOUS_STEP = ['first_plan', 'worked', 'no_change'] as const;
+
+/** What the model says the user's previous step accomplished, decided before
+ *  it plans this one. `first_plan` on the opening call; `worked` when the page
+ *  moved or new controls appeared; `no_change` when neither did. */
+export type PreviousStep = (typeof GUIDE_PREVIOUS_STEP)[number];
+
 export interface GuideEnvelope {
   intent: 'guide';
+  /** Absent only on envelopes stored before this field existed. */
+  previous_step?: PreviousStep;
   route: GuideRouteHop[];
   steps: GuideStepIntent[];
 }
@@ -157,6 +183,45 @@ export function parseContract(raw: string): ParseResult {
   return { kind: 'ok', envelope };
 }
 
+/**
+ * The tool-calling counterpart of `parseContract`.
+ *
+ * The endpoint hands back two things: which function the model chose, and the
+ * arguments text it wrote. The function name *is* the intent — a structured
+ * field the API reports, never something recovered from prose — so the model
+ * is never asked to write `intent` at all, and this attaches it afterwards.
+ *
+ * That ordering is what keeps ADR 0005 intact. `scanProvenance` anchors by
+ * path: it walks the parsed value and demands a matching literal at the same
+ * path in the raw text. So it runs here against `rawArgs` and the model's own
+ * fields, before `intent` exists — scanning text with an `intent` we spliced
+ * in ourselves would be checking our own writing, and scanning the model's
+ * text against an object carrying a field that text never had would fail at
+ * the root for a reason that has nothing to do with honesty.
+ *
+ * Asking the model for `intent` anyway was tried and is worse: pinned to a
+ * single-value enum it still came back holding a free-text restatement of the
+ * user's goal in 6 of 8 draws, because a property called `intent` reads as
+ * "the user's intent" no matter what the schema says.
+ */
+export function parseToolContract(toolName: string, rawArgs: string): ParseResult {
+  const parsed = extractCandidate(rawArgs);
+  if (parsed === undefined) return err('工具调用的 arguments 不是合法 JSON（容错解析全部尝试失败）');
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
+    return err('工具调用的 arguments 不是一个 JSON 对象');
+
+  const violation = scanProvenance(rawArgs, parsed);
+  if (violation) {
+    const at = violation.path.length ? violation.path.join('.') : '(顶层)';
+    return err(`解析结果在路径「${at}」处无法在原始输出中找到对应字面量：${violation.reason}`);
+  }
+
+  const envelope = recognizeEnvelope({ ...(parsed as Record<string, unknown>), intent: toolName });
+  if (!envelope) return err(explainRecognitionFailure({ ...(parsed as Record<string, unknown>), intent: toolName }));
+
+  return { kind: 'ok', envelope };
+}
+
 /* ═══════════ shape recognition — runs only after provenance has passed ═══════════ */
 
 /** Every intent `recognizeEnvelope` actually handles, in its own switch order. */
@@ -197,7 +262,8 @@ function explainRecognitionFailure(parsed: unknown): string {
       if (typeof raw !== 'object' || raw === null) return missing(`steps[${i}]`, '对象结构');
       const st = raw as Record<string, unknown>;
       for (const f of ['ref', 'action', 'why']) if (typeof st[f] !== 'string') return missing(`steps[${i}]`, f);
-      if (st.value !== undefined && typeof st.value !== 'string') return missing(`steps[${i}]`, 'value（有的话必须是字符串）');
+      if (st.value !== undefined && st.value !== null && typeof st.value !== 'string')
+        return missing(`steps[${i}]`, 'value（有的话必须是字符串）');
       if (st.expect_after !== undefined && st.expect_after !== null) {
         if (typeof st.expect_after !== 'object') return missing(`steps[${i}].expect_after`, '对象结构');
         if (typeof (st.expect_after as Record<string, unknown>).via_ref !== 'string')
@@ -234,8 +300,16 @@ function recognizeEnvelope(parsed: unknown): Envelope | null {
       return recognizeGuide(obj);
     case 'need_docs':
       return recognizeNeedDocs(obj);
-    case 'done':
-      return typeof obj.why === 'string' ? { intent: 'done', why: obj.why } : null;
+    case 'done': {
+      if (typeof obj.why !== 'string') return null;
+      // Carried when recognisable, dropped otherwise — same discipline as
+      // `previous_step`. Nothing downstream decides on it; it exists to make
+      // the model name its grounds, and to be countable afterwards.
+      const evidence = (DONE_EVIDENCE as readonly string[]).includes(obj.evidence as string)
+        ? (obj.evidence as DoneEvidence)
+        : undefined;
+      return { intent: 'done', ...(evidence ? { evidence } : {}), why: obj.why };
+    }
     default:
       return null;
   }
@@ -295,7 +369,15 @@ function recognizeGuide(obj: Record<string, unknown>): GuideEnvelope | null {
     steps.push(step);
   }
 
-  return { intent: 'guide', route, steps };
+  // Carried when present and recognisable, dropped otherwise. A wrong value
+  // here is not worth refusing a whole plan over: nothing downstream decides
+  // anything on it — it exists to make the model look at the page before it
+  // plans, and it earns its place in the trace either way.
+  const previous = (GUIDE_PREVIOUS_STEP as readonly string[]).includes(obj.previous_step as string)
+    ? (obj.previous_step as PreviousStep)
+    : undefined;
+
+  return { intent: 'guide', ...(previous ? { previous_step: previous } : {}), route, steps };
 }
 
 function recognizeGuideStep(raw: unknown): GuideStepIntent | null {
@@ -303,9 +385,13 @@ function recognizeGuideStep(raw: unknown): GuideStepIntent | null {
   const s = raw as Record<string, unknown>;
   if (typeof s.ref !== 'string' || typeof s.action !== 'string' || typeof s.why !== 'string') return null;
   const step: GuideStepIntent = { ref: s.ref as Ref, action: s.action, why: s.why };
-  // Same discipline as every other optional field here: a wrong *type* is a
-  // malformed envelope, not something to coerce into shape.
-  if (s.value !== undefined) {
+  // Absent and `null` are the same event, the same way `expect_after` below
+  // already treats them — and now they have to be, because a schema that is
+  // valid under OpenAI's strict mode has no way to say "optional" except a
+  // union with null, so a model obeying it writes `"value": null` for every
+  // step that is not an `input`. A wrong *type* is still a malformed envelope,
+  // never something to coerce into shape.
+  if (s.value !== undefined && s.value !== null) {
     if (typeof s.value !== 'string') return null;
     step.value = s.value;
   }
@@ -323,8 +409,17 @@ function recognizeGuideStep(raw: unknown): GuideStepIntent | null {
   if (ea.must_contain !== undefined && ea.must_contain !== null) {
     if (typeof ea.must_contain !== 'object') return null;
     const mc = ea.must_contain as Record<string, unknown>;
-    if (typeof mc.role !== 'string' || typeof mc.name !== 'string') return null;
-    expectAfter.must_contain = { role: mc.role, name: mc.name };
+    if (typeof mc.role !== 'string') return null;
+    // A null `name` is "no constraint on the name", read the same way `value`
+    // and `expect_after` already read theirs. Strict mode forces every property
+    // to be present, so a model that can name the landing *role* but not its
+    // text has no other way to say so — and one live draw did exactly that,
+    // `{"role":"link","name":null}`, which the old check refused, throwing away
+    // an otherwise perfectly good envelope over the one field it was least
+    // sure of.
+    if (mc.name !== undefined && mc.name !== null && typeof mc.name !== 'string') return null;
+    expectAfter.must_contain =
+      typeof mc.name === 'string' ? { role: mc.role, name: mc.name } : { role: mc.role };
   }
   step.expect_after = expectAfter;
   return step;

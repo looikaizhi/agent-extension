@@ -76,7 +76,12 @@ function toEffectRequest(
       effectId: effect.effectId,
       threadId,
       kind: 'callModel',
-      params: { goal: effect.goal, table: effect.table, history: effect.history },
+      params: {
+        goal: effect.goal,
+        table: effect.table,
+        history: effect.history,
+        ...(effect.siteNotes ? { siteNotes: effect.siteNotes } : {}),
+      },
       at,
       deadline,
     };
@@ -286,7 +291,13 @@ export async function sweepExpiredGuideEffect(deps: GuideEffectDeps, threadId: T
     kind: 'effect_result',
     effectId: inflight!.effectId,
     at: inflight!.at,
-    outcome: { ok: false, error: '调用超时', retryable: true },
+    // E-4: the panel never came back. `providerCalls: 1` is the floor, not a
+    // measurement — the host cannot know whether the panel got as far as a
+    // repair round, and 1 is exactly what `tryEmitCallModel` already charged
+    // optimistically when it dispatched. Claiming more would bill for a
+    // request that may never have gone out; claiming 0 would hand back quota
+    // for one that almost certainly did.
+    outcome: { ok: false, error: '调用超时', retryable: true, failureKind: 'transport', providerCalls: 1 },
   });
 }
 

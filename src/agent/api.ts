@@ -42,6 +42,8 @@ export interface TokenUsage {
   prompt: number;
   completion: number;
   total: number;
+  /** The cached share of `prompt`. Optional because not every endpoint says. */
+  cachedPrompt?: number;
 }
 
 export interface StartInput {

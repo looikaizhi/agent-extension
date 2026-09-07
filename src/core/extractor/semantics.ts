@@ -49,7 +49,7 @@ export function resolveName(
   } catch {
     raw = '';
   }
-  let source: NameSource = raw ? classifySource(el) : 'none';
+  let source: NameSource = raw ? classifySource(el, raw.trim()) : 'none';
 
   if (!raw || raw.trim().length < 2 || JUNK.test(raw)) {
     const title = el.getAttribute('title')?.trim();
@@ -77,7 +77,29 @@ export function resolveName(
   };
 }
 
-function classifySource(el: Element): NameSource {
+/**
+ * Where the name came from — which decides whether the user can read it.
+ *
+ * Guessed from attributes, except for `title`, where guessing was wrong. The
+ * accessible-name spec ends with `title` as its last resort, and
+ * `computeAccessibleName` implements that — so an element carrying only a
+ * `title` never reaches `resolveName`'s explicit fallback below, and used to
+ * be classified `content`: "text the user reads on screen". Measured: across
+ * the whole eval corpus, 189 items, **not one** carried a `nameSource`, so the
+ * `~` mark had zero coverage and the model was being told that names existing
+ * only in a `title` attribute were painted on the page. That mark is the one
+ * thing standing between it and telling a user to 「点写着 X 的按钮」 when
+ * nothing on screen says X.
+ *
+ * Detected by comparing the computed name against the title, which is exact
+ * whenever the title is what produced it. The residual is an element whose
+ * visible text happens to equal its own `title` — real, but rare, and it errs
+ * the safe way: the model under-trusts a name it could have read, rather than
+ * over-trusting one it could not.
+ */
+const fold = (s: string): string => s.replace(/\s+/g, ' ').trim();
+
+function classifySource(el: Element, name: string): NameSource {
   if (el.hasAttribute('aria-labelledby')) return 'aria-labelledby';
   if (el.hasAttribute('aria-label')) return 'aria-label';
   if (el.hasAttribute('alt')) return 'alt';
@@ -85,6 +107,11 @@ function classifySource(el: Element): NameSource {
   const id = el.getAttribute('id');
   if (id && el.ownerDocument.querySelector(`label[for="${CSS.escape(id)}"]`)) return 'label';
   if (el.closest('label')) return 'label';
+  // Both sides folded: `computeAccessibleName` collapses whitespace the way
+  // the spec says, a raw attribute does not. A `title` carrying a newline
+  // would otherwise compare unequal and fall back to `content` — the exact
+  // failure this branch exists to remove.
+  if (fold(el.getAttribute('title') ?? '') === fold(name)) return 'title';
   return 'content';
 }
 

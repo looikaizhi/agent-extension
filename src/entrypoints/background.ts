@@ -19,6 +19,7 @@ import {
 import { bindingFromAck } from '@/agent/host/binding';
 import { claimEffect, judgeRecovery, type EffectRequest } from '@/agent/host/effect';
 import { budgetFor } from '@/agent/budget';
+import { mergeTrace, traceKey } from '@/agent/guide/trace';
 import { buildRunRecord, writeRunRecord, type RecordStore } from '@/agent/host/record';
 import { replan, type ReplanPorts, type ReplanTrace } from '@/agent/host/replan';
 import { matchFlow } from '@/core/packs/match';
@@ -563,6 +564,15 @@ async function startGuide(tabId: number, req: { goal?: string; steps?: readonly 
   const url = tab?.url ?? '';
   const threadId = sessionIdForTab(tabId);
 
+  // A new guide gets a fresh debug trace. Threads are keyed by tab and so is
+  // the trace, so without this a second guide in the same tab appends to the
+  // first one's record — and since the trace keeps only its last 24 entries,
+  // the new guide's opening calls get evicted by the old guide's. Cleared
+  // here rather than in `dropGuideThread`: a guide that just ended badly is
+  // precisely when someone wants to read its trace, so ending one must not
+  // destroy it.
+  await chrome.storage.session.remove(traceKey(threadId)).catch(() => {});
+
   const page = {
     async extract(profile: ExtractProfile, budget: ProjectBudget): Promise<PromptTable> {
       const ex = await sendToTab(tabId, { type: 'EXTRACT', profile, budget });
@@ -721,6 +731,19 @@ export default defineBackground(() => {
       const r = m as EffectResultMessage;
       const threadId = r.threadId as ThreadId; // echoed back verbatim from a real `sessionIdForTab()` on the panel side
       void (async () => {
+        // Debug trace, before anything that can early-return: it is keyed by
+        // thread and `storage.session` is the worker's alone (N-6), so this is
+        // the only place it can be written. Deliberately outside the decision
+        // path — a failure here must not touch the result being processed.
+        if (r.trace) {
+          const key = traceKey(threadId);
+          try {
+            const existing = (await chrome.storage.session.get(key))[key];
+            await chrome.storage.session.set({ [key]: mergeTrace(existing, r.trace) });
+          } catch {
+            /* a trace that cannot be stored is not a reason to drop a result */
+          }
+        }
         await sweepExpiredGuideEffect(guideEffectDeps, threadId);
         const outcome = await applyGuideInput(guideEffectDeps, threadId, {
           kind: 'effect_result',
@@ -735,7 +758,13 @@ export default defineBackground(() => {
           // below is a defensive fallback for anything else, not the
           // expected path.
           outcome: r.outcome.ok
-            ? { ok: true, value: typeof r.outcome.value === 'string' ? r.outcome.value : JSON.stringify(r.outcome.value), ...(r.outcome.usage ? { usage: r.outcome.usage } : {}) }
+            ? {
+                ok: true,
+                value: typeof r.outcome.value === 'string' ? r.outcome.value : JSON.stringify(r.outcome.value),
+                providerCalls: r.outcome.providerCalls,
+                ...(r.outcome.tool ? { tool: r.outcome.tool } : {}),
+                ...(r.outcome.usage ? { usage: r.outcome.usage } : {}),
+              }
             : r.outcome,
         });
         // `EFFECT_RESULT` arrives from the panel, which has no `sender.tab` —

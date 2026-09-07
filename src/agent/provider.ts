@@ -26,11 +26,28 @@ const TIMEOUT_MS = 15_000;
 
 /* ═══════════ P-04: generation streaming ═══════════ */
 
-export type ChatRole = 'system' | 'user' | 'assistant';
+export type ChatRole = 'system' | 'user' | 'assistant' | 'tool';
 
+/**
+ * One message, in the shape every OpenAI-compatible endpoint accepts.
+ *
+ * `tool_calls` and `tool_call_id` exist for one round trip: handing a bad tool
+ * call back to the model with a note about what was wrong. That exchange has a
+ * fixed form — an `assistant` message carrying the call, then a `tool` message
+ * echoing its `id` — and both halves 400 without the id. Checked against the
+ * docs of Anthropic's and Kimi's compatibility layers, which list the `tool`
+ * role and `tool_call_id` as fully supported.
+ *
+ * `content` is optional because an assistant message that is nothing but a
+ * tool call has none; endpoints send `null` or `""` and both mean the same.
+ */
 export interface ChatMessage {
   role: ChatRole;
-  content: string;
+  content?: string | null;
+  /** On an `assistant` message: the call being replayed back to the model. */
+  tool_calls?: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>;
+  /** On a `tool` message: which call this answers. Required by the wire. */
+  tool_call_id?: string;
 }
 
 /** Real once the endpoint reports it; character-count based otherwise (`estimated: true`). */
@@ -38,14 +55,84 @@ export interface Usage {
   prompt: number;
   completion: number;
   total: number;
+  /**
+   * How much of `prompt` the endpoint served from its prefix cache.
+   *
+   * `prompt` counts these at full weight, so without this number a run's token
+   * total stops tracking its cost the moment caching starts working — which it
+   * did: making the nonce stable per snapshot took a repeat call from 1792
+   * uncached prompt tokens to 128, with `prompt` unchanged at 3712.
+   *
+   * Absent where the endpoint does not report it (Anthropic's compatibility
+   * layer documents `prompt_tokens_details` as always empty), which is why it
+   * is optional rather than zero: nothing measured is not the same as nothing
+   * cached.
+   */
+  cachedPrompt?: number;
   estimated: boolean;
 }
 
 export interface Delta {
   /** May be empty — a usage-only chunk carries no new text. */
   content: string;
+  /**
+   * A fragment of a tool call, present only when `tools` was sent.
+   *
+   * The endpoint streams a function's `arguments` in pieces exactly as it
+   * streams `content`; `id`, `name` and `index` arrive on the first fragment
+   * and are absent from the rest (measured against DeepSeek: 23 fragments,
+   * all three on fragment 1). A caller concatenates `arguments` and keeps the
+   * first of each it sees.
+   *
+   * `index` is which call this fragment belongs to. It is carried rather than
+   * assumed because `parallel_tool_calls: false` is a request the endpoint may
+   * ignore — Anthropic documents it as supported, most other compatible layers
+   * do not mention it at all, and an unlisted parameter is silently dropped
+   * rather than refused. Demultiplexing on the value the response actually
+   * carries is the only thing that does not depend on being obeyed.
+   *
+   * `id` matters for one thing: a `role: 'tool'` message must echo it as
+   * `tool_call_id`. Not every compatible endpoint emits one, so a caller that
+   * needs it must have a path for its absence.
+   */
+  tool?: { id?: string; name?: string; arguments: string; index: number };
+  /**
+   * Why the endpoint stopped, on the fragment that carries it (the last one).
+   *
+   * Reported, never trusted. Every OpenAI-compatible endpoint returns the
+   * field, but the vocabulary is theirs: some answer `stop` for a tool call
+   * that OpenAI would call `tool_calls`. So a caller may use it to *explain* a
+   * failure and must never use it to *decide* one — the only value worth
+   * acting on is `length`, which says the output was cut off rather than
+   * finished, and that is the difference between "retry" and "the model
+   * cannot produce this shape".
+   */
+  finishReason?: string;
   /** Present only on the last `Delta` of a stream. */
   usage?: Usage;
+}
+
+/**
+ * One callable function, in the OpenAI-compatible shape every endpoint this
+ * product talks to accepts. `parameters` is a JSON Schema; it stays `unknown`
+ * here because this file has no business knowing what the guide's envelopes
+ * look like — building that schema is `agent/guide/agent.ts`'s job.
+ *
+ * `strict` asks the endpoint to *enforce* the schema rather than treat it as
+ * advice. Measured on deepseek-chat: with it, a `required` field the model was
+ * dropping in 2 of 16 draws stopped being dropped; without it the same schema
+ * kept losing the field. It is not total enforcement — one draw in 24 still
+ * omitted a required array — so a caller must keep validating what comes back.
+ */
+export interface ToolDef {
+  type: 'function';
+  function: { name: string; description?: string; strict?: boolean; parameters: unknown };
+}
+
+export interface CompleteOptions {
+  tools?: readonly ToolDef[];
+  /** `'required'` = must call one of them, model picks which. */
+  toolChoice?: 'auto' | 'required' | 'none';
 }
 
 /**
@@ -78,8 +165,27 @@ export class ProviderError extends Error {
 /** Parses one already-unwrapped SSE line into a `Delta`, or `null` if the line carries nothing usable. */
 function parseDataLine(payload: string): Delta | null {
   const parsed = JSON.parse(payload) as {
-    choices?: Array<{ delta?: { content?: string } }>;
-    usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+    choices?: Array<{
+      finish_reason?: string | null;
+      delta?: {
+        content?: string;
+        tool_calls?: Array<{
+          index?: number;
+          id?: string;
+          type?: string;
+          function?: { name?: string; arguments?: string };
+        }>;
+      };
+    }>;
+    usage?: {
+      prompt_tokens?: number;
+      completion_tokens?: number;
+      total_tokens?: number;
+      // Two spellings for one number: OpenAI nests it, DeepSeek also reports a
+      // flat pair. Whichever arrives is the same fact.
+      prompt_tokens_details?: { cached_tokens?: number };
+      prompt_cache_hit_tokens?: number;
+    };
     // Gotcha: HTTP 200 is not proof of success — some endpoints report a
     // model-side failure as a normal SSE data line instead of a non-2xx
     // status. Left unhandled, this reads as "the model said nothing" and
@@ -92,16 +198,41 @@ function parseDataLine(payload: string): Delta | null {
   }
   const content = parsed.choices?.[0]?.delta?.content ?? '';
   const rawUsage = parsed.usage;
-  if (!content && !rawUsage) return null;
+  // Carried up with its `index`, not flattened to `[0]`. The caller decides
+  // what to do with a second concurrent call; this layer's job is to report
+  // what arrived, and a fragment whose index it silently dropped is a fragment
+  // it reported wrongly.
+  const rawCall = parsed.choices?.[0]?.delta?.tool_calls?.[0];
+  const toolFragment = rawCall?.function ? (rawCall.function.arguments ?? '') : null;
+  const finish = parsed.choices?.[0]?.finish_reason ?? undefined;
+  if (!content && !rawUsage && toolFragment === null && !finish) return null;
 
   const delta: Delta = { content };
+  if (finish) delta.finishReason = finish;
+  if (toolFragment !== null) {
+    delta.tool = {
+      arguments: toolFragment,
+      // `index` is optional in the wire schema; absent means the endpoint
+      // sends one call at a time, which is index 0.
+      index: rawCall?.index ?? 0,
+      ...(rawCall?.function?.name ? { name: rawCall.function.name } : {}),
+      ...(rawCall?.id ? { id: rawCall.id } : {}),
+    };
+  }
   if (rawUsage) {
     const prompt = rawUsage.prompt_tokens ?? 0;
     const completion = rawUsage.completion_tokens ?? 0;
     // Gotcha: `total_tokens` is sometimes missing even when the other two are
     // present. Writing 0 there would read as "0 tokens total" in the UI —
     // indistinguishable from a real zero-cost call — so fall back to the sum.
-    delta.usage = { prompt, completion, total: rawUsage.total_tokens ?? prompt + completion, estimated: false };
+    const cached = rawUsage.prompt_tokens_details?.cached_tokens ?? rawUsage.prompt_cache_hit_tokens;
+    delta.usage = {
+      prompt,
+      completion,
+      total: rawUsage.total_tokens ?? prompt + completion,
+      ...(typeof cached === 'number' ? { cachedPrompt: cached } : {}),
+      estimated: false,
+    };
   }
   return delta;
 }
@@ -223,6 +354,7 @@ export async function* complete(
   cfg: ProviderConfig,
   messages: ChatMessage[],
   signal: AbortSignal,
+  options?: CompleteOptions,
 ): AsyncIterable<Delta> {
   if (signal.aborted) return;
 
@@ -286,6 +418,27 @@ export async function* complete(
           messages,
           stream: true,
           stream_options: { include_usage: true },
+          // Stated, not inherited. The guide's one repair round is a re-draw
+          // of the identical request (`guide/runner.ts`), which only recovers
+          // anything if the endpoint is free to answer differently — against a
+          // provider whose default is 0 it would reproduce the same bad answer
+          // and spend a second call to do it. 1 is also what every measurement
+          // in `tests/spike` was taken at, so the corpus and the product agree.
+          temperature: 1,
+          ...(options?.tools?.length
+            ? {
+                tools: options.tools,
+                tool_choice: options.toolChoice ?? 'required',
+                // A hint, not a mechanism. Anthropic's compatibility layer
+                // documents it as fully supported; most others do not mention
+                // it, and an unlisted parameter is silently dropped rather
+                // than refused — DeepSeek returns 200 for a field invented on
+                // the spot, so a 200 proves nothing about it being honoured.
+                // What actually guarantees one envelope is the runner
+                // demultiplexing by `index` and taking the first call.
+                parallel_tool_calls: false,
+              }
+            : {}),
         }),
         signal: internal.signal,
       }),
@@ -377,7 +530,12 @@ export async function* complete(
     // request explicitly asked for it. When nothing real arrived, manufacture
     // the estimate here so the promise holds regardless of the endpoint.
     if (!sawRealUsage) {
-      const promptChars = messages.reduce((sum, m) => sum + m.content.length, 0);
+      // Tool calls count too: an assistant message replaying one has no
+      // `content` at all, and charging it as zero would understate a repair.
+      const promptChars = messages.reduce(
+        (sum, m) => sum + (m.content?.length ?? 0) + (m.tool_calls ? JSON.stringify(m.tool_calls).length : 0),
+        0,
+      );
       const prompt = estimateTokens(promptChars);
       const completion = estimateTokens(completionChars);
       yield { content: '', usage: { prompt, completion, total: prompt + completion, estimated: true } };
@@ -448,4 +606,20 @@ export async function testConnection(cfg: ProviderConfig): Promise<TestResult> {
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * `complete()` never lets a raw error escape once it has decided the call
+ * was genuinely aborted (see this file's own catch block) — anything that
+ * reaches here and is not a `ProviderError` is an even-more-unexpected
+ * failure this function still has to say something honest about, rather
+ * than leak `[object Object]` or a stack trace to the user.
+ *
+ * Lives beside `ProviderError` rather than in the panel: it reads that class
+ * and nothing else, and `agent/guide/runner.ts` needs it too — importing a
+ * panel module from under `src/agent` would run the dependency the wrong way.
+ */
+export function describeProviderError(err: unknown): string {
+  if (err instanceof ProviderError) return err.message;
+  return `未知错误：${String((err as Error)?.message ?? err)}`;
 }

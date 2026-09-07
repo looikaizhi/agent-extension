@@ -1,7 +1,6 @@
 import type { Ref } from '@/shared/types';
-import { LANDMARK_ROLES, PRIMARY_INTERACTIVE_ROLES } from './roles';
+import { ENTRANCE_LANDMARK_ROLES, LANDMARK_ROLES, PRIMARY_INTERACTIVE_ROLES } from './roles';
 import type { LocatorView, ProjectBudget, PromptItem, PromptTable, UINode } from './types';
-import { withinBands } from './visibility';
 
 /**
  * How long a name may be — **not** a budget knob, which is why it does not live
@@ -23,10 +22,29 @@ import { withinBands } from './visibility';
  */
 export const NAME_MAX_LEN = 120;
 
-/** Node caps follow §5.1 of the design doc; driven by the model's context window. */
+/**
+ * Node caps, driven by the model's context window.
+ *
+ * The middle rung is the measured one. Live traffic fits `prompt ≈ 25.8 ×
+ * elements + 2593`, so 400 elements on a 64k window costs about 10.7k — a sixth
+ * of it — against the 6.3k the old 150 was spending. That is the trade ADR 0012
+ * makes: 20 of 20 repository pages came back truncated at 150, and the
+ * navigation the user needed was missing from 7 of 31 snapshots. The cap stops
+ * being a knife that cuts every page and becomes a guard rail an extreme one
+ * reaches, which only works if reaching it is genuinely rare.
+ *
+ * The other two rungs are proportion, not measurement, and should be read that
+ * way. 120 on a 16k window is a *third* of it once the 2.6k intercept is
+ * counted — small windows cannot buy the same headroom. 800 is extrapolation:
+ * nothing above 64k has been measured here at all.
+ *
+ * The top rung has to stay the largest, which it did not have to be before:
+ * raising the middle to 400 while leaving the top at 250 would have made a
+ * bigger context window buy a smaller table.
+ */
 export function budgetFor(contextWindow: number): ProjectBudget {
-  const maxNodes = contextWindow < 16_000 ? 60 : contextWindow <= 64_000 ? 150 : 250;
-  return { maxNodes, viewportBands: 1 };
+  const maxNodes = contextWindow < 16_000 ? 120 : contextWindow <= 64_000 ? 400 : 800;
+  return { maxNodes };
 }
 
 /** A node together with the identity that must not depend on the viewport. */
@@ -54,7 +72,7 @@ export interface Described {
  * (Named `describeAll` rather than `describe` only to stay out of the way of
  * vitest's global of the same name.)
  */
-export function describeAll(view: LocatorView, budget: ProjectBudget): readonly Described[] {
+export function describeAll(view: LocatorView): readonly Described[] {
   const byRef = new Map<Ref, UINode>(view.nodes.map((n) => [n.ref, n]));
   const headings = headingsBefore(view, byRef);
   const targets = view.nodes.filter((n) => PRIMARY_INTERACTIVE_ROLES.has(n.role) || n.focusable);
@@ -100,8 +118,12 @@ export function describeAll(view: LocatorView, budget: ProjectBudget): readonly 
  * may touch `path` or `nth`.
  */
 export function project(view: LocatorView, budget: ProjectBudget): PromptTable {
-  const { kept, truncated } = prune(describeAll(view, budget), budget, view, budget.viewportBands);
-  return tableOf(view, kept.map((d) => d.item), truncated);
+  const byRef = new Map<Ref, UINode>(view.nodes.map((n) => [n.ref, n]));
+  // Lossless first, budget second. Unwrapping is not a way of saving room — it
+  // runs even when there is room to spare, because a table that names the same
+  // target twice is worse for the reader either way.
+  const { kept, omitted } = prune(dropRestatements(describeAll(view), byRef), budget, byRef);
+  return tableOf(view, kept.map((d) => d.item), omitted);
 }
 
 /**
@@ -113,18 +135,18 @@ export function project(view: LocatorView, budget: ProjectBudget): PromptTable {
  * because the target had been pruned for being off screen (F-6). Token budget
  * is a constraint on what we *say*, never on what we can *find*.
  */
-export function fullTable(view: LocatorView, budget: ProjectBudget): PromptTable {
-  return tableOf(view, describeAll(view, budget).map((d) => d.item), false);
+export function fullTable(view: LocatorView): PromptTable {
+  return tableOf(view, describeAll(view).map((d) => d.item), 0);
 }
 
-function tableOf(view: LocatorView, items: PromptItem[], truncated: boolean): PromptTable {
+function tableOf(view: LocatorView, items: PromptItem[], omitted: number): PromptTable {
   return {
     snapshotId: view.snapshotId,
     url: view.url,
     title: view.title,
     pageHash: view.pageHash,
     items,
-    truncated,
+    omitted,
     degraded: view.degraded,
     ambiguity: ambiguityOf(items),
     stats: view.stats,
@@ -147,59 +169,117 @@ export function truncate(s: string, max: number): string {
 }
 
 /**
- * Score-then-restore-document-order. A plain document-order cut would
- * systematically drop main-content controls: the first 250 elements of a
- * console are almost all global nav, while the button the user wants is in
- * <main>.
+ * Entrances first, then document order, then cut the tail (ADR 0012).
+ *
+ * What this replaces is a score: viewport +4 / within a band +2 / off screen
+ * +1, plus small bonuses for role and name. It ranked by *proximity to what the
+ * user happens to be looking at*, which made the discard position drift with
+ * the scroll — measured on one page, scrolling to the file list dropped the
+ * navigation, and scrolling to the top dropped the sidebar instead. Whatever
+ * was on screen won, and the budget was spent on it.
+ *
+ * Ranking by relevance to the goal is not the fix, and was measured too: the
+ * lexical scorer already in the tree scores five of seven real targets below
+ * its own discard threshold, because the user types Chinese and the page is in
+ * English — 「CI 是怎么配置的」 against a control named `Actions` shares no
+ * trigram. It also *keeps* noise, promoting a commit message containing "ci".
+ * Answering "which of these matters most" needs a trained cross-encoder, which
+ * is what the one framework that does it uses.
+ *
+ * So this answers two questions that have definite answers instead: is this an
+ * entrance, and where does it sit in the document. Entrances are taken first
+ * but are not exempt from the budget — a page whose entrances alone overflow
+ * still gets a clean tail cut rather than an oversized table.
  */
 function prune(
   described: readonly Described[],
   budget: ProjectBudget,
-  view: LocatorView,
-  bands: number,
-): { kept: readonly Described[]; truncated: boolean } {
-  if (described.length <= budget.maxNodes) return { kept: described, truncated: false };
+  byRef: Map<Ref, UINode>,
+): { kept: readonly Described[]; omitted: number } {
+  if (described.length <= budget.maxNodes) return { kept: described, omitted: 0 };
 
-  const scored = described.map((d, order) => ({ d, order, score: score(d.node, view, bands) }));
-  scored.sort((a, b) => b.score - a.score || a.order - b.order);
-  const kept = scored
+  const ordered = described.map((d, order) => ({ d, order, entrance: inEntrance(d.node, byRef) }));
+  const kept = [...ordered.filter((o) => o.entrance), ...ordered.filter((o) => !o.entrance)]
     .slice(0, budget.maxNodes)
     .sort((a, b) => a.order - b.order)
-    .map((s) => s.d);
-  return { kept, truncated: true };
+    .map((o) => o.d);
+  return { kept, omitted: described.length - budget.maxNodes };
+}
+
+/** Whether any enclosing landmark exists to take the user somewhere else. */
+function inEntrance(n: UINode, byRef: Map<Ref, UINode>): boolean {
+  for (const a of ancestors(n, byRef)) if (ENTRANCE_LANDMARK_ROLES.has(a.role)) return true;
+  return false;
 }
 
 /**
- * Proximity to the viewport is a *preference*, not a filter.
+ * Drop the shells that say the same target a second time — `CONTEXT.md`'s
+ * `Restatement`.
  *
- * It used to be both: `project()` first dropped everything outside ±1 viewport
- * and then pruned to the budget — so information was discarded even when there
- * was budget left over. Real-world consequence: a control 1400 px down could
- * not be located until the user scrolled to it, which inverts the product (the
- * user is asking *us* where it is). The budget is the only thing that has to
- * cut; distance only decides who gets cut first.
+ * `describeAll` emits anything focusable, not only the primary interactive
+ * roles, because a `<div tabindex="0">` really is a button. The cost is that a
+ * focusable shell around a single real control arrives as its own row, and the
+ * table then names one target twice.
+ *
+ * The criterion is deliberately structural, not textual. An earlier draft
+ * deleted a row whose *name contained another row's name*; on the very fixture
+ * built to exercise it, that would have deleted a sibling link pointing at a
+ * different URL — losing a target, which is the one thing this may not do. A
+ * shell wrapping exactly one interactive descendant can go, because clicking
+ * that descendant is the only thing the shell could have offered. Two
+ * descendants and it is a region, not a shell; an interactive role of its own
+ * and it is a target, not a shell.
+ *
+ * Counting only *interactive* descendants is what makes nested shells collapse.
+ * Counting every emitted descendant instead — the first version did — leaves
+ * the outer one standing the moment two shells nest, because the inner shell
+ * counts as a second descendant. Playwright MCP's `unwrapSingleChildGenerics`,
+ * which this follows, gets the same effect by recursing.
+ *
+ * Honest about its reach: on the current eval corpus this removes nothing,
+ * because no fixture contains such a shell. How common they are on real pages
+ * is unmeasured — the live logs record no parent links, so the 29 fallback-name
+ * rows seen there cannot be checked for wrapping after the fact.
  */
-function score(n: UINode, view: LocatorView, bands: number): number {
-  let s = 0;
-  s += n.inViewport ? 4 : withinBands(n.rect, bands, view.viewport) ? 2 : 1;
-  if (PRIMARY_INTERACTIVE_ROLES.has(n.role)) s += 2;
-  if (n.name.length > 0) s += 1;
-  else s -= 3;
-  if (n.sensitive) s -= 1;
-  return s;
+function dropRestatements(
+  described: readonly Described[],
+  byRef: Map<Ref, UINode>,
+): readonly Described[] {
+  const emitted = new Set(described.map((d) => d.node.ref));
+  const interactiveBelow = new Map<Ref, number>();
+  for (const { node } of described) {
+    if (!PRIMARY_INTERACTIVE_ROLES.has(node.role)) continue;
+    for (const a of ancestors(node, byRef))
+      if (emitted.has(a.ref)) interactiveBelow.set(a.ref, (interactiveBelow.get(a.ref) ?? 0) + 1);
+  }
+  return described.filter(
+    (d) =>
+      PRIMARY_INTERACTIVE_ROLES.has(d.node.role) ||
+      (interactiveBelow.get(d.node.ref) ?? 0) !== 1,
+  );
+}
+
+/**
+ * Enclosing nodes, nearest first.
+ *
+ * Bounded rather than trusting the tree: `parent` refs arrive over a message
+ * channel from a page we do not control, and a cycle here would hang the
+ * content script. Twelve is deep enough for every real landmark nesting seen
+ * and shallow enough to cost nothing.
+ */
+function* ancestors(n: UINode, byRef: Map<Ref, UINode>): Generator<UINode> {
+  let cur = n.parent ? byRef.get(n.parent) : undefined;
+  let guard = 0;
+  while (cur && guard++ < 12) {
+    yield cur;
+    cur = cur.parent ? byRef.get(cur.parent) : undefined;
+  }
 }
 
 /** Every enclosing landmark, nearest first — landmarks genuinely do wrap their
  *  contents, which is exactly what headings do not. */
 function landmarkChain(n: UINode, byRef: Map<Ref, UINode>): UINode[] {
-  const out: UINode[] = [];
-  let cur = n.parent ? byRef.get(n.parent) : undefined;
-  let guard = 0;
-  while (cur && guard++ < 12) {
-    if (LANDMARK_ROLES.has(cur.role)) out.push(cur);
-    cur = cur.parent ? byRef.get(cur.parent) : undefined;
-  }
-  return out;
+  return [...ancestors(n, byRef)].filter((a) => LANDMARK_ROLES.has(a.role));
 }
 
 /**
@@ -293,8 +373,40 @@ function ambiguityOf(items: readonly PromptItem[]): number {
 }
 
 /**
- * The text actually sent to the model. Group-header serialisation: `path` is
- * written once per run of items that share it, not repeated per item.
+ * The text actually sent to the model.
+ *
+ * Two page-level lines first, then the elements as an indented tree.
+ *
+ * `page` / `title` answer "where am I", which nothing else in this prompt
+ * does. Without them five live journeys re-proposed a control the user had
+ * just used: the model clicked `Code`, the URL went from `/n8n-io/n8n/pulls`
+ * to `/n8n-io/n8n`, and with no way to see that it proposed `Code` again —
+ * 35% of every repeat measured on github.com traces to this one gap. Both are
+ * what browser-use sends every turn as `Current url:` / `Available tabs:`.
+ *
+ * The URL is reduced to `host + path + query`: the scheme is noise (every
+ * page is https) and the fragment never changes what page you are on. It is
+ * deliberately *not* the whole story on `href` — see `href.spec.ts`. Element
+ * hrefs stay out of the prompt entirely (§8.2): thirty attacker-authored
+ * destinations are a menu the model could pick a request target from, while
+ * the address the user is already at is a fact about where they stand. The
+ * model still has no field anywhere in the contract that carries a URL.
+ *
+ * Both values are page-controlled, so both are `JSON.stringify`-quoted like
+ * every name here — a title containing a newline would otherwise forge a
+ * line of our own header format. Structural safety against the *wrapper*
+ * remains the nonce's job (`prompt.ts`), and `nonceFor` sees these lines
+ * because they are part of what it hashes.
+ *
+ * Indentation, not `## a › b › c` group headers. The flat form was chosen to
+ * save tokens (150 nodes × 7 ≈ 1050 as per-node fields, versus ~15 group
+ * headers ≈ 90) and it does — but D2Snap (arXiv 2508.04412) measures
+ * hierarchy as the strongest single feature for LLM page understanding, and
+ * the representations that flatten it (accessibility trees, reader views)
+ * score materially worse. A real prompt here measures 3488 tokens against a
+ * 32k window: the 960 tokens the flat form saves were never the constraint.
+ * Shared prefixes are still printed once, so the tree form is *cheaper* than
+ * repeating `## a › b › c` per run, not dearer.
  *
  * One item per line, keys unnamed: `ref role "name"` rather than
  * `ref: e1  role: link  name: "x"`. The named form repeats three key names on
@@ -310,25 +422,38 @@ function ambiguityOf(items: readonly PromptItem[]): number {
  * hard-rejects it at the render boundary — the user sees a step silently
  * vanish instead of never being offered it.
  *
- * Headers follow document order, not a `path`-keyed bucket: a header is
- * written once per *contiguous run* of items that share a `path`, so a
- * `path` that gets interrupted by a different one and then resumes (A, B,
- * A) prints its header twice. That is deliberate, not an oversight —
- * bucketing by `path` would reorder the items to make the runs contiguous,
- * and document order is itself information the model uses: it mirrors how
- * the page reads and is exactly what `score()` prioritises. An extra header
- * line costs a handful of tokens; silently reordering controls costs the
- * thing document order exists to preserve.
+ * Groups follow document order, not a `path`-keyed bucket: a group is opened
+ * per *contiguous run* of items sharing it, so a `path` that gets interrupted
+ * by a different one and then resumes (A, B, A) opens `A` twice. That is
+ * deliberate, not an oversight — bucketing by `path` would reorder the items
+ * to make the runs contiguous, and document order is itself information the
+ * model uses: it mirrors how the page reads, and since ADR 0012 it is also the
+ * order `prune` cuts along. A repeated group line costs a handful of tokens;
+ * silently
+ * reordering controls costs the thing document order exists to preserve.
  */
 export function toPromptText(table: PromptTable): string {
-  const lines: string[] = [];
-  let lastPath: string | undefined;
+  const lines: string[] = [`page ${JSON.stringify(pageLabel(table.url))}`];
+  if (table.title) lines.push(`title ${JSON.stringify(truncate(table.title, NAME_MAX_LEN))}`);
+  // Said out loud, because the reader cannot tell otherwise. `prune` cuts the
+  // document's tail once the budget is spent, and a live run had 45 of 98 calls
+  // reading a table that had been cut — with nothing in the text to say so. The
+  // model then reasons from "not in the
+  // table" to "not on the page", and both of the wrong answers that follow
+  // were observed: it re-proposed a control on a page whose content it had
+  // simply not been shown, and it asked the user for help on pages that did
+  // have an entrance.
+  if (table.omitted > 0)
+    lines.push('truncated 这一页元素太多，下面只是其中一部分；导航一类的入口已优先保留');
+
+  let prev: readonly string[] = [];
   for (const it of table.items) {
-    const p = it.path.join('›');
-    if (p !== lastPath) {
-      lastPath = p;
-      if (p) lines.push(`## ${it.path.join(' › ')}`);
-    }
+    let shared = 0;
+    while (shared < prev.length && shared < it.path.length && prev[shared] === it.path[shared]) shared += 1;
+    // Only the levels this item does not already share with the previous one.
+    for (let i = shared; i < it.path.length; i += 1)
+      lines.push(`${'  '.repeat(i)}${flatten(it.path[i] ?? '')}:`);
+
     const mark = it.nameSource ? '~' : '';
     const tail = [
       it.nth !== undefined ? `#${it.nth}` : '',
@@ -337,7 +462,48 @@ export function toPromptText(table: PromptTable): string {
     ]
       .filter(Boolean)
       .join(' ');
-    lines.push(`${it.ref} ${it.role} ${mark}${JSON.stringify(it.name)}${tail ? ` ${tail}` : ''}`);
+    lines.push(
+      `${'  '.repeat(it.path.length)}${it.ref} ${it.role} ${mark}${JSON.stringify(it.name)}${tail ? ` ${tail}` : ''}`,
+    );
+    prev = it.path;
   }
+  // Last thing read, right where the decision gets made. The header line above
+  // says the same thing, ~2300 tokens earlier on a full page — and a live run
+  // had the model reason from "not in the table" to "not on the page" anyway.
+  // The count is here because "there is more" and "there are 214 more" are
+  // different situations: browser-use's `[End of page]` works for the same
+  // reason, it gives the reader a position rather than a boolean.
+  //
+  // It does *not* claim the missing elements are a contiguous run at the end of
+  // the document, which an earlier wording did and which `prune` makes false:
+  // entrances are taken first, so a late one survives while an earlier ordinary
+  // control is dropped. Saying "everything after here is missing" would be a
+  // lie the model could act on.
+  //
+  // Not forgeable from page content, though it sits inside the untrusted
+  // wrapper with the header lines. A group header is the only line built
+  // without `JSON.stringify`, and it always ends in `:`; every element line
+  // carries a quoted name. Neither can end in `]`.
+  if (table.omitted > 0) lines.push(`[表到此为止 · 这一页还有 ${table.omitted} 个元素没有列出]`);
   return lines.join('\n');
 }
+
+/** The address minus the two parts that carry no signal: the fragment (it
+ *  does not change which page you are on) and an `http(s)://` prefix (every
+ *  page has one). Any other scheme is kept — `about:blank` and
+ *  `chrome://extensions` are real pages a guide can be sitting on, and there
+ *  the scheme *is* the identity. Middle-truncated like a name, so a long
+ *  query keeps the tail that tells two of them apart. */
+function pageLabel(raw: string): string {
+  try {
+    const u = new URL(raw);
+    const withoutHash = u.href.slice(0, u.href.length - u.hash.length);
+    return truncate(withoutHash.replace(/^https?:\/\//, ''), NAME_MAX_LEN);
+  } catch {
+    return truncate(raw, NAME_MAX_LEN);
+  }
+}
+
+/** A newline inside a page-authored group name would forge a level in the
+ *  indented tree, the way it would forge a header line before it. */
+const flatten = (s: string): string => s.replace(/\s+/g, ' ').trim();

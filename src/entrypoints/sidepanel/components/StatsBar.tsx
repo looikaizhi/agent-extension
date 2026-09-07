@@ -29,7 +29,7 @@ export function StatsBar({ table }: { table: PromptTable }) {
         </span>
       )}
       {s.modalScoped && <span className="badge">模态作用域</span>}
-      {table.truncated && <span className="badge warn">已按预算裁剪</span>}
+      {table.omitted > 0 && <span className="badge warn">已按预算裁剪 {table.omitted} 项</span>}
     </div>
   );
 }

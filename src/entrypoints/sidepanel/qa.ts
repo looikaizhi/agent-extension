@@ -241,17 +241,3 @@ export function describeBinding(binding: WireBinding): string {
       return '此刻指不出来';
   }
 }
-
-/* ═══════════ 出错文案 ═══════════ */
-
-/**
- * `complete()` never lets a raw error escape once it has decided the call
- * was genuinely aborted (see provider.ts's own catch block) — anything that
- * reaches here and is not a `ProviderError` is an even-more-unexpected
- * failure this function still has to say something honest about, rather
- * than leak `[object Object]` or a stack trace to the user.
- */
-export function describeProviderError(err: unknown): string {
-  if (err instanceof ProviderError) return err.message;
-  return `未知错误：${String((err as Error)?.message ?? err)}`;
-}

@@ -1,4 +1,5 @@
 import type { GuideRouteHop } from '@/agent/plan/contract';
+import type { Trace } from '@/agent/guide/trace';
 import type { EffectRecovery, EffectRequest, EffectResult } from '@/agent/host/effect';
 import type { ExtractProfile, ProjectBudget, PromptItem, PromptTable } from '@/core/extractor/types';
 import type { Rect, Ref } from './types';
@@ -364,7 +365,14 @@ export interface EffectClaimResponse {
  * echoes back the `threadId` it read off the `EffectRequest` it is answering.
  */
 export type EffectRequestMessage = { type: 'EFFECT_REQUEST' } & EffectRequest;
-export type EffectResultMessage = { type: 'EFFECT_RESULT'; threadId: string } & EffectResult;
+/**
+ * `trace` rides along only when the debug switch is on (`agent/guide/trace.ts`
+ * — off by default, and read by the panel from `storage.local`). It is the
+ * panel's only way to get one to storage at all: N-6 keeps the panel out of
+ * `storage.session`, so it collects and the worker writes. Absent on every
+ * normal call, and nothing downstream of `handleEffectResult` reads it.
+ */
+export type EffectResultMessage = { type: 'EFFECT_RESULT'; threadId: string; trace?: Trace } & EffectResult;
 
 /** E-5: broadcast when the host clears an `inflight` tombstone before a
  *  result arrived for it. Harmless if nobody is listening, or if the panel

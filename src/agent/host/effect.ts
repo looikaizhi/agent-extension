@@ -34,6 +34,10 @@ export interface CallModelParams {
    *  lives on the host — without it every replan is a fresh conversation, and
    *  the model re-proposes the step the user just finished. */
   history: GuideHistory;
+  /** Notes about this site from its pack, when it has one. Travels with the
+   *  request for the same reason `history` does: the prompt is built in the
+   *  panel (ADR 0002) and the lookup happens on the host. */
+  siteNotes?: string;
 }
 
 /** `url` is the one field `MachineEffect`'s own `fetchDoc` variant (03) does
@@ -61,6 +65,10 @@ export interface EffectUsage {
   prompt: number;
   completion: number;
   total: number;
+  /** The cached share of `prompt`, when the endpoint reports one. Travels
+   *  because `prompt` alone stopped describing cost once prefix caching
+   *  started hitting. */
+  cachedPrompt?: number;
 }
 
 export interface EffectRequest {
@@ -76,9 +84,36 @@ export interface EffectRequest {
   deadline: number;
 }
 
+/**
+ * Which of three unrelated things went wrong, so the host can say three
+ * different things to the user. `transport` — the request never produced an
+ * answer. `parse` — an answer came back that is not an envelope, twice.
+ * `violation` — a well-formed envelope that R-a…R-e refused.
+ *
+ * They used to arrive as one undifferentiated `error` string and reach the
+ * user as 「调用失败」 regardless, which is wrong for two of the three: a
+ * refused envelope is not a failed call, and the panel is the *only* place
+ * that knows which happened, because on the failure path the host never sees
+ * the model text and cannot re-derive the verdict for itself.
+ */
+export type EffectFailureKind = 'transport' | 'parse' | 'violation';
+
 export type EffectOutcome =
-  | { ok: true; value: unknown; usage?: EffectUsage }
-  | { ok: false; error: string; retryable: boolean };
+  | {
+      ok: true;
+      value: unknown;
+      usage?: EffectUsage;
+      providerCalls: number;
+      /**
+       * Which function the model called, when the answer came back as a tool
+       * call. The name *is* the intent, and `value` is the arguments text with
+       * no `intent` in it — so without this the host cannot re-derive the
+       * envelope it is supposed to be the final judge of (§8.3), and every
+       * answer reads as "信封缺少 intent 字段". Absent on the text path.
+       */
+      tool?: string;
+    }
+  | { ok: false; error: string; retryable: boolean; failureKind: EffectFailureKind; providerCalls: number };
 
 export interface EffectResult {
   effectId: string;

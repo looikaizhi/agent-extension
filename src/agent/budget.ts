@@ -27,5 +27,4 @@ export const LOCAL_BUDGET: ProjectBudget = {
   // Infinity into null. Large enough for any real page (MDN, the heaviest we
   // have measured, emits ~2100).
   maxNodes: 100_000,
-  viewportBands: 1,
 };

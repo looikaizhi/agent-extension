@@ -150,7 +150,7 @@ export default defineContentScript({
      */
     function bindHere(step: GuideStep): { el: Element | null; also: Element[]; refs: readonly Ref[] } {
       const view = extract(lastProfile);
-      const table = fullTable(view, lastBudget);
+      const table = fullTable(view);
       // Recomputed from the fresh full set, so S-03 can never be evaluated
       // against a stale — or narrower — view of the page.
       sensitiveRefs = new Set(table.items.filter((i) => i.sensitive).map((i) => i.ref));
@@ -503,7 +503,7 @@ export default defineContentScript({
     // Binding needs the same lens the caller extracted through, so the profile
     // and budget of the last EXTRACT are remembered rather than guessed.
     let lastProfile: ExtractProfile = 'interactive';
-    let lastBudget: ProjectBudget = { maxNodes: 150, viewportBands: 1 };
+    let lastBudget: ProjectBudget = { maxNodes: 400 };
 
     /* ═══════════ authoring: pick an element, get a descriptor ═══════════ */
 
@@ -527,7 +527,7 @@ export default defineContentScript({
     function startInspect(): void {
       stopInspect();
       const view = extract(lastProfile);
-      const table = fullTable(view, lastBudget);
+      const table = fullTable(view);
       const byEl = new Map<Element, PromptItem>();
       for (const item of table.items) {
         const el = registry.resolve(view.snapshotId, item.ref);
@@ -591,7 +591,7 @@ export default defineContentScript({
           // a password field pruned for being off screen is still a password
           // field, and late binding can reach it.
           sensitiveRefs = new Set(
-            fullTable(view, req.budget)
+            fullTable(view)
               .items.filter((i) => i.sensitive)
               .map((i) => i.ref),
           );

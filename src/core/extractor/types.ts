@@ -83,8 +83,6 @@ export interface ExtractStats {
  */
 export interface ProjectBudget {
   maxNodes: number;
-  /** Viewport bands to keep, 1 = ±1 screen. */
-  viewportBands: number;
 }
 
 export interface PromptItem {
@@ -143,7 +141,11 @@ export interface PromptTable {
   title: string;
   pageHash: string;
   items: PromptItem[];
-  truncated: boolean;
+  /** How many elements the budget cut from the document's tail. `0` means the
+   *  table is the whole page. A count rather than a flag because the model is
+   *  told the number: "there is more" and "there are 214 more" are different
+   *  situations, and only one of them is worth changing plan over. */
+  omitted: number;
   /** The 250 ms watchdog fired: this table is incomplete. Carried through from
    *  `LocatorView` because a degradation nobody downstream can see is not
    *  observable — the side panel and, in step 2, the agent both have to know

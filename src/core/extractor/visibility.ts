@@ -31,20 +31,6 @@ export function inViewport(rect: Rect): boolean {
   return y + h > 0 && y < window.innerHeight && x + w > 0 && x < window.innerWidth;
 }
 
-/** Keep elements within ±`bands` screens of the viewport.
- *  Takes the viewport as data so callers in Node (the eval harness) can use it. */
-export function withinBands(
-  rect: Rect,
-  bands: number,
-  viewport: { width: number; height: number },
-): boolean {
-  const [x, y, w, h] = rect;
-  const { width: vw, height: vh } = viewport;
-  return (
-    y + h > -vh * bands && y < vh * (1 + bands) && x + w > -vw * bands && x < vw * (1 + bands)
-  );
-}
-
 /**
  * When a modal is open the user is almost always stuck *in it* — extracting the
  * background is guaranteed-wrong. ~15 lines, and far cheaper than hit-testing

@@ -47,6 +47,27 @@ export const LANDMARK_ROLES: ReadonlySet<string> = new Set([
   'menubar',
 ]);
 
+/**
+ * The landmarks whose whole purpose is to take the user somewhere else.
+ *
+ * A strict subset of `LANDMARK_ROLES`, and the subset is the point: `main` is a
+ * landmark, and treating it as an entrance would protect the entire body of the
+ * page — on the repository page that means 39 groups of file rows, which is
+ * exactly what crowded the navigation out. `region` and `form` are out for the
+ * same reason; any page may wrap its content in either.
+ */
+export const ENTRANCE_LANDMARK_ROLES: ReadonlySet<string> = new Set([
+  'navigation',
+  'banner',
+  'complementary',
+  'contentinfo',
+  'tablist',
+  'menubar',
+  'menu',
+  'toolbar',
+  'search',
+]);
+
 export const DIAGNOSTIC_ROLES: ReadonlySet<string> = new Set([
   'alert',
   'status',

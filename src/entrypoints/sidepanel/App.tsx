@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PromptTable } from '@/core/extractor/types';
 import { descriptorOf } from '@/core/packs/bind';
 import { packsFor } from '@/core/packs/match';
-import { complete, testConnection } from '@/agent/provider';
+import { complete, describeProviderError, testConnection } from '@/agent/provider';
 import { parseContract } from '@/agent/plan/contract';
 import { buildPrompt, buildRepairPrompt, ENVELOPE_SHAPE_GUIDE } from '@/agent/plan/prompt';
 import { validateEnvelope } from '@/agent/plan/validate';
@@ -29,7 +29,6 @@ import {
   describeBinding,
   describeCheck,
   describeEvidence,
-  describeProviderError,
   sameQaContext,
   summarizeCost,
 } from './qa';

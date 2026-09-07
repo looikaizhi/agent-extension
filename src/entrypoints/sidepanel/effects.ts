@@ -1,8 +1,14 @@
-import { complete, ProviderError } from '@/agent/provider';
-import { GUIDE_ENVELOPE_SHAPE_GUIDE, buildGuidePrompt, buildRepairPrompt } from '@/agent/plan/prompt';
-import { parseContract } from '@/agent/plan/contract';
-import { validateEnvelope } from '@/agent/plan/validate';
-import type { CallModelParams, EffectRequest, EffectResult, EffectUsage, FetchDocParams } from '@/agent/host/effect';
+import { complete } from '@/agent/provider';
+import { runGuideToEnd } from '@/agent/guide/runner';
+import { createTrace, type Trace } from '@/agent/guide/trace';
+import { createNonceCache } from '@/agent/guide/nonce';
+
+/** One per panel instance. Lives here rather than inside the run loop because
+ *  consecutive calls on one page are separate effects, and a cache scoped to a
+ *  single run would never get a second look at the same snapshot. */
+const nonces = createNonceCache();
+import { TRACE_ENABLED_KEY, isFlagOn } from '@/agent/guide/flags';
+import type { CallModelParams, EffectOutcome, EffectRequest, EffectResult, FetchDocParams } from '@/agent/host/effect';
 import { sessionIdForTab } from '@/shared/protocol';
 import type {
   EffectClaimResponse,
@@ -11,7 +17,6 @@ import type {
   GuideInflightResponse,
 } from '@/shared/protocol';
 import type { ProviderConfig } from '@/shared/settings';
-import { describeProviderError } from './qa';
 
 /**
  * The panel's half of 04-effect-protocol.md — the executor for `EFFECT_
@@ -26,90 +31,44 @@ import { describeProviderError } from './qa';
  * that actually touches `chrome.*` — and mounts it once.
  */
 
-const isRetryable = (err: unknown): boolean => (err instanceof ProviderError ? err.retryable : true);
-
 /* ═══════════ callModel (slice 9/10) ═══════════ */
 
 /**
- * `buildGuidePrompt` → `complete()` → `parseContract` → `validateEnvelope` —
- * 01/02's pipeline, reused verbatim rather than rebuilt (design doc Seam).
+ * Transport, and nothing else: hand the run to `guide/runner.ts`, put what
+ * comes back on the wire. The pipeline it used to spell out inline
+ * (`buildMessages` → `complete()` → `parseOutput` → repair → `validate`)
+ * reads in one place now, and that place is not tied to the side panel.
  *
- * `parseContract`/`validateEnvelope` here are a *gate*, not a transform:
- * `value` on success is still the raw model text, never the parsed
- * `Envelope` object. `machine.ts`'s own `handleEffectResult` (03) re-parses
- * `outcome.value` itself and is the authoritative check (design doc §8.3:
- * "判定权在 Host") — re-running the check on this side first only means a
- * hallucinated ref or broken JSON gets a readable `error` immediately
- * instead of the host silently rediscovering the identical failure one
- * round-trip later. Handing the host anything other than the *original* raw
- * text would also break ADR 0005: `parseContract`'s provenance scanner has
- * to run against what the model actually said, not against a re-serialized
- * reconstruction of it.
+ * What stays true across the move: `value` on success is the model's raw
+ * text, never a re-serialized `Envelope`. `machine.ts`'s `handleEffectResult`
+ * re-parses it and is the authoritative check (design doc §8.3, "判定权在
+ * Host"); running the same check here first only means a hallucinated ref
+ * gets a readable error immediately instead of the host rediscovering it a
+ * round-trip later. And ADR 0005's provenance scanner has to see what the
+ * model actually said, so re-serializing here would break it outright.
+ *
+ * What is new: `providerCalls` and `failureKind` cross with the outcome. The
+ * repair round happens inside the runner, so without the first the host can
+ * only guess how much of its quota an effect spent; and the host cannot
+ * re-derive the second at all, because on a failure it never receives the
+ * text to judge.
  */
 export async function runCallModelEffect(
   req: EffectRequest & { kind: 'callModel' },
   cfg: ProviderConfig,
   signal: AbortSignal,
   completeFn: typeof complete = complete,
-): Promise<EffectResult> {
-  const params = req.params as CallModelParams;
-  let raw = '';
-  let usage: EffectUsage | undefined;
+): Promise<{ result: EffectResult; trace: Trace | null }> {
+  const trace = createTrace();
+  const r = await runGuideToEnd(req.params as CallModelParams, cfg, signal, completeFn, trace.record, nonces);
 
-  try {
-    for await (const d of completeFn(cfg, buildGuidePrompt(params.goal, params.table, params.history), signal)) {
-      raw += d.content;
-      if (d.usage) usage = { prompt: d.usage.prompt, completion: d.usage.completion, total: d.usage.total };
-    }
-  } catch (err) {
-    return { effectId: req.effectId, at: req.at, outcome: { ok: false, error: describeProviderError(err), retryable: isRetryable(err) } };
-  }
-
-  let parsed = parseContract(raw);
-  if (parsed.kind === 'error') {
-    // One repair round, the same one S1's QA path has always taken (`App.tsx`:
-    // primary output fails to parse → `buildRepairPrompt` → parse again).
-    // S2 never had it, so a single missing field in one model response killed
-    // the whole guide at hop 0 — `retryable: true` was recorded on the way out
-    // and nobody read it. Measured live: 1–2 of every 15 github.com journeys
-    // died this way, before taking a single step.
-    //
-    // Exactly one retry, never a loop: a model that cannot produce the shape
-    // twice will not produce it on the third try either, and the guide's whole
-    // cost ceiling is built on a bounded number of requests per effect.
-    const repairMessages = buildRepairPrompt(raw, GUIDE_ENVELOPE_SHAPE_GUIDE);
-    let repaired = '';
-    try {
-      for await (const d of completeFn(cfg, repairMessages, signal)) {
-        repaired += d.content;
-        // Both requests' cost is reported, because both were really spent.
-        if (d.usage)
-          usage = {
-            prompt: (usage?.prompt ?? 0) + d.usage.prompt,
-            completion: (usage?.completion ?? 0) + d.usage.completion,
-            total: (usage?.total ?? 0) + d.usage.total,
-          };
-      }
-    } catch (err) {
-      return {
-        effectId: req.effectId,
-        at: req.at,
-        outcome: { ok: false, error: describeProviderError(err), retryable: isRetryable(err) },
-      };
-    }
-    const reparsed = parseContract(repaired);
-    if (reparsed.kind === 'error') {
-      return { effectId: req.effectId, at: req.at, outcome: { ok: false, error: reparsed.message, retryable: true } };
-    }
-    parsed = reparsed;
-    raw = repaired;
-  }
-  const validated = validateEnvelope(parsed.envelope, params.table);
-  if (validated.kind === 'violation') {
-    return { effectId: req.effectId, at: req.at, outcome: { ok: false, error: validated.reason, retryable: true } };
-  }
-
-  return { effectId: req.effectId, at: req.at, outcome: { ok: true, value: raw, ...(usage ? { usage } : {}) } };
+  const outcome: EffectOutcome = r.failure
+    ? { ok: false, error: r.failure.error, retryable: r.failure.retryable, failureKind: r.failure.kind, providerCalls: r.providerCalls }
+    : { ok: true, value: r.raw, providerCalls: r.providerCalls, ...(r.tool ? { tool: r.tool } : {}), ...(r.usage ? { usage: r.usage } : {}) };
+  // The trace comes back beside the result, never folded into it: the outcome
+  // is what the host decides on, and nothing about a debugging artefact may
+  // change it. `startEffectListener` decides whether it goes any further.
+  return { result: { effectId: req.effectId, at: req.at, outcome }, trace: trace.snapshot() };
 }
 
 /* ═══════════ fetchDoc (slice 11) ═══════════ */
@@ -123,6 +82,10 @@ export async function runCallModelEffect(
  * response-size cap (V-9) are 06's job, once something upstream of this file
  * actually produces a resolved `url` to drive them (see `agent/api.ts`'s
  * `toEffectRequest` doc comment — 03's `fetchDoc` effect has no `url` yet).
+ *
+ * `providerCalls: 0` on every branch, and it is not a formality: a document
+ * fetch spends no model quota, and the host's accounting has to be able to
+ * tell that apart from a model call whose count it does not know.
  */
 export async function runFetchDocEffect(
   req: EffectRequest & { kind: 'fetchDoc' },
@@ -133,16 +96,16 @@ export async function runFetchDocEffect(
   try {
     const res = await fetchFn(params.url, { credentials: 'omit', redirect: 'manual', signal });
     if (!res.ok) {
-      return { effectId: req.effectId, at: req.at, outcome: { ok: false, error: `文档抓取失败：HTTP ${res.status}`, retryable: true } };
+      return { effectId: req.effectId, at: req.at, outcome: { ok: false, error: `文档抓取失败：HTTP ${res.status}`, retryable: true, failureKind: 'transport', providerCalls: 0 } };
     }
     const text = await res.text();
-    return { effectId: req.effectId, at: req.at, outcome: { ok: true, value: text } };
+    return { effectId: req.effectId, at: req.at, outcome: { ok: true, value: text, providerCalls: 0 } };
   } catch (err) {
-    if (signal.aborted) return { effectId: req.effectId, at: req.at, outcome: { ok: false, error: '已取消', retryable: false } };
+    if (signal.aborted) return { effectId: req.effectId, at: req.at, outcome: { ok: false, error: '已取消', retryable: false, failureKind: 'transport', providerCalls: 0 } };
     return {
       effectId: req.effectId,
       at: req.at,
-      outcome: { ok: false, error: `文档抓取失败：${String((err as Error)?.message ?? err)}`, retryable: true },
+      outcome: { ok: false, error: `文档抓取失败：${String((err as Error)?.message ?? err)}`, retryable: true, failureKind: 'transport', providerCalls: 0 },
     };
   }
 }
@@ -215,11 +178,20 @@ export function startEffectListener(getTabId: () => number | null, loadCfg: () =
       controllers.set(req.effectId, controller);
       try {
         const cfg = await loadCfg();
-        const result =
-          req.kind === 'callModel'
-            ? await runCallModelEffect(req as EffectRequest & { kind: 'callModel' }, cfg, controller.signal)
-            : await runFetchDocEffect(req as EffectRequest & { kind: 'fetchDoc' }, controller.signal);
-        const out: EffectResultMessage = { type: 'EFFECT_RESULT', threadId: req.threadId, ...result };
+        let trace: Trace | null = null;
+        let result: EffectResult;
+        if (req.kind === 'callModel') {
+          const ran = await runCallModelEffect(req as EffectRequest & { kind: 'callModel' }, cfg, controller.signal, complete);
+          result = ran.result;
+          // Asked after the run, and asked of `storage.local` — `storage.session`
+          // belongs to the worker (N-6). A disabled trace therefore costs one
+          // local read and puts nothing on the wire; only the worker ever
+          // writes the thing itself.
+          if (ran.trace && (await isFlagOn(chrome.storage.local, TRACE_ENABLED_KEY))) trace = ran.trace;
+        } else {
+          result = await runFetchDocEffect(req as EffectRequest & { kind: 'fetchDoc' }, controller.signal);
+        }
+        const out: EffectResultMessage = { type: 'EFFECT_RESULT', threadId: req.threadId, ...result, ...(trace ? { trace } : {}) };
         chrome.runtime.sendMessage(out).catch(() => {});
       } finally {
         controllers.delete(req.effectId);

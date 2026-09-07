@@ -1,9 +1,10 @@
 import type { HostSignal, TokenUsage } from '@/agent/api';
 import type { ClarifyOption } from '@/agent/plan/contract';
 import type { GuideHistory } from '@/agent/plan/prompt';
-import { parseContract } from '@/agent/plan/contract';
-import { judgeArrival, toGuideStep, validateEnvelope } from '@/agent/plan/validate';
+import { guideAgent } from '@/agent/guide/agent';
+import { judgeArrival, toGuideStep } from '@/agent/plan/validate';
 import { sameHost } from '@/core/security/link-safety';
+import { packsFor } from '@/core/packs/match';
 import { groundFromPageLink } from '@/agent/ground/docs';
 import type { PromptTable } from '@/core/extractor/types';
 import type { GuideStep, HighlightMode } from '@/shared/protocol';
@@ -53,9 +54,15 @@ export interface WorldAt {
   url: string;
 }
 
+/** Mirrors `host/effect.ts`'s `EffectFailureKind`, declared again rather than
+ *  imported for the same reason that file keeps its own copies: it is a leaf
+ *  by design, and this reducer is the other end of the same wire, not a
+ *  dependent of it. */
+export type EffectFailureKind = 'transport' | 'parse' | 'violation';
+
 export type EffectOutcome =
-  | { ok: true; value: string; usage?: TokenUsage }
-  | { ok: false; error: string; retryable: boolean };
+  | { ok: true; value: string; usage?: TokenUsage; providerCalls: number; tool?: string }
+  | { ok: false; error: string; retryable: boolean; failureKind: EffectFailureKind; providerCalls: number };
 
 /**
  * The five event kinds `step` recognises (03-machine-reducer.md Seam).
@@ -108,7 +115,15 @@ export type MachineInput =
  */
 export type MachineEffect =
   | { kind: 'present'; step: GuideStep; index: number; total: number; mode: HighlightMode }
-  | { kind: 'callModel'; effectId: string; goal: string; table: PromptTable; history: GuideHistory }
+  | {
+      kind: 'callModel';
+      effectId: string;
+      goal: string;
+      table: PromptTable;
+      history: GuideHistory;
+      /** From this site's pack, when it has one (`siteNotesFor`). */
+      siteNotes?: string;
+    }
   /** `url` is already approved: the host decided, the panel only fetches
    *  (§8.3). It arrives here from the page's own link, never from the model. */
   | { kind: 'fetchDoc'; effectId: string; viaRef: Ref; query: string; url: string }
@@ -280,11 +295,29 @@ const crossSiteAsk = (fromUrl: string, to: string): MachineEffect => ({
  * so the next breakpoint knows to run P-3 against the landing page.
  */
 /**
- * `step_settle_timeout` — the user activated the step and nothing happened.
+ * `step_settle_timeout` — the user activated the step and the page did not
+ * move (`replan.ts` looked several times before saying so).
  *
- * Not a terminal state for the run: a control that did not respond is a step
- * to retry or skip, not a reason to stop guiding. It costs no quota, because
- * nothing was asked of the model.
+ * "Did not move" is not "did not work". Clicking a search button opens a
+ * dialog; opening a menu expands it; both leave `pageMoved` false because the
+ * route is unchanged and — for a dialog — extraction scopes into it, so the
+ * control list is compared against a table describing somewhere else. The
+ * user did exactly what was asked. What is missing is the rest of the plan.
+ *
+ * So the first question is whether this plan has a rest. The model writes
+ * `e6 click` then `e6 input value:"n8n"` — click the search open, then type
+ * into it — reusing the same ref because the dialog's textbox is not in the
+ * table yet (`CHOICE_GUIDE` now asks for exactly this shape). Before this
+ * branch existed `cursor` never advanced anywhere in the codebase, so that
+ * second step was planned and then discarded, and four of seven live journeys
+ * ended right here reading 「这一步看起来没有反应」 while the thing to do next
+ * sat unused in `steps[1]`.
+ *
+ * Advancing costs no quota — the step is already planned and already
+ * validated against the table it was drawn from. Only when the plan really is
+ * exhausted does the old message stand: then there is nothing left to offer,
+ * and a control that did not respond is a step to retry or skip, not a reason
+ * to stop guiding.
  *
  * `stamp` keeps its first-come-wins rule, so a step whose fate is already
  * recorded is never rewritten — the page moving and the window closing can
@@ -294,6 +327,22 @@ const crossSiteAsk = (fromUrl: string, to: string): MachineEffect => ({
 function handleStepSettleTimeout(state: ThreadState): StepOut {
   const last = state.history[state.history.length - 1];
   if (!last || last.outcome !== 'unknown') return { state, effects: [] };
+
+  const next = state.cursor + 1;
+  if (next < state.steps.length) {
+    // `confirmed` is not ours to write — `handlePageChanged`'s doc comment
+    // reserves it for the one place that has proven the page moved, and
+    // nothing here has proven that. What is known is narrower and is what
+    // gets recorded: the user acted on this step, and the guide moved on.
+    const advanced: ThreadState = {
+      ...state,
+      cursor: next,
+      outcomes: state.outcomes.map((o, i) => (i === state.cursor ? o ?? 'skipped' : o)),
+      history: [...state.history, { title: state.steps[next]!.title, url: state.table.url, outcome: 'unknown' }],
+    };
+    return { state: advanced, effects: [present(advanced, next)] };
+  }
+
   return {
     state: { ...state, history: stamp(state.history, 'failed') },
     // The screen still shows the same page and the same highlight, so without
@@ -333,6 +382,25 @@ type StepOut = { state: ThreadState; effects: MachineEffect[] };
  * redundant request its caller should not have made. A blocked-by-quota
  * attempt is a terminal state the user must be told about (slice 11).
  */
+/**
+ * What a human wrote down about this site, from its pack.
+ *
+ * This is where a site's own vocabulary belongs — how its search box wants a
+ * query, what its odd control names mean — and deliberately not in the system
+ * message: a general prompt that carries one site's search syntax makes every
+ * other site's users pay for it, and the list can never be finished. A page
+ * with no pack gets nothing, which is the normal case.
+ *
+ * Several packs can match one URL; their notes are joined, because a pack is
+ * scoped by domain and two that both matched are both about this page.
+ */
+function siteNotesFor(url: string): string | undefined {
+  const notes = packsFor(url)
+    .map((p) => p.siteNotes)
+    .filter((n): n is string => Boolean(n));
+  return notes.length ? notes.join('\n') : undefined;
+}
+
 function tryEmitCallModel(state: ThreadState, effectId: string, nextRev: number): StepOut {
   if (state.inflight) return { state, effects: [] };
   if (state.callCount >= 12) {
@@ -345,7 +413,18 @@ function tryEmitCallModel(state: ThreadState, effectId: string, nextRev: number)
   return {
     state: { ...state, callCount: state.callCount + 1, inflight },
     effects: [
-      { kind: 'callModel', effectId, goal: state.goal, table: state.table, history: { done: state.history, route: state.route } },
+      {
+        kind: 'callModel',
+        effectId,
+        goal: state.goal,
+        table: state.table,
+        history: { done: state.history, route: state.route },
+        // Looked up here rather than in the panel because it is a decision
+        // about *what this thread is told*, and those live on the host. It is
+        // also pure — `packsFor` reads a static table and nothing else — so
+        // N-2 holds.
+        ...(siteNotesFor(state.table.url) ? { siteNotes: siteNotesFor(state.table.url) } : {}),
+      },
     ],
   };
 }
@@ -406,8 +485,20 @@ function handleStart(input: Extract<MachineInput, { kind: 'start' }>, nextRev: n
  * `effect_result` — the one branch that has to interpret a raw model or
  * fetch response. E-2 (idempotent discard) and E-3 (world-mismatch discard +
  * auto-replan) run *before* anything in the payload is trusted; only a
- * result that survives both is handed to `parseContract`/`validateEnvelope`.
+ * result that survives both is handed to `guideAgent.parseOutput`/`.validate`.
  */
+/**
+ * One sentence per failure kind, shared by both routes to the same verdict:
+ * the panel's `ok:false` (all the host gets when the envelope was refused
+ * over there) and this reducer's own re-derivation below. Two wordings for
+ * one condition is a divergence no test would catch, so there is one table.
+ */
+const FAILURE_TEXT: Record<EffectFailureKind, (detail: string) => string> = {
+  transport: (d) => `调用失败：${d}`,
+  parse: (d) => `模型输出无法解析：${d}`,
+  violation: (d) => `模型输出不合法：${d}`,
+};
+
 function handleEffectResult(
   state: ThreadState,
   input: Extract<MachineInput, { kind: 'effect_result' }>,
@@ -419,7 +510,16 @@ function handleEffectResult(
     return { state, effects: [] };
   }
 
-  const cleared: ThreadState = { ...state, inflight: null };
+  // §5.9 says a repair call counts against the same 12-call cap as the call
+  // it repairs. It never did: `tryEmitCallModel` charges exactly 1 when it
+  // dispatches, while the repair round happens *inside* the effect, where the
+  // host cannot see it — so 12 dispatched effects could spend up to 24 real
+  // requests and `callCount` would still read 12. The panel now reports what
+  // it actually spent, and this adds whatever exceeded the one already
+  // charged. Applied before E-3, not after: a result discarded for arriving
+  // in the wrong world was still paid for.
+  const unbilled = Math.max(0, input.outcome.providerCalls - 1);
+  const cleared: ThreadState = { ...state, inflight: null, callCount: state.callCount + unbilled };
 
   const worldMatches =
     input.at.threadRev === state.inflight.at.threadRev &&
@@ -437,16 +537,30 @@ function handleEffectResult(
   }
 
   if (!input.outcome.ok) {
-    return { state: cleared, effects: [notify(`调用失败：${input.outcome.error}`)] };
+    // Three different things, three different sentences. The panel runs the
+    // same `parseOutput`/`validate` this reducer does, and on a refusal it
+    // returns `ok:false` — so the model's text never reaches here and the
+    // verdict cannot be re-derived (design doc §8.3 gives the host the last
+    // word, but only over text it actually receives). Saying 「调用失败」 to
+    // a user whose plan was refused for naming a password field was wrong
+    // twice over: the call succeeded, and the reason was worth telling.
+    return { state: cleared, effects: [notify(FAILURE_TEXT[input.outcome.failureKind](input.outcome.error))] };
   }
 
-  const parsed = parseContract(input.outcome.value);
+  // Re-derived here, not trusted from the panel (§8.3, "判定权在 Host"). The
+  // intent is the function the model called, not a field in the text, so the
+  // host has to be told which one — `value` is the arguments and cannot say.
+  // A `callModel` result without it is a `fetchDoc` result or a bug, and
+  // either way there is no envelope to recover.
+  const parsed = input.outcome.tool
+    ? guideAgent.parseOutput(input.outcome.tool, input.outcome.value)
+    : ({ kind: 'error', message: '结果里没有工具名，无法判断这是哪一种信封' } as const);
   if (parsed.kind === 'error') {
-    return { state: cleared, effects: [notify(`模型输出无法解析：${parsed.message}`)] };
+    return { state: cleared, effects: [notify(FAILURE_TEXT.parse(parsed.message))] };
   }
-  const validated = validateEnvelope(parsed.envelope, state.table);
+  const validated = guideAgent.validate(parsed.envelope, state.table);
   if (validated.kind === 'violation') {
-    return { state: cleared, effects: [notify(`模型输出不合法：${validated.reason}`)] };
+    return { state: cleared, effects: [notify(FAILURE_TEXT.violation(validated.reason))] };
   }
 
   const envelope = validated.envelope;
@@ -456,12 +570,12 @@ function handleEffectResult(
   }
 
   if (envelope.intent === 'guide') {
-    // R-b already guarantees `steps.length > 0` (validateEnvelope), so
+    // R-b already guarantees `steps.length > 0` (`guideAgent.validate`), so
     // `present` always has a step 0 to point at.
     const steps = envelope.steps.map((s) => toGuideStep(s, state.table));
 
     // The backstop, not the main defence: a model told where the user has
-    // already been should stop on its own (`buildGuidePrompt`'s history), and
+    // already been should stop on its own (the history in its user message), and
     // this catches the times it does not. Same two-independent-layers shape as
     // `pageMoved`'s content-script check and its host-side re-check.
     //
@@ -549,9 +663,9 @@ function handleEffectResult(
   }
 
   if (envelope.intent === 'clarify') {
-    // CL-1 (§5.8): not a contract mismatch — `GUIDE_ENVELOPE_SHAPE_GUIDE`
-    // offers `clarify` as one of the three shapes a guide call may answer
-    // with, and the first live run took it 8 times out of 12. The thread
+    // CL-1 (§5.8): not a contract mismatch — `clarify` is one of the four
+    // functions a guide call may answer with, and the model reaches for it
+    // often enough to matter (10% of calls in the last live run). The thread
     // parks on the question with its steps intact rather than ending: the
     // user answers by asking again more specifically, and `page_changed`
     // still re-plans underneath them if the page moves meanwhile.
