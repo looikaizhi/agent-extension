@@ -3,8 +3,7 @@ node_modules/
 dist/
 .wxt/
 stats.html
-tests/e2e/shot-*.png
-tests/eval/corpus/
+tests/
 
 # 本地密钥，永不提交
 .env.local

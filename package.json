@@ -14,7 +14,7 @@
     "e2e": "wxt build && node tests/e2e/smoke.mjs",
     "verify": "npm run typecheck && npm run test && npm run e2e",
     "measure": "wxt build && node tests/e2e/measure.mjs",
-    "eval": "wxt build && node tests/eval/capture.mjs && node --experimental-strip-types tests/eval/score.mjs",
+    "eval": "wxt build && node --import ./tests/alias-loader-register.mjs tests/eval/capture.mjs && node --experimental-strip-types tests/eval/score.mjs",
     "eval:score": "node --experimental-strip-types tests/eval/score.mjs"
   },
   "dependencies": {
