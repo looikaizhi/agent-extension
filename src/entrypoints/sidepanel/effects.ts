@@ -1,14 +1,15 @@
-import { complete } from '@/agent/provider';
-import { runGuideToEnd } from '@/agent/guide/runner';
-import { createTrace, type Trace } from '@/agent/guide/trace';
-import { createNonceCache } from '@/agent/guide/nonce';
+import { complete } from '@/agent/provider/provider';
+import { runGuideToEnd } from '@/agent/agents/guide/runner';
+import { createTrace } from '@/agent/agents/guide/trace';
+import type { Trace } from '@/shared/types';
+import { createNonceCache } from '@/agent/context/nonce';
 
 /** One per panel instance. Lives here rather than inside the run loop because
  *  consecutive calls on one page are separate effects, and a cache scoped to a
  *  single run would never get a second look at the same snapshot. */
 const nonces = createNonceCache();
-import { TRACE_ENABLED_KEY, isFlagOn } from '@/agent/guide/flags';
-import type { CallModelParams, EffectOutcome, EffectRequest, EffectResult, FetchDocParams } from '@/agent/host/effect';
+import { TRACE_ENABLED_KEY, isFlagOn } from '@/agent/flags';
+import type { CallModelParams, EffectOutcome, EffectRequest, EffectResult, EffectUsage, FetchDocParams } from '@/agent/thread/effect';
 import { sessionIdForTab } from '@/shared/protocol';
 import type {
   EffectClaimResponse,
@@ -19,7 +20,7 @@ import type {
 import type { ProviderConfig } from '@/shared/settings';
 
 /**
- * The panel's half of 04-effect-protocol.md — the executor for `EFFECT_
+ * The panel's half of the effect protocol (design doc §2.6) — the executor for `EFFECT_
  * REQUEST`s the host broadcasts, plus the E-6 recovery pull on mount.
  *
  * Kept separate from `App.tsx` on purpose, the same way `qa.ts` is: every
@@ -44,7 +45,7 @@ import type { ProviderConfig } from '@/shared/settings';
  * re-parses it and is the authoritative check (design doc §8.3, "判定权在
  * Host"); running the same check here first only means a hallucinated ref
  * gets a readable error immediately instead of the host rediscovering it a
- * round-trip later. And ADR 0005's provenance scanner has to see what the
+ * round-trip later. And the provenance scanner (CONTEXT.md `Provenance`) has to see what the
  * model actually said, so re-serializing here would break it outright.
  *
  * What is new: `providerCalls` and `failureKind` cross with the outcome. The
@@ -63,7 +64,16 @@ export async function runCallModelEffect(
   const r = await runGuideToEnd(req.params as CallModelParams, cfg, signal, completeFn, trace.record, nonces);
 
   const outcome: EffectOutcome = r.failure
-    ? { ok: false, error: r.failure.error, retryable: r.failure.retryable, failureKind: r.failure.kind, providerCalls: r.providerCalls }
+    ? {
+        ok: false,
+        error: r.failure.error,
+        retryable: r.failure.retryable,
+        failureKind: r.failure.kind,
+        providerCalls: r.providerCalls,
+        // A draw that came back and was refused still cost its tokens. Dropping
+        // the figure here is what made a rejected envelope look free.
+        ...(r.usage ? { usage: r.usage } : {}),
+      }
     : { ok: true, value: r.raw, providerCalls: r.providerCalls, ...(r.tool ? { tool: r.tool } : {}), ...(r.usage ? { usage: r.usage } : {}) };
   // The trace comes back beside the result, never folded into it: the outcome
   // is what the host decides on, and nothing about a debugging artefact may
@@ -80,8 +90,8 @@ export async function runCallModelEffect(
  * `redirect:'manual'` are §8.3's own floor for an anonymous, non-redirect-
  * following grab; the full redirect-reauthorization loop (V-8) and the
  * response-size cap (V-9) are 06's job, once something upstream of this file
- * actually produces a resolved `url` to drive them (see `agent/api.ts`'s
- * `toEffectRequest` doc comment — 03's `fetchDoc` effect has no `url` yet).
+ * actually produces a resolved `url` to drive them (see `toEffectRequest` in
+ * `agent/thread/writer.ts`).
  *
  * `providerCalls: 0` on every branch, and it is not a formality: a document
  * fetch spends no model quota, and the host's accounting has to be able to
@@ -139,18 +149,40 @@ export async function recoverInflightOnMount(
  * The one function in this file that touches `chrome.*`. Listens for
  * `EFFECT_REQUEST`, executes it (`runCallModelEffect`/`runFetchDocEffect`),
  * and replies with exactly one `EFFECT_RESULT` — one of the two `sendMessage`
- * call sites this file's completion criteria grep for (04-effect-protocol.md,
- * amended); the other is the `EFFECT_CLAIM` round trip below.
+ * call sites architecture.spec.ts counts; the
+ * other is the `EFFECT_CLAIM` round trip below.
  *
  * `getTabId` rules out *other* tabs' panels: an instance only ever considers
  * a request addressed to the tab it is currently tracking (`App.tsx`'s own
  * `tabIdRef` pattern), dropping anything else silently. It cannot tell two
- * instances of *this same tab's* panel apart — the gap 04-effect-protocol.md's
- * Gotchas recorded as accepted — so the `EFFECT_CLAIM` claim immediately
+ * instances of *this same tab's* panel apart — a gap once accepted as known — so the `EFFECT_CLAIM` claim immediately
  * below is what actually closes it: the host arbitrates before either
  * instance is allowed to spend money on `complete()`/`fetch()`.
  */
-export function startEffectListener(getTabId: () => number | null, loadCfg: () => Promise<ProviderConfig>): () => void {
+/**
+ * What one `callModel` effect actually spent, reported to whoever mounted the
+ * listener.
+ *
+ * The guide path never reached the cost panel — `App.tsx` only records the QA
+ * path's own two calls — so a user watching a guide burn money read 「调用 2」
+ * from a completely unrelated question and had no way to see the guide at all.
+ * That is not a display detail: the panel is the only place this product ever
+ * says what it is spending.
+ *
+ * `usage` is already summed over the primary draw and its repair, because that
+ * round happens inside `runGuideToEnd`; `providerCalls` says how many requests
+ * that sum covers.
+ */
+export interface ModelSpend {
+  providerCalls: number;
+  usage?: EffectUsage;
+}
+
+export function startEffectListener(
+  getTabId: () => number | null,
+  loadCfg: () => Promise<ProviderConfig>,
+  onModelSpend?: (spend: ModelSpend) => void,
+): () => void {
   const controllers = new Map<string, AbortController>();
 
   const onRequest = (msg: unknown) => {
@@ -165,7 +197,7 @@ export function startEffectListener(getTabId: () => number | null, loadCfg: () =
       // Same-tab arbitration, *before* anything that spends money. A second
       // `sidepanel.html` instance bound to this same tab sees the identical
       // broadcast `EFFECT_REQUEST` and races this same claim; the host grants
-      // exactly one (`claimEffect`, `agent/host/effect.ts`). Losing here is
+      // exactly one (`claimEffect`, `agent/thread/effect.ts`). Losing here is
       // not a failure — it means the other instance already owns this call —
       // so this returns silently: no controller registered, no error, no
       // `EFFECT_RESULT`, nothing rendered.
@@ -183,6 +215,13 @@ export function startEffectListener(getTabId: () => number | null, loadCfg: () =
         if (req.kind === 'callModel') {
           const ran = await runCallModelEffect(req as EffectRequest & { kind: 'callModel' }, cfg, controller.signal, complete);
           result = ran.result;
+          // Reported whatever the outcome: a refused envelope was still paid
+          // for, and a panel that only counts successes understates the bill
+          // exactly when the user most wants to know.
+          onModelSpend?.({
+            providerCalls: result.outcome.providerCalls,
+            ...(result.outcome.usage ? { usage: result.outcome.usage } : {}),
+          });
           // Asked after the run, and asked of `storage.local` — `storage.session`
           // belongs to the worker (N-6). A disabled trace therefore costs one
           // local read and puts nothing on the wire; only the worker ever
@@ -200,8 +239,8 @@ export function startEffectListener(getTabId: () => number | null, loadCfg: () =
   };
 
   // E-5: harmless when the effectId is not (or no longer) tracked here — see
-  // this file's `RecoveryOutcome` doc comment and 04-effect-protocol.md's
-  // Gotchas on why both message orders are safe.
+  // this file's `RecoveryOutcome` doc comment on why both message
+  // orders are safe.
   const onAbort = (msg: unknown) => {
     const m = msg as { type?: string; effectId?: string } | undefined;
     if (m?.type === 'EFFECT_ABORT' && m.effectId) controllers.get(m.effectId)?.abort();

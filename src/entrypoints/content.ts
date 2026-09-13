@@ -2,8 +2,8 @@ import { extract, extractPageHash } from '@/core/extractor/extract';
 import { pageStructureChanged } from '@/core/extractor/fingerprint';
 import { fullTable, project } from '@/core/extractor/project';
 import { registry } from '@/core/extractor/registry';
-import { bindStep } from '@/core/packs/bind';
-import { authorDescriptor, toPackYaml } from '@/core/packs/author';
+import { bindStep } from '@/core/descriptor/bind';
+import { authorDescriptor } from '@/core/descriptor/author';
 import type { ExtractProfile, ProjectBudget, PromptItem, PromptTable } from '@/core/extractor/types';
 import { Overlay } from '@/core/overlay/overlay';
 import { scrollToTarget, TargetTracker } from '@/core/overlay/tracker';
@@ -140,7 +140,7 @@ export default defineContentScript({
      * A `ref` names an element *in one snapshot of one page at one moment*. Step
      * 3's target usually does not exist in the DOM while step 1 is on screen
      * (a dialog has not opened, a page has not been navigated to), so no caller
-     * — pack, baseline or model — can produce a ref for it up front. What it can
+     * — fixed plan, baseline or model — can produce a ref for it up front. What it can
      * produce is a `descriptor`, and turning that into a ref is only possible
      * here, now, against the live page.
      *
@@ -205,7 +205,7 @@ export default defineContentScript({
           // silently substitute our own idea of the target for theirs.
           candidates = declared;
         } else if (cmd.mode === 'explain') {
-          // ADR 0006: a QA reference is a point-in-time assertion ("the one I
+          // A QA reference is a point-in-time assertion ("the one I
           // read just then"), not a durable intent like a guide Step. Rebinding
           // by descriptor here would silently swap in whatever element happens
           // to match now — right role, right name, wrong moment — and paint it
@@ -228,7 +228,7 @@ export default defineContentScript({
         }
       }
 
-      // S-03, second and independent enforcement point: a hand-written pack is
+      // S-03, second and independent enforcement point: a hand-written fixed plan is
       // blocked exactly like a model would be. It sits in front of every paint,
       // and covers *every* ref the step can put on screen — `alsoRefs` cuts a
       // hole in the scrim just as `ref` does, and it is the path `explain` /
@@ -417,7 +417,7 @@ export default defineContentScript({
     }
 
     /**
-     * 05-route-and-steps.md's Seam: a second, independent subscription on top
+     * A second, independent subscription on top
      * of the same DOM-observation machinery `TargetTracker` already uses.
      * `TargetTracker` watches one highlighted element; this watches whatever
      * landmark/heading nodes feed `pageFingerprint` — the exact "一小撮
@@ -492,6 +492,7 @@ export default defineContentScript({
         title: cmd.step.title,
         detail: cmd.step.detail,
         value: cmd.step.value,
+        skippable: cmd.skippable,
         looking: `找的是：${d.role}｜${d.name}${d.scope ? `（在「${d.scope}」内）` : ''}${d.nth !== undefined ? `（第 ${d.nth} 个）` : ''}`,
       };
     }
@@ -557,7 +558,6 @@ export default defineContentScript({
           matches: authored.matches,
           correct: authored.correct,
           rung: authored.rung,
-          yaml: toPackYaml(authored, hit.item.name || hit.item.role),
         });
       };
       addEventListener('pointermove', onMove, true);

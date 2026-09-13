@@ -16,17 +16,20 @@
  * address we cannot vouch for, and the cost of asking once more is a click.
  */
 export function sameHost(a: string, b: string): boolean {
-  const host = (raw: string): string | null => {
-    try {
-      const h = new URL(raw).hostname;
-      return h === '' ? null : h.toLowerCase();
-    } catch {
-      return null;
-    }
-  };
-  const left = host(a);
-  const right = host(b);
+  const left = hostOf(a);
+  const right = hostOf(b);
   return left !== null && right !== null && left === right;
+}
+
+/** An address's hostname, lower-cased — `null` for anything unparseable or
+ *  without a host, which `sameHost` then refuses to vouch for. */
+export function hostOf(raw: string): string | null {
+  try {
+    const h = new URL(raw).hostname;
+    return h === '' ? null : h.toLowerCase();
+  } catch {
+    return null;
+  }
 }
 
 /**

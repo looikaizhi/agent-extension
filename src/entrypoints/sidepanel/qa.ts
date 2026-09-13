@@ -1,98 +1,18 @@
-import { ProviderError, type Usage } from '@/agent/provider';
-import type { KnownEnvelope } from '@/agent/plan/contract';
-import type { PromptItem, PromptTable } from '@/core/extractor/types';
+import { ProviderError, type Usage } from '@/agent/provider/provider';
 import type { WireBinding, WireCheck, WireEvidence } from '@/shared/protocol';
-import type { Ref } from '@/shared/types';
 
 /**
- * Pure view-model logic behind `App.tsx`'s `runQuestion()` (07-panel-loop.md,
- * task 7).
+ * Pure view-model logic behind `App.tsx`'s `askPage()`.
  *
  * `App.tsx` depends on `chrome.*` and React rendering, and this repo runs
  * vitest under `environment: 'node'` with no jsdom and no component-test
  * precedent (see 07's README) — so `App.tsx` itself is proven only by the
  * e2e suite (08). Everything in *this* file is ordinary data-in/data-out
  * logic with no side effects, so it keeps the fast red→green loop the rest
- * of the codebase has. Whenever a judgment call in `runQuestion()` can be
+ * of the codebase has. Whenever a judgment call in `askPage()` can be
  * phrased as "given this input, what should show?" rather than "go do this
  * chrome/network thing", it belongs here instead of inline in the component.
  */
-
-/* ═══════════ 三种 intent 各自该渲染成什么 ═══════════ */
-
-export interface QaOption {
-  ref: Ref;
-  label: string;
-}
-
-export interface QaAnswer {
-  intent: 'explain' | 'clarify' | 'need_text';
-  /** `explain`: the model's `answer`. `clarify`: the model's `question`.
-   *  `need_text`: a fixed, non-fabricated string — see `NEED_TEXT_MESSAGE`. */
-  message: string;
-  /** Resolved elements to highlight via `PANEL_SHOW_QA_RESULT`. Empty means
-   *  "send no highlight request" — `explain` with no refs, or `need_text`
-   *  always. */
-  items: readonly PromptItem[];
-  /** `clarify` only: every candidate's label, for display next to the
-   *  highlight. Never used to pick one — the caller passes all of `items`
-   *  through to the host, which puts them all in `alsoRefs` (06, K-6). */
-  options?: readonly QaOption[];
-}
-
-/**
- * `need_text`'s fixed copy. A constant, not a sentence built from the
- * model's own `query`/`blocks` fields — those are validated model output
- * (provenance already checked them), but weaving them into prose here would
- * read as "here is what the page says", which is exactly the fabrication
- * 07 forbids. The honest thing this intent can say is that the text could
- * not be read at all.
- */
-export const NEED_TEXT_MESSAGE = '我还读不到这个页面的正文——正文管线要到后面的阶段才有。';
-
-/**
- * Looks up `refs` in `table.items`, preserving order, dropping anything not
- * found. In practice nothing is ever dropped: `validateEnvelope`'s R-a
- * already proved every claimed ref exists in this same table before this
- * function ever runs. The filter exists so this function's own contract does
- * not silently depend on that upstream guarantee holding forever.
- */
-function resolveItems(refs: readonly Ref[], table: PromptTable): PromptItem[] {
-  const byRef = new Map(table.items.map((i) => [i.ref, i] as const));
-  const out: PromptItem[] = [];
-  for (const ref of refs) {
-    const item = byRef.get(ref);
-    if (item) out.push(item);
-  }
-  return out;
-}
-
-/**
- * Turns a validated `Envelope` into what the panel should show and, if
- * anything, highlight. Never called with an envelope that failed
- * `validateEnvelope` — every ref inside is already known-safe (present in
- * this snapshot, not sensitive).
- */
-export function describeAnswer(envelope: KnownEnvelope, table: PromptTable): QaAnswer {
-  switch (envelope.intent) {
-    case 'explain':
-      return { intent: 'explain', message: envelope.answer, items: resolveItems(envelope.refs, table) };
-    case 'clarify': {
-      const options = envelope.options.map((o) => ({ ref: o.ref, label: o.label }));
-      return {
-        intent: 'clarify',
-        message: envelope.question,
-        items: resolveItems(
-          options.map((o) => o.ref),
-          table,
-        ),
-        options,
-      };
-    }
-    case 'need_text':
-      return { intent: 'need_text', message: NEED_TEXT_MESSAGE, items: [] };
-  }
-}
 
 /* ═══════════ 页面身份比对(Panel 侧,独立于 06 的 Host 侧核对) ═══════════ */
 
@@ -131,8 +51,15 @@ export interface CallRecord {
    * a call that got that far always has one. A `null` here still counts
    * toward `totalCalls` below: the request went out and, in most billing
    * models, was already paid for even though nothing useful came back.
+   *
+   * `'merged'` is the third case, and it is not the same as `null`: the guide
+   * path runs its repair round *inside* `runGuideToEnd`, so the endpoint's
+   * figures come back already summed over both requests. The sum is recorded
+   * on one record and its siblings say so, rather than claiming a number was
+   * never reported — that claim is what the panel warns about, and it would be
+   * false here.
    */
-  usage: Usage | null;
+  usage: Usage | null | 'merged';
 }
 
 export interface CostSummary {
@@ -170,6 +97,9 @@ export function summarizeCost(calls: readonly CallRecord[]): CostSummary {
     if (c.kind === 'primary') primaryCalls++;
     else repairCalls++;
 
+    // Counted, but its tokens live on a sibling record — nothing to add and
+    // nothing to warn about.
+    if (c.usage === 'merged') continue;
     if (!c.usage) {
       unknownCostCalls++;
       continue;
@@ -192,7 +122,7 @@ export function summarizeCost(calls: readonly CallRecord[]): CostSummary {
   };
 }
 
-/* ═══════════ 三轴文案（05-route-and-steps.md §5.7）═══════════ */
+/* ═══════════ 三轴文案（设计文档 §5.7）═══════════ */
 
 /**
  * §5.7's three orthogonal axes, mapped to display text. Kept as three
@@ -206,13 +136,15 @@ export function summarizeCost(calls: readonly CallRecord[]): CostSummary {
  * three members each, and a `switch` over a subset would either need a
  * default (silently swallowing a real S3/S4 value once it starts arriving) or
  * a cast. Handling the input type honestly, not "for a value that will never
- * arrive today", is the same discipline `describeAnswer` above already
- * follows for the wider `Envelope` union.
+ * arrive today", is the same discipline the question agent's answers
+ * (`agent/agents/question/output/`) follow, one module per intent.
  */
 export function describeEvidence(evidence: WireEvidence): string {
   switch (evidence) {
     case 'walked':
       return '曾经真实走过一遍';
+    case 'handpicked':
+      return '由你在元素表里亲手指定';
     case 'documented':
       return '依据站内文档';
     case 'model':

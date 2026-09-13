@@ -3,8 +3,8 @@ import type { PromptTable } from '@/core/extractor/types';
 
 /**
  * The node table is both the developer's view of "what the extension sees" and
- * the authoring surface for guide packs — which is why U-10 (recording) could
- * be cut without losing the ability to write packs.
+ * the authoring surface for fixed plans — which is why U-10 (recording) could
+ * be cut without losing the ability to write them.
  */
 export function NodeTable({
   table,

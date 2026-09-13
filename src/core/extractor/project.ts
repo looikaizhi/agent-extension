@@ -6,8 +6,8 @@ import type { LocatorView, ProjectBudget, PromptItem, PromptTable, UINode } from
  * How long a name may be — **not** a budget knob, which is why it does not live
  * in `ProjectBudget`.
  *
- * It used to, and it had drifted to three different values: 120 in the host's
- * `LOCAL_BUDGET`, 80 from `budgetFor`, 80 as the content script's initial
+ * It used to, and it had drifted to three different values: 120 in the retired
+ * local matcher's budget, 80 from `budgetFor`, 80 as the content script's initial
  * `lastBudget`. Because the name is truncated *before* it becomes part of an
  * identity (see `describeAll` below), two extractions taken at two budgets
  * produced two different identities for the same element — so a descriptor
@@ -27,8 +27,8 @@ export const NAME_MAX_LEN = 120;
  *
  * The middle rung is the measured one. Live traffic fits `prompt ≈ 25.8 ×
  * elements + 2593`, so 400 elements on a 64k window costs about 10.7k — a sixth
- * of it — against the 6.3k the old 150 was spending. That is the trade ADR 0012
- * makes: 20 of 20 repository pages came back truncated at 150, and the
+ * of it — against the 6.3k the old 150 was spending. That is the trade CONTEXT.md's
+ * `Element table` records: 20 of 20 repository pages came back truncated at 150, and the
  * navigation the user needed was missing from 7 of 31 snapshots. The cap stops
  * being a knife that cuts every page and becomes a guard rail an extreme one
  * reaches, which only works if reaching it is genuinely rare.
@@ -169,7 +169,7 @@ export function truncate(s: string, max: number): string {
 }
 
 /**
- * Entrances first, then document order, then cut the tail (ADR 0012).
+ * Entrances first, then document order, then cut the tail (CONTEXT.md `Element table`, `Entrance`).
  *
  * What this replaces is a score: viewport +4 / within a band +2 / off screen
  * +1, plus small bonuses for role and name. It ranked by *proximity to what the
@@ -395,7 +395,7 @@ function ambiguityOf(items: readonly PromptItem[]): number {
  * Both values are page-controlled, so both are `JSON.stringify`-quoted like
  * every name here — a title containing a newline would otherwise forge a
  * line of our own header format. Structural safety against the *wrapper*
- * remains the nonce's job (`prompt.ts`), and `nonceFor` sees these lines
+ * remains the nonce's job (`context/user-message.ts`), and `nonceFor` sees these lines
  * because they are part of what it hashes.
  *
  * Indentation, not `## a › b › c` group headers. The flat form was chosen to
@@ -427,12 +427,12 @@ function ambiguityOf(items: readonly PromptItem[]): number {
  * by a different one and then resumes (A, B, A) opens `A` twice. That is
  * deliberate, not an oversight — bucketing by `path` would reorder the items
  * to make the runs contiguous, and document order is itself information the
- * model uses: it mirrors how the page reads, and since ADR 0012 it is also the
+ * model uses: it mirrors how the page reads, and it is also the
  * order `prune` cuts along. A repeated group line costs a handful of tokens;
  * silently
  * reordering controls costs the thing document order exists to preserve.
  */
-export function toPromptText(table: PromptTable): string {
+export function toPromptText(table: PromptTable, fresh?: ReadonlySet<Ref>): string {
   const lines: string[] = [`page ${JSON.stringify(pageLabel(table.url))}`];
   if (table.title) lines.push(`title ${JSON.stringify(truncate(table.title, NAME_MAX_LEN))}`);
   // Said out loud, because the reader cannot tell otherwise. `prune` cuts the
@@ -459,6 +459,12 @@ export function toPromptText(table: PromptTable): string {
       it.nth !== undefined ? `#${it.nth}` : '',
       it.state?.length ? `[${it.state.join(',')}]` : '',
       it.sensitive ? '!secret' : '',
+      // Only ever set when the page did not navigate — see `CallModelParams`.
+      // A click that opens a menu leaves the reader with the same few hundred
+      // rows and no clue which dozen of them just appeared; measured live, one
+      // journey clicked the same button five times while the control it wanted
+      // sat in the panel that button had opened.
+      fresh?.has(it.ref) ? '+new' : '',
     ]
       .filter(Boolean)
       .join(' ');

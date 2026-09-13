@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PromptTable } from '@/core/extractor/types';
-import { descriptorOf } from '@/core/packs/bind';
-import { packsFor } from '@/core/packs/match';
-import { complete, describeProviderError, testConnection } from '@/agent/provider';
-import { parseContract } from '@/agent/plan/contract';
-import { buildPrompt, buildRepairPrompt, ENVELOPE_SHAPE_GUIDE } from '@/agent/plan/prompt';
-import { validateEnvelope } from '@/agent/plan/validate';
+import { descriptorOf } from '@/core/descriptor/bind';
+import { testConnection } from '@/agent/provider/provider';
+import { questionAgent } from '@/agent/agents/question/agent';
+import { runQuestion } from '@/agent/agents/question/runner';
 import { DEFAULT_CONFIG, loadConfig, PRESETS, saveConfig, type ProviderConfig } from '@/shared/settings';
 import {
   type ContentEvent,
@@ -18,14 +16,13 @@ import {
 } from '@/shared/protocol';
 import { onEvent } from '@/shared/rpc';
 import type { GuideInflightResponse, WireBinding, WireCheck, WireEvidence } from '@/shared/protocol';
-import type { GuideRouteHop } from '@/agent/plan/contract';
+import type { GuideRouteHop } from '@/shared/types';
 import { NodeTable } from './components/NodeTable';
 import { StatsBar } from './components/StatsBar';
 import { recoverInflightOnMount, startEffectListener } from './effects';
 import {
   type CallRecord,
   type QaContext,
-  describeAnswer,
   describeBinding,
   describeCheck,
   describeEvidence,
@@ -34,7 +31,7 @@ import {
 } from './qa';
 
 /**
- * 05-route-and-steps.md's "账单前置": the model's latest coarse `route` plus
+ * "账单前置": the model's latest coarse `route` plus
  * §5.7's three axes, shown next to whatever step is on screen — present only
  * while an S2 model-driven guide is running (`GuideState`'s optional fields
  * are absent for every S1 path, `App.tsx` never fabricates a placeholder for
@@ -72,8 +69,8 @@ type QaViewState =
   | { kind: 'idle' }
   | { kind: 'busy'; message: string }
   // `highlightIssue` is set only when the *panel's own* page-identity check
-  // (`sameQaContext`) passed but the host's later, narrower check (06/ADR
-  // 0006 — it can only see `chrome.tabs.get`, not `snapshotId`) rejected the
+  // (`sameQaContext`) passed but the host's later, narrower check (it
+  // can only see `chrome.tabs.get`, not `snapshotId`) rejected the
   // highlight anyway, or the host could not reach the content script at
   // all. The answer text is still shown — the panel already trusts it —
   // this only says the highlight itself did not make it onto the page.
@@ -97,9 +94,7 @@ export function App() {
   const [status, setStatus] = useState<Status>({ kind: 'idle', text: '就绪' });
   const [goal, setGoal] = useState('');
   const [log, setLog] = useState<string[]>([]);
-  // 05-route-and-steps.md: `null` whenever no S2 model-driven guide is
-  // currently reporting axes (no guide running, or an S1 pack/baseline/
-  // inspector-driven one is) — see `GuideAxes`'s own doc comment.
+  // `null` whenever no guide is currently reporting axes — see `GuideAxes`'s own doc comment.
   const [guideAxes, setGuideAxes] = useState<GuideAxes | null>(null);
   /** CL-1's question and its candidates, verbatim. `null` whenever the guide
    *  is not waiting on an answer. */
@@ -123,11 +118,11 @@ export function App() {
   const [costCalls, setCostCalls] = useState<CallRecord[]>([]);
   /** One real `AbortController` per question, truly passed to `complete`
    *  (要害一). A new question, a tab switch, or the panel unmounting all
-   *  abort whatever this currently points to — see `runQuestion`, `sync`
+   *  abort whatever this currently points to — see `askPage`, `sync`
    *  below, and the unmount effect further down. */
   const qaAbort = useRef<AbortController | null>(null);
   /** Mirrors of the latest known tab/page state, updated the instant `sync`
-   *  or `doExtract`/`runQuestion` learn something new. `runQuestion`'s own
+   *  or `doExtract`/`askPage` learn something new. `askPage`'s own
    *  `tabId`/`url` closure params stay pinned to the values *when the
    *  question was asked* (ordinary JS closure semantics); these refs are
    *  what let it also see the *current* values once the model call returns,
@@ -141,7 +136,7 @@ export function App() {
    *  where — to call `PANEL_RESUME_GUIDE` (要害四). */
   const activeQaHighlight = useRef<{ tabId: number; guideActive: boolean } | null>(null);
   /** The exact text last submitted, for the error state's retry button —
-   *  retrying re-runs `runQuestion` from scratch (a whole new call), it does
+   *  retrying re-runs `askPage` from scratch (a whole new call), it does
    *  not resume anything, so it needs the original question even if the
    *  input box has since been edited. */
   const lastQuestion = useRef('');
@@ -220,10 +215,10 @@ export function App() {
    * so anything the panel remembered would be lost exactly when it mattered.
    */
   const startFlow = useCallback(
-    async (steps: GuideStep[]) => {
+    async (goal: string, steps: GuideStep[]) => {
       if (tabId === null || steps.length === 0) return;
       setStatus({ kind: 'busy', text: '正在定位…' });
-      await chrome.runtime.sendMessage({ type: 'START_GUIDE', tabId, steps });
+      await chrome.runtime.sendMessage({ type: 'START_GUIDE', tabId, goal, steps });
     },
     [tabId],
   );
@@ -330,11 +325,25 @@ export function App() {
     });
   }, []);
 
-  // 04-effect-protocol.md: the executor for whatever `EFFECT_REQUEST`s the
+  // The effect protocol (design doc §2.6): the executor for whatever `EFFECT_REQUEST`s the
   // host broadcasts. Mounted once — `startEffectListener` itself decides,
   // per message, whether the tab it is currently tracking (`tabIdRef`) is
   // the one the request is for.
-  useEffect(() => startEffectListener(() => tabIdRef.current, loadConfig), []);
+  useEffect(
+    () =>
+      startEffectListener(() => tabIdRef.current, loadConfig, ({ providerCalls, usage }) =>
+        setCostCalls((cs) => [
+          ...cs,
+          // The endpoint reports one figure for the whole effect, because the
+          // repair round runs inside the runner. It goes on the first record;
+          // the rest say `merged` so they are counted without pretending their
+          // usage went missing.
+          { kind: 'primary', usage: usage ? { ...usage, estimated: false } : null },
+          ...Array.from({ length: Math.max(0, providerCalls - 1) }, () => ({ kind: 'repair' as const, usage: 'merged' as const })),
+        ]),
+      ),
+    [],
+  );
 
   // E-6: pulled once per tab, never on a timer and never re-issuing an
   // `EffectRequest` of its own — a reopened panel only ever *reports* what
@@ -374,21 +383,12 @@ export function App() {
   }, [tabId, goal]);
 
   /**
-   * "问这个页面" — the seam 07-panel-loop.md names. A straight line, on
-   * purpose: `PANEL_EXTRACT` → `buildPrompt` → the model call → `parseContract`
-   * → (parse failure only) exactly one `buildRepairPrompt` + a second model
-   * call → `parseContract` → `validateEnvelope` → render. No loop, no retry
-   * counter — "1 主调用 + ≤1 修复" falls out of there being exactly two
-   * literal calls to `complete` below, not out of anything that counts.
-   *
-   * Deliberately does NOT share a streaming helper between the primary and
-   * repair calls: a reentrant function either of them could call from
-   * inside itself is exactly the shape that turns into an unbounded retry
-   * loop the moment someone edits it, even if today's two callers behave.
-   * Two separate, literal call sites is what makes "at most one repair" a
-   * structural fact instead of a promise (see 07-panel-loop.md's 完成判据).
+   * "问这个页面" — the panel's half of a question: extract the page, hand the
+   * question to the question agent (`agent/agents/question/runner.ts`, where the one
+   * primary call and the at-most-one repair live), check the page is still the
+   * one that was asked about, then show the answer and its highlight.
    */
-  const runQuestion = useCallback(
+  const askPage = useCallback(
     async (raw: string) => {
       const q = raw.trim();
       if (tabId === null || !q) return;
@@ -422,77 +422,24 @@ export function App() {
 
       setQaView({ kind: 'busy', message: '正在询问模型…' });
 
-      // ─── Primary call: the only place this question spends money before
-      // knowing whether the output even parses. ───
-      let primaryRaw = '';
-      try {
-        for await (const d of complete(cfg, buildPrompt(q, snapshot), controller.signal)) {
-          // Progress indicator only (要害三): never render `d.content` itself.
-          // Every `Delta` here is un-validated model output — it has not
-          // been through `parseContract`/`validateEnvelope` yet, and may
-          // never produce a legal envelope at all. Showing it verbatim
-          // would hand the user half a JSON object or content R-a/R-e will
-          // go on to reject. If you are here to "add back streaming
-          // display", don't — that is the exact regression this comment
-          // exists to stop; drive a "generating…" indicator off `.length`
-          // (as below) or a timer instead, never off `.content`.
-          primaryRaw += d.content;
-          if (d.usage) setCostCalls((cs) => [...cs, { kind: 'primary', usage: d.usage! }]);
-          else setQaView({ kind: 'busy', message: `正在生成回答…（已收到 ${primaryRaw.length} 字）` });
-        }
-      } catch (err) {
-        if (controller.signal.aborted) return; // aborted mid-flight — not a real failure
-        // The request went out even though it failed — it still counts
-        // toward the cost panel (成本面板, "已发出但失败的调用照样计入").
-        setCostCalls((cs) => [...cs, { kind: 'primary', usage: null }]);
-        setQaView({ kind: 'error', message: describeProviderError(err) });
-        return;
-      }
-      if (controller.signal.aborted) return;
-
-      let parsed = parseContract(primaryRaw);
-      let envelope = parsed.kind === 'ok' ? parsed.envelope : null;
-
-      if (!envelope) {
-        setQaView({ kind: 'busy', message: '首次输出无法解析，正在尝试一次修复…' });
-
-        // ─── Repair call: the structurally-guaranteed *only* second
-        // attempt (§5.9 of the agent design doc) — a brand-new minimal
-        // conversation, never the original one with the bad output
-        // appended, and never fed the page content a second time. There is
-        // no third call site anywhere for this to loop into. ───
-        let repairRaw = '';
-        try {
-          for await (const d of complete(cfg, buildRepairPrompt(primaryRaw, ENVELOPE_SHAPE_GUIDE), controller.signal)) {
-            repairRaw += d.content; // same rule as the primary call: progress only, never displayed
-            if (d.usage) setCostCalls((cs) => [...cs, { kind: 'repair', usage: d.usage! }]);
-            else setQaView({ kind: 'busy', message: `正在修复…（已收到 ${repairRaw.length} 字）` });
-          }
-        } catch (err) {
-          if (controller.signal.aborted) return;
-          setCostCalls((cs) => [...cs, { kind: 'repair', usage: null }]); // same reasoning as the primary call above
-          setQaView({ kind: 'error', message: describeProviderError(err) });
-          return;
-        }
-        if (controller.signal.aborted) return;
-
-        parsed = parseContract(repairRaw);
-        if (parsed.kind === 'error') {
-          setQaView({ kind: 'error', message: parsed.message });
-          return;
-        }
-        envelope = parsed.envelope;
-      }
-
-      const validated = validateEnvelope(envelope, snapshot);
-      if (validated.kind === 'violation') {
-        setQaView({ kind: 'error', message: validated.reason });
+      const result = await runQuestion({ question: q, table: snapshot }, cfg, controller.signal, (e) => {
+        if (e.kind === 'billed') setCostCalls((cs) => [...cs, { kind: e.call, usage: e.usage }]);
+        else if (e.kind === 'repairing') setQaView({ kind: 'busy', message: '首次输出无法解析，正在尝试一次修复…' });
+        else
+          setQaView({
+            kind: 'busy',
+            message: e.call === 'primary' ? `正在生成回答…（已收到 ${e.chars} 字）` : `正在修复…（已收到 ${e.chars} 字）`,
+          });
+      });
+      if (result.kind === 'aborted') return; // superseded — say nothing
+      if (result.kind === 'failed') {
+        setQaView({ kind: 'error', message: result.message });
         return;
       }
 
       // Page identity, re-checked against the *live* refs (要害二). This is
       // independent of — and in addition to — the URL check the host makes
-      // before forwarding a highlight (06/ADR 0006): that one only decides
+      // before forwarding a highlight: that one only decides
       // whether to paint an overlay; this one decides whether the panel
       // trusts the answer text enough to show it at all.
       const current: QaContext = {
@@ -505,24 +452,7 @@ export function App() {
         return;
       }
 
-      // QA (ADR 0004) only ever prompts with `buildPrompt` (S1's three-intent
-      // shape guide), so the model should never actually hand back `guide` /
-      // `need_docs` here — those are S2's `AgentHost` path (`agent/api.ts`),
-      // never QA's (see contract.ts's `KnownEnvelope` doc comment). But
-      // `validateEnvelope`'s `ok.envelope` is now the full five-shape
-      // `Envelope` (02-validate-guide.md widened it for `AgentHost`'s sake),
-      // so this narrowing is what keeps that guarantee real instead of
-      // assumed — a defensive `error`, not a silent cast, if it ever fires.
-      if (
-        validated.envelope.intent === 'guide' ||
-        validated.envelope.intent === 'need_docs' ||
-        validated.envelope.intent === 'done'
-      ) {
-        setQaView({ kind: 'error', message: `模型返回了问答流程不支持的信封类型「${validated.envelope.intent}」。` });
-        return;
-      }
-
-      const answer = describeAnswer(validated.envelope, snapshot);
+      const answer = questionAgent.answer(result.envelope, snapshot);
       setQaView(
         answer.intent === 'clarify'
           ? { kind: 'clarify', message: answer.message, options: answer.options ?? [] }
@@ -558,7 +488,7 @@ export function App() {
     [tabId, url, cfg, endQaHighlight],
   );
 
-  const onAskQuestion = useCallback(() => void runQuestion(question), [question, runQuestion]);
+  const onAskQuestion = useCallback(() => void askPage(question), [question, askPage]);
   const cancelQuestion = useCallback(() => {
     qaAbort.current?.abort();
     setQaView({ kind: 'idle' });
@@ -567,19 +497,21 @@ export function App() {
     void endQaHighlight();
     setQaView({ kind: 'idle' });
   }, [endQaHighlight]);
-  const retryQuestion = useCallback(() => void runQuestion(lastQuestion.current), [runQuestion]);
+  const retryQuestion = useCallback(() => void askPage(lastQuestion.current), [askPage]);
 
   const onRowClick = useCallback(
     async (ref: string) => {
       if (!table) return;
       const item = table.items.find((i) => i.ref === ref);
       if (!item) return;
-      await startFlow([
+      // No `ref`: this one belongs to the panel's own snapshot, and the host
+      // takes a fresh one before painting. The descriptor is what survives.
+      const title = item.name || item.role;
+      await startFlow(`定位「${title}」`, [
         {
-          ref: item.ref,
           descriptor: descriptorOf(item),
           expectedUserAction: actionForRole(item.role),
-          title: item.name || item.role,
+          title,
           detail: '（从元素表直接选中）',
         },
       ]);
@@ -587,7 +519,6 @@ export function App() {
     [table, startFlow],
   );
 
-  const availablePacks = url ? packsFor(url) : [];
   const cost = summarizeCost(costCalls);
 
   return (
@@ -631,15 +562,10 @@ export function App() {
             {inspecting ? '取消检视' : '检视元素'}
           </button>
         </div>
-        {availablePacks.length > 0 && (
-          <p className="packs">
-            本站可用引导包：{availablePacks.map((p) => p.displayName).join('、')}
-          </p>
-        )}
       </section>
 
       {/*
-        05-route-and-steps.md："账单前置"——route 与三轴一到就展示，不是一个
+        "账单前置"——route 与三轴一到就展示，不是一个
         需要用户主动点开才看得到的东西，也不是一个要点确认才能继续的阻断式
         弹窗。只在 S2 模型驱动的引导正在报告时出现；route 里的字符串原样展
         示，不做任何二次加工（Gotchas）。三轴各自独立展示，互不覆盖。
@@ -743,7 +669,7 @@ export function App() {
       {/*
         独立的"问这个页面"入口 — 与上面的"引导我"分开摆
         放，不靠猜测用户打的字属于引导还是问答。问答是无状态的一次性回合
-        （ADR 0004），不建 Thread、不动引导的游标。
+        （CONTEXT.md `Question`），不建 Thread、不动引导的游标。
       */}
       <section className="qa">
         <h2>问这个页面</h2>
@@ -790,7 +716,7 @@ export function App() {
           <div className="qa-answer error">
             <p>{qaView.message}</p>
             {/* 契约违规 / 解析失败 / 网络错误统一落在这里；重试是用户按下
-                按钮之后发生的全新一轮 runQuestion()，不是内部自动重试。 */}
+                按钮之后发生的全新一轮 askPage()，不是内部自动重试。 */}
             <div className="row">
               <button className="primary" onClick={retryQuestion}>
                 重试
@@ -836,9 +762,8 @@ export function App() {
           <p className={`status ${picked.correct ? 'ok' : 'error'}`}>
             {picked.correct
               ? `唯一命中（${picked.rung}）`
-              : `命中 ${picked.matches} 个 —— 这个 descriptor 现在就不安全，不要写进引导包`}
+              : `命中 ${picked.matches} 个 —— 这个元素现在无法被唯一定位，照它引导可能指错`}
           </p>
-          <pre>{picked.yaml}</pre>
         </section>
       )}
 

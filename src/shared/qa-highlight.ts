@@ -1,9 +1,9 @@
-import { descriptorOf } from '@/core/packs/bind';
+import { descriptorOf } from '@/core/descriptor/bind';
 import type { PromptItem } from '@/core/extractor/types';
 import type { GuideStep, HighlightAck } from './protocol';
 
 /**
- * Host-side gate for `PANEL_SHOW_QA_RESULT` (task 6, ADR 0006).
+ * Host-side gate for `PANEL_SHOW_QA_RESULT`.
  *
  * The model can take several seconds to answer, and the user is free to
  * navigate during that time. Comparing `tab.url` against the URL the question
@@ -11,7 +11,7 @@ import type { GuideStep, HighlightAck } from './protocol';
  * `chrome.tabs.get`, which `content.ts` has no access to — and it only ever
  * catches a whole-page navigation. The narrower "same URL, but the SPA
  * re-rendered" case is a *renderer* concern and is handled by the `mode`
- * branch in `content.ts`'s `render()` instead (ADR 0006): this function
+ * branch in `content.ts`'s `render()` instead: this function
  * cannot see that far, and must not try to.
  */
 export function checkPageIdentity(
@@ -29,12 +29,12 @@ export function checkPageIdentity(
  * `items` are already-resolved `PromptItem`s — the panel looks them up from
  * its own `PANEL_EXTRACT` table before sending `PANEL_SHOW_QA_RESULT`, the
  * same way `App.tsx`'s `onRowClick` does — not bare refs. That is what lets
- * this function reuse `descriptorOf` (`src/core/packs/bind.ts`) instead of
+ * this function reuse `descriptorOf` (`src/core/descriptor/bind.ts`) instead of
  * inventing a second ref → `ElementDescriptor` path, and it is why no fresh
  * extraction happens on the host: re-extracting here would commit a new
  * snapshot generation in the content script's registry and make the *original*
  * `snapshotId` unresolvable, so `explain` would report `snapshot_stale` on
- * every single call — the fast path ADR 0006 depends on would never fire.
+ * every single call — the fast path the explain branch depends on would never fire.
  *
  * `null` when there is nothing to highlight: the answer stands on its own.
  */
@@ -65,19 +65,19 @@ export function buildQaStep(
 /** What `PANEL_SHOW_QA_RESULT` answers with. Not part of `ContentRpcMap` — the
  *  panel talks to the host, not the content script, and the host adds one
  *  field the content script cannot know: whether a guide is parked on this
- *  tab (`agentHost.exists()`, the only `agentHost` method this whole channel
- *  ever calls). */
+ *  tab (the ownership query — the only thread access this whole channel ever
+ *  makes). */
 export type QaHighlightResponse =
   | { ok: true; data: { guideActive: boolean; highlight: HighlightAck | null } }
   | { ok: false; code: 'page_changed'; message: string };
 
 /**
- * Assembles the response once the identity check, `agentHost.exists()`, and
+ * Assembles the response once the identity check, the ownership query, and
  * (if applicable) the forwarded `HIGHLIGHT` result are all in hand.
  *
  * `guideActive` passes straight through — this function does not know or
- * care where it came from, so slice 8 ("guideActive 与当时 agentHost.exists()
- * 的返回值一致") tests it directly with a boolean, no `chrome.*` needed.
+ * care where it came from, so slice 8 ("guideActive 与当时的所有权查询结果
+ * 一致") tests it directly with a boolean, no `chrome.*` needed.
  */
 export function buildQaResponse(
   identity: { ok: true } | { ok: false; reason: string },

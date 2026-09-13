@@ -1,20 +1,18 @@
-import type { GuideRouteHop } from '@/agent/plan/contract';
-import type { Trace } from '@/agent/guide/trace';
-import type { EffectRecovery, EffectRequest, EffectResult } from '@/agent/host/effect';
+import type { EffectRecovery, EffectRequest, EffectResult } from '@/agent/thread/effect';
 import type { ExtractProfile, ProjectBudget, PromptItem, PromptTable } from '@/core/extractor/types';
-import type { Rect, Ref } from './types';
+import type { GuideRouteHop, Rect, Ref, Trace } from './types';
 
 /**
- * Mirrors `agent/host/machine.ts`'s `Binding` and `agent/host/thread.ts`'s
+ * Mirrors `agent/thread/machine.ts`'s `Binding` and `agent/thread/thread.ts`'s
  * `Evidence`/`Check` — not imported from either on purpose. Both of those
  * files already import *from* this one (`GuideStep`/`HighlightMode`), and
- * `agent/host/effect.ts`'s own doc comment explains why this file stays a
- * leaf with respect to `agent/host/`: importing back would turn a one-way
+ * `agent/thread/effect.ts`'s own doc comment explains why this file stays a
+ * leaf with respect to `agent/thread/`: importing back would turn a one-way
  * edge into a cycle for the sake of three small string unions. Three literals
  * are cheap to keep in sync by hand; a cycle is not.
  */
 export type WireBinding = 'bound' | 'ambiguous' | 'unbound';
-export type WireEvidence = 'walked' | 'documented' | 'model';
+export type WireEvidence = 'walked' | 'handpicked' | 'documented' | 'model';
 export type WireCheck = 'pass' | 'unknown' | 'skipped';
 
 /* ═══════════ identity ═══════════ */
@@ -82,8 +80,8 @@ export type UserAction = 'click' | 'input' | 'select' | 'toggle' | 'scroll' | 'o
  * The action a role implies, for producers that have a role and no better
  * evidence — the element inspector, and any future step author.
  *
- * `toPackYaml` used to emit a literal `click` for every element it was handed,
- * so picking a text field produced a step that told the user to click it. The
+ * The inspector used to produce a literal `click` for every element it was
+ * handed, so picking a text field produced a step that told the user to click it. The
  * card renders from this value, so the defect was visible to the user and
  * silent to us.
  *
@@ -146,6 +144,11 @@ export interface HighlightCommand {
   step: GuideStep;
   progress: { index: number; total: number };
   autoScroll: boolean;
+  /** Whether 跳过 does anything for this step. Only a fixed plan can move past
+   *  a step the user declined — a model-driven guide would re-plan and hand
+   *  the same step back — so the button is offered only there, and every skip
+   *  the side panel records is one that actually happened. */
+  skippable: boolean;
 }
 
 export type HighlightFailure =
@@ -206,13 +209,13 @@ export interface ContentRpcMap {
   EXTRACT: { req: { profile: ExtractProfile; budget: ProjectBudget }; res: PromptTable };
   HIGHLIGHT: { req: { command: HighlightCommand }; res: HighlightAck };
   CLEAR: { req: Record<never, never>; res: null };
-  /** Element picking for pack authoring. `on: false` leaves the mode. */
+  /** Element picking for writing a fixed plan's steps. `on: false` leaves the mode. */
   INSPECT: { req: { on: boolean }; res: null };
   /** Overlay state readback. Not a test-only affordance — the side panel needs
    *  exactly this, and closed shadow roots make it the only way in. */
   DEBUG_GET_OVERLAY_STATE: {
     req: Record<never, never>;
-    res: { mounted: boolean; visible: boolean; rect: Rect | null; status: string } | null;
+    res: { mounted: boolean; visible: boolean; rect: Rect | null; status: string; canSkip: boolean } | null;
   };
 }
 
@@ -246,22 +249,21 @@ export type ContentResponse<K extends RpcType = RpcType> =
  * Deliberately tiny, and deliberately not part of `ContentRpcMap`.
  *
  * The host is the only process that outlives both a navigation and the side
- * panel being closed, so it is the only place a flow can live. Task 9 replaces
- * `START_GUIDE` / `END_GUIDE` with `AgentHost.start/abort` over an event
- * stream; the shape is chosen so that swap is a rename, not a redesign.
+ * panel being closed, so it is the only place a flow can live.
  *
  * The `PANEL_*` verbs are a different kind and are not part of that swap.
  * They own no flow — they relay one panel gesture each to the content script,
  * and exist only so the content script answers to a single commander.
  * `PANEL_SHOW_QA_RESULT` and `PANEL_RESUME_GUIDE` (task 6) are the same kind
- * again: a question never owns a Thread (ADR 0004), so neither one starts,
- * resumes or aborts one — `PANEL_SHOW_QA_RESULT` only ever *reads* `agentHost`
- * (`exists()`), and `PANEL_RESUME_GUIDE` does not touch it at all.
+ * again: a question never owns a Thread (CONTEXT.md `Question`), so neither one starts,
+ * resumes or aborts one — `PANEL_SHOW_QA_RESULT` only asks whether a guide owns
+ * the tab, and `PANEL_RESUME_GUIDE` only repaints the step it is already on.
  */
 export type HostRequest =
-  /** `goal` is the agent path; `steps` is the element inspector handing over a
-   *  ready-made flow. Step 2 only ever sends `goal`. */
-  | { type: 'START_GUIDE'; tabId: number; goal?: string; steps?: readonly GuideStep[] }
+  /** `goal` is always said — a run is recorded against it. `steps` is a plan
+   *  handed over whole (the element inspector's row), which runs as given and
+   *  never reaches the model; without it, the model plans. */
+  | { type: 'START_GUIDE'; tabId: number; goal: string; steps?: readonly GuideStep[] }
   /** Ends whatever flow currently owns the tab, agent- or inspector-driven alike. */
   | { type: 'END_GUIDE'; tabId: number }
   /** The user's answer to P-2's card. Declining is not an error: the guide
@@ -274,17 +276,16 @@ export type HostRequest =
   /** The panel's inspect-mode toggle. Relayed for the same reason as `PANEL_EXTRACT`. */
   | { type: 'PANEL_INSPECT'; tabId: number; on: boolean }
   /**
-   * A QA answer's highlight (task 6, ADR 0004 & 0006). Unlike every other verb
-   * here, this one does *not* touch `agentHost` beyond the read-only `exists()`
-   * — a question never builds, resumes or aborts a Thread.
+   * A QA answer's highlight (CONTEXT.md `Question`). Unlike every other verb
+   * here, this one only *asks* whether a guide owns the tab — a question never
+   * builds, resumes or aborts a Thread.
    */
   | {
       type: 'PANEL_SHOW_QA_RESULT';
       tabId: number;
       /** The snapshot `items` were read from. Becomes `HighlightCommand.snapshotId`
        *  unchanged — the host must never substitute a freshly re-extracted one,
-       *  or `render()`'s `mode: 'explain'` branch could never detect staleness
-       *  (ADR 0006). */
+       *  or `render()`'s `mode: 'explain'` branch could never detect staleness */
       snapshotId: string;
       /** The page's URL when the question was asked, compared against the tab's
        *  *current* URL before anything is forwarded — the one check only the
@@ -293,7 +294,7 @@ export type HostRequest =
       /** Already-resolved items, not bare refs: the panel already has them from
        *  its own `PANEL_EXTRACT` table (same pattern as `App.tsx`'s
        *  `onRowClick`), which is what lets the host build a descriptor via
-       *  `descriptorOf` (`src/core/packs/bind.ts`) without a second extraction —
+       *  `descriptorOf` (`src/core/descriptor/bind.ts`) without a second extraction —
        *  a second extraction would commit a new snapshot generation and make
        *  the `snapshotId` above unresolvable on arrival. */
       items: readonly PromptItem[];
@@ -304,7 +305,7 @@ export type HostRequest =
   /** Redraws whatever step the tab's guide Thread is currently parked on,
    *  without advancing its cursor. The panel calls this once a QA highlight's
    *  overlay closes, to hand the screen back to an in-progress guide — reading
-   *  the parked step is enough; nothing here calls `agentHost.resume()`. */
+   *  the parked step is enough; nothing here moves the guide. */
   | { type: 'PANEL_RESUME_GUIDE'; tabId: number }
   /** E-6: the panel asks this once on mount, before
    *  it does anything else — never to issue a new `EffectRequest`, only to
@@ -313,7 +314,7 @@ export type HostRequest =
    *  either staying silent or (worse) sending a second, paid-for request. */
   | { type: 'PANEL_GUIDE_INFLIGHT'; tabId: number }
   /**
-   * Closes the gap 04-effect-protocol.md's Gotchas left open: `EFFECT_
+   * Closes a gap the effect protocol first left open: `EFFECT_
    * REQUEST` is a broadcast, so two `sidepanel.html` instances bound to the
    * *same* tab both receive it and, without this, both would really call
    * `complete()`/`fetch()` for one model call — a real duplicate charge, not
@@ -321,7 +322,7 @@ export type HostRequest =
    * `startEffectListener` instance sends this *before* touching
    * `complete()`/`fetch()`; the host answers with `EffectClaimResponse`, and
    * only the first asker for a given `effectId` gets `granted: true`
-   * (`agent/host/effect.ts`'s `claimEffect`). A losing instance does not
+   * (`agent/thread/effect.ts`'s `claimEffect`). A losing instance does not
    * retry, error, or render anything — it silently yields, because another
    * instance of the very same panel is already running this call. */
   | { type: 'EFFECT_CLAIM'; effectId: string };
@@ -346,15 +347,15 @@ export interface GuideInflightResponse {
 
 /** `EFFECT_CLAIM`'s answer. `granted` is `false` for every asker after the
  *  first for a given `effectId` — see `HostRequest`'s `EFFECT_CLAIM` variant
- *  and `agent/host/effect.ts`'s `claimEffect` for why one `Set` on the host
+ *  and `agent/thread/effect.ts`'s `claimEffect` for why one `Set` on the host
  *  is enough and needs no persistence. */
 export interface EffectClaimResponse {
   granted: boolean;
 }
 
 /**
- * 04-effect-protocol.md's wire envelopes over `chrome.runtime.sendMessage` —
- * `EffectRequest`/`EffectResult` (`@/agent/host/effect`) plus the `type` tag
+ * The effect protocol's wire envelopes (design doc §2.6) over `chrome.runtime.sendMessage` —
+ * `EffectRequest`/`EffectResult` (`@/agent/thread/effect`) plus the `type` tag
  * every message on this channel needs to be told apart from `GuideState` /
  * `ContentEvent` / the `HostRequest` verbs above.
  *
@@ -366,7 +367,7 @@ export interface EffectClaimResponse {
  */
 export type EffectRequestMessage = { type: 'EFFECT_REQUEST' } & EffectRequest;
 /**
- * `trace` rides along only when the debug switch is on (`agent/guide/trace.ts`
+ * `trace` rides along only when the debug switch is on (`agent/agents/guide/trace.ts`
  * — off by default, and read by the panel from `storage.local`). It is the
  * panel's only way to get one to storage at all: N-6 keeps the panel out of
  * `storage.session`, so it collects and the worker writes. Absent on every
@@ -374,11 +375,10 @@ export type EffectRequestMessage = { type: 'EFFECT_REQUEST' } & EffectRequest;
  */
 export type EffectResultMessage = { type: 'EFFECT_RESULT'; threadId: string; trace?: Trace } & EffectResult;
 
-/** E-5: broadcast when the host clears an `inflight` tombstone before a
- *  result arrived for it. Harmless if nobody is listening, or if the panel
- *  that would have listened already sent its result (see `cancelGuideEffect`
- *  in `agent/api.ts` — that path never reaches this broadcast at all, since
- *  there is nothing left to cancel by the time the result won the race). */
+/** E-5: broadcast when a run ends with an `inflight` tombstone still set, so
+ *  the panel stops a call nobody will read. Harmless if nobody is listening,
+ *  or if that panel already sent its result — the host discards a result for
+ *  a thread that is gone (E-2). */
 export interface EffectAbortMessage {
   type: 'EFFECT_ABORT';
   effectId: string;
@@ -387,14 +387,10 @@ export interface EffectAbortMessage {
 /**
  * Host → side panel. The panel is a view; this is what it renders.
  *
- * `route`/`evidence`/`check`/`binding` are 05-route-and-steps.md's addition —
- * present only on broadcasts the S2 model-driven guide produces (`agent/api.ts`'s
- * `applyGuideInput`, driven from `entrypoints/background.ts`'s `renderGuideOutcome`).
- * The S1 paths (element inspector, guide packs, the local lexical baseline)
- * never set them: those never call the model, so there is no `route` to show
- * and no `Evidence`/`Check` axis with a real value to stamp — leaving the
- * fields absent is the honest reading, not defaulting them to some
- * placeholder the user would mistake for a real answer.
+ * `route`/`evidence`/`check`/`binding` come from the guide's `ThreadState`
+ * (`agent/thread/writer.ts`'s `applyGuideInput`, rendered by
+ * `entrypoints/background.ts`'s `renderGuideOutcome`). A fixed plan sends them
+ * too, with an empty `route`: it never calls the model, so it has none to show.
  *
  * Per the Seam: "route 的展示与消费是一回事" — each broadcast carries the
  * *complete*, current `route`/`steps` picture, verbatim from `ThreadState`;
@@ -478,7 +474,7 @@ export const EVENT_TYPES = [
   'TARGET_FOUND',
   'SESSION_ENDED',
   'ELEMENT_PICKED',
-  /** 05-route-and-steps.md's Seam. A *second*, independent subscription on
+  /** A *second*, independent subscription on
    *  the same DOM-observation machinery `attachTracker`'s `TargetTracker`
    *  already uses — that one watches a single highlighted target; this one
    *  watches whatever landmark/heading nodes feed `pageFingerprint`. Reported
@@ -509,15 +505,15 @@ export type ContentEvent =
   /** §5.3's re-planning trigger, carried at its cheapest: the content script
    *  computes the new hash itself (it already has the live DOM), and leaves
    *  deciding whether it actually differs from what the *guide* was planned
-   *  against to the host (`ThreadState.table.pageHash`, `agent/api.ts`'s
-   *  `applyGuidePageChanged`) — the content script only ever compares against
+   *  against to the host (`ThreadState.table.pageHash`,
+   *  `agent/thread/writer.ts`'s `applyGuidePageChanged`) — the content script only ever compares against
    *  its own last-*reported* hash, a cheaper, independent check that exists
    *  purely so it does not spam this event on every mutation (05's Gotchas,
    *  "两层核对独立存在"). */
   | { type: 'PAGE_STRUCTURE_CHANGED'; sessionId: SessionId; pageHash: string }
   /**
    * The inspector's output. `matches !== 1 || !correct` means the descriptor is
-   * not safe to write down — L-0 is a constraint, not a statistic (§7.5).
+   * not safe to guide by — L-0 is a constraint, not a statistic (§7.5).
    */
   | {
       type: 'ELEMENT_PICKED';
@@ -526,5 +522,4 @@ export type ContentEvent =
       matches: number;
       correct: boolean;
       rung: string;
-      yaml: string;
     };

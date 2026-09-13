@@ -1,0 +1,178 @@
+import type { ChatMessage, ToolDef } from '@/agent/provider/provider';
+import type { Ref } from '@/shared/types';
+import type { PromptTable } from '@/core/extractor/types';
+import type { ParseResult } from '@/agent/envelope/contract';
+import type { GuideHistory } from '@/agent/context/user-message';
+import { INTENTS } from '@/agent/intents';
+import { refsViolation, type ValidateResult } from '@/agent/envelope/validate';
+import { CHOICE_GUIDE, LANGUAGE_GUIDE, MARK_GUIDE, TOOL_CHOICE_CLOSING, toolChoiceOpening } from '@/agent/prompts/system';
+import { buildGuideUserMessage } from '@/agent/context/user-message';
+import { parseContract, parseToolContract, type EnvelopeReader } from '@/agent/envelope/contract';
+import { GUIDE_INTENT_MODULES, isRegistered, moduleFor, moduleOf, type GuideAgentEnvelope } from './registry';
+
+/**
+ * The guide agent, in one place.
+ *
+ * A model call in this codebase is spread across two processes and eight
+ * files by necessity, not by choice: the SSE request lives in the
+ * side panel because a service worker is killed at 30 seconds (CONTEXT.md
+ * `Panel`), and the decisions live in a pure reducer that never touches the
+ * network (`Thread`). Both constraints are load-bearing and neither is negotiable. What
+ * they cost is the ability to read the agent: to see, in one screen, what
+ * system prompt it sends, what user message it builds, and what it does with
+ * the answer. `machine.ts` imported the parser, `effects.ts` imported the
+ * prompt builders, and nothing anywhere named the thing they belonged to.
+ *
+ * This file names it. `guideAgent` is the façade, and it assembles rather
+ * than implements: the intents registered for it (`registry.ts`) bring their
+ * own tools, policy lines, recognition and consequences; what both agents
+ * share — the reading machinery, clarify's shape, R-a/R-e — stays in
+ * `envelope/contract.ts` / `envelope/validate.ts`; the prompt text stays in
+ * `prompts/system.ts`. What it adds is the order — tools and policy lines in
+ * registry order — and how an answer is read: by its own modules, with every
+ * intent the product knows as the measure of what is someone else's. Everything it sends the model is frozen byte for
+ * byte by `tests/unit/model-input-snapshot.spec.ts`, which is the only reason
+ * to trust that moving a piece out of here changed no behaviour.
+ *
+ * Pure by construction: no `fetch`, no `chrome.*`, no `await`. Sending the
+ * messages this file builds is `guide/runner.ts`'s job, and the architecture
+ * guard keeps `host/` from ever reaching that far.
+ */
+
+/**
+ * Everything the guide agent needs to know to plan its next move: the user's
+ * goal, the page as it is right now, and where this guide has already been.
+ *
+ * The same three fields cross the wire as `CallModelParams` (`thread/effect.ts`)
+ * — not a coincidence, since shipping this context to the panel is what that
+ * wire is *for*. They stay two declarations all the same: `effect.ts` states
+ * in its own header that it is deliberately a leaf, duplicating a few field
+ * lists rather than importing, and collapsing one of those duplicates would
+ * quietly repeal that. Structural typing means a `CallModelParams` is already
+ * accepted wherever a `GuideContext` is asked for, so the duplication costs
+ * nothing at the call site; if the two ever need to diverge, they can.
+ */
+export interface GuideContext {
+  goal: string;
+  table: PromptTable;
+  history: GuideHistory;
+  /** What the enabled Plugins add (`agent/context/plugins.ts`) — today a site's
+   *  `Skill`, absent for every site without one, which is most of them. The
+   *  system message stays general; this is where a site's own vocabulary goes
+   *  instead. */
+  contributions?: readonly string[];
+  /** Refs that appeared since the last call, when the page did not navigate.
+   *  Absent on the first call and after every navigation. */
+  freshRefs?: readonly Ref[];
+}
+
+/**
+ * The system message: the tool-choice policy — its opening, each registered
+ * intent's own line in registry order, its closing — then how to pick a
+ * control, how to read the table, and which language to answer in.
+ */
+const GUIDE_SYSTEM = [
+  toolChoiceOpening(GUIDE_INTENT_MODULES.length),
+  GUIDE_INTENT_MODULES.map((m) => m.policy).join('\n'),
+  TOOL_CHOICE_CLOSING,
+  CHOICE_GUIDE,
+  MARK_GUIDE,
+  LANGUAGE_GUIDE,
+].join('\n\n');
+
+/**
+ * An envelope-shaped object whose `intent` is not one an agent answers with —
+ * `locate` (S6), or anything else a future stage introduces. `validate` below
+ * accepts this alongside its own envelopes on purpose: its intent
+ * gate does not assume the caller went through recognition first — a caller,
+ * or a test, must be able to hand it a shape recognition does not even know
+ * yet, with no cast.
+ */
+export interface UnknownIntentEnvelope {
+  intent: string;
+  [key: string]: unknown;
+}
+
+/** §5.8: an intent an agent does not answer with is a contract violation, not
+ *  a question for the user — it goes to `violation`, never `clarify`. */
+const unknownIntent = (intent: string) => `intent「${intent}」不在已知范围内`;
+
+/** Recognition as this agent does it: its own answers by their modules, and
+ *  every other intent the product knows as the question agent's. */
+const GUIDE_READER: EnvelopeReader<GuideAgentEnvelope> = { shapeFor: moduleFor, known: INTENTS };
+
+export const guideAgent = {
+  name: 'guide',
+
+  /**
+   * Every intent the guide agent can answer with, as a function the model
+   * calls, in registry order — expressed the way every mainstream endpoint
+   * expects it rather than as a bespoke text format only a strong model can
+   * follow.
+   *
+   * `strict: true` on every one (`tool-schema.ts`): a `required` array the
+   * model was dropping in 2 of 16 draws stopped being dropped. Partial
+   * enforcement is still worth having.
+   *
+   * No `intent` property anywhere: the function name carries it (see
+   * `parseToolContract`), and asking for it makes the model write prose.
+   *
+   * The descriptions carry the *bar* for reaching a tool, not just a label —
+   * the measurement behind that sits with the tool it was about
+   * (`output/clarify.ts`).
+
+   */
+  outputSchema: (ctx: GuideContext): ToolDef[] => GUIDE_INTENT_MODULES.map((m) => m.tool(ctx)),
+
+  /** The system message, verbatim — the same string `buildMessages` sends. */
+  instructions: GUIDE_SYSTEM,
+
+  buildMessages: (ctx: GuideContext, nonce?: string): ChatMessage[] => [
+    { role: 'system', content: GUIDE_SYSTEM },
+    { role: 'user', content: buildGuideUserMessage(ctx.goal, ctx.table, ctx.history, ctx.contributions, ctx.freshRefs, nonce) },
+  ],
+
+  /**
+   * The endpoint reports which function the model called; that name is the
+   * intent. `rawArgs` is what the model wrote, byte for byte, and the
+   * provenance scanner runs on exactly that (see `parseToolContract`).
+   */
+  parseOutput: (toolName: string, rawArgs: string): ParseResult<GuideAgentEnvelope> =>
+    parseToolContract(toolName, rawArgs, GUIDE_READER),
+
+  /**
+   * The fallback for an endpoint that does not honour `tool_choice: 'required'`
+   * and answers with prose instead of a call.
+   *
+   * That is not hypothetical: of the OpenAI-compatible endpoints whose docs
+   * were checked, only OpenAI, Kimi and DeepSeek list `required` at all —
+   * Qwen's parameter table has no `tool_choice` entry, Zhipu documents only
+   * `auto`, and Gemini's compatibility layer says unlisted parameters are
+   * silently ignored. On any of those the model may answer in text, and
+   * without this the whole guide dies with 「端点没有返回任何工具调用」.
+   *
+   * Producing free-text envelopes was deleted; *reading* one never was, and
+   * `contract.ts` still does it for the QA path. So the cost of this is one
+   * function call on a path that is already failing.
+   */
+  parseTextOutput: (raw: string): ParseResult<GuideAgentEnvelope> => parseContract(raw, GUIDE_READER),
+
+  /**
+   * Takes the table rather than a whole `GuideContext`: R-a…R-f judge an
+   * envelope against the page it was written for, and neither the goal nor
+   * the history is an input to any of them. Handing it a context would mean
+   * `machine.ts` assembling two fields nothing reads.
+   */
+  validate: (
+    envelope: GuideAgentEnvelope | UnknownIntentEnvelope,
+    table: PromptTable,
+  ): ValidateResult<GuideAgentEnvelope> => {
+    if (!isRegistered(envelope)) return { kind: 'violation', reason: unknownIntent(envelope.intent) };
+    const m = moduleOf(envelope);
+    // The shared rules first — every ref the envelope claims is on this table
+    // and not sensitive (R-a/R-e) — then the answering intent's own. A plan
+    // that breaks both is refused for the ref.
+    const reason = refsViolation(m.claimedRefs(envelope), table) ?? m.violation(envelope, table);
+    return reason === null ? { kind: 'ok', envelope } : { kind: 'violation', reason };
+  },
+} as const;

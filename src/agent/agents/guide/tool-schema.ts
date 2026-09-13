@@ -1,0 +1,36 @@
+import type { ToolDef } from '@/agent/provider/provider';
+import type { GuideAgentEnvelope } from './registry';
+
+/**
+ * How one of the guide agent's intents is written as a function the model can
+ * call — strict mode, every property required, no extra keys. Shared by every
+ * intent's module, so each writes its own schema in the one shape the endpoint
+ * enforces, and the bytes the model is sent do not depend on which file an
+ * intent happens to live in.
+ */
+
+export const str = (description?: string) => (description ? { type: 'string', description } : { type: 'string' });
+
+/**
+ * Optional, said the only way OpenAI's strict mode allows it to be said: a
+ * union with null, with the key still listed in `required`. "Leave it out" is
+ * not expressible there — every property must be required — so a model obeying
+ * the schema writes an explicit null, and `contract.ts` reads null and absent
+ * as the same event.
+ */
+export const nullable = (description: string) => ({ type: ['string', 'null'], description });
+
+export const fn = (
+  name: GuideAgentEnvelope['intent'],
+  description: string,
+  required: readonly string[],
+  properties: Record<string, unknown>,
+): ToolDef => ({
+  type: 'function',
+  function: {
+    name,
+    description,
+    strict: true,
+    parameters: { type: 'object', additionalProperties: false, required: [...required], properties },
+  },
+});

@@ -128,12 +128,6 @@ button.primary {
   border-color: var(--accent);
   color: #fff;
 }
-.packs {
-  margin: 0;
-  font-size: 11px;
-  color: var(--muted);
-}
-
 .status {
   margin: 0;
   font-size: 12px;

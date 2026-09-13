@@ -52,6 +52,9 @@ export interface StepView {
   looking?: string;
   /** Extra holes with no pulse and no card anchor (explain / diagnose). */
   alsoRects?: Rect[];
+  /** Offer 跳过 — both buttons, the step row's and the lost screen's. A button
+   *  that does nothing when pressed is worse than no button. */
+  skippable: boolean;
 }
 
 export interface OverlayCallbacks {
@@ -153,7 +156,13 @@ export class Overlay {
     }
   };
 
+  private canSkip = false;
+
   setStep(step: StepView): void {
+    this.canSkip = step.skippable;
+    this.root
+      .querySelectorAll<HTMLElement>('.btn-skip')
+      .forEach((b) => (b.style.display = step.skippable ? '' : 'none'));
     this.root.querySelector('.step-n')!.textContent = `步骤 ${step.index + 1} / ${step.total}`;
     this.root.querySelector('.title')!.textContent = step.title;
     this.root.querySelector('.detail')!.textContent = step.detail ?? '';
@@ -295,6 +304,7 @@ export class Overlay {
       visible: this.visible,
       rect: this.lastRect,
       status: this.status,
+      canSkip: this.canSkip,
     };
   }
 

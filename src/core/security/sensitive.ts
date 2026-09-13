@@ -4,7 +4,7 @@
  * table, so the evidence has to come from the element itself.
  *
  * Used in two independent places — tagging at extraction time and refusing at
- * render time — so a hand-written pack is blocked exactly like a model is.
+ * render time — so a hand-written fixed plan is blocked exactly like a model is.
  */
 const SENSITIVE_AUTOCOMPLETE = /(^|\s)(cc-|current-password|new-password|one-time-code)/i;
 /**

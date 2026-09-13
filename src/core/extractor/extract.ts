@@ -245,7 +245,7 @@ export function extractPageHash(): string {
  * `?region=us-east-1` and `#/settings` are often the only thing that tells a
  * console page apart from its siblings, and the flow owner compares against
  * `tab.url`, which does carry them — so the two views of "where are we"
- * disagreed, and pack matching saw a URL the browser never showed.
+ * disagreed.
  *
  * Restoring them means the address travels to the user's model endpoint intact,
  * so the parameters that carry secrets are removed first. This is not a general

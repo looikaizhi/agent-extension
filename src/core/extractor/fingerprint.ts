@@ -36,7 +36,7 @@ export function pageFingerprint(nodes: readonly Pick<UINode, 'role' | 'name'>[])
 }
 
 /**
- * 05-route-and-steps.md's Gotchas, first layer: "连内容脚本都不应该在明知
+ * First of two independent layers: "连内容脚本都不应该在明知
  * 没变的情况下发消息". `pageFingerprint` is already, by construction,
  * insensitive to anything other than landmark/heading structure (this file's
  * own doc comment above) — so the decision of whether a freshly computed hash
