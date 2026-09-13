@@ -1,10 +1,10 @@
 {
  "slug": "canvas-only",
  "table": {
-  "snapshotId": "msr7cl7g-i50b0lq6-1",
-  "url": "http://127.0.0.1:56650/canvas-only.html",
+  "snapshotId": "mtzcf33w-x6t9ycnd-1",
+  "url": "http://127.0.0.1:53368/canvas-only.html",
   "title": "canvas 绘制，无可抽取控件",
-  "pageHash": "1v6v6mt",
+  "pageHash": "jmsvvg",
   "items": [
    {
     "ref": "e4",
@@ -13,7 +13,7 @@
     "path": []
    }
   ],
-  "truncated": false,
+  "omitted": 0,
   "degraded": false,
   "ambiguity": 0,
   "stats": {
@@ -25,11 +25,11 @@
    "emptyName": 0,
    "modalScoped": false,
    "ms": {
-    "walk": 1.1,
+    "walk": 1.9,
     "visibility": 0.3,
-    "semantics": 2.8,
-    "name": 1.9,
-    "total": 4.2
+    "semantics": 3.7,
+    "name": 2.5,
+    "total": 5.9
    }
   }
  },

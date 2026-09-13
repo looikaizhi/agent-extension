@@ -1,10 +1,10 @@
 {
  "slug": "shadow-nested",
  "table": {
-  "snapshotId": "msr7ch7n-9v0pb1bb-1",
-  "url": "http://127.0.0.1:56650/shadow-nested.html",
+  "snapshotId": "mtzcez0e-wxcotz1e-1",
+  "url": "http://127.0.0.1:53368/shadow-nested.html",
   "title": "嵌套 shadow DOM",
-  "pageHash": "1n4ei6y",
+  "pageHash": "1n9dwcf",
   "items": [
    {
     "ref": "e6",
@@ -16,7 +16,7 @@
     ]
    }
   ],
-  "truncated": false,
+  "omitted": 0,
   "degraded": false,
   "ambiguity": 0,
   "stats": {
@@ -28,11 +28,11 @@
    "emptyName": 0,
    "modalScoped": false,
    "ms": {
-    "walk": 3.5,
-    "visibility": 1.1,
-    "semantics": 7.3,
-    "name": 5,
-    "total": 11.9
+    "walk": 2,
+    "visibility": 0.3,
+    "semantics": 3.4,
+    "name": 2.2,
+    "total": 5.7
    }
   }
  },

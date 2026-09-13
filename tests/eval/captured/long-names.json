@@ -1,10 +1,10 @@
 {
  "slug": "long-names",
  "table": {
-  "snapshotId": "msr7cps3-ecbim2tb-1",
-  "url": "http://127.0.0.1:56650/long-names.html",
+  "snapshotId": "mtzcf82j-vhvbhzch-1",
+  "url": "http://127.0.0.1:53368/long-names.html",
   "title": "超长名字必须截断但仍可区分",
-  "pageHash": "l33r4p",
+  "pageHash": "1r51u30",
   "items": [
    {
     "ref": "e4",
@@ -23,7 +23,7 @@
     ]
    }
   ],
-  "truncated": false,
+  "omitted": 0,
   "degraded": false,
   "ambiguity": 0,
   "stats": {
@@ -35,11 +35,11 @@
    "emptyName": 0,
    "modalScoped": false,
    "ms": {
-    "walk": 0.9,
-    "visibility": 0.2,
-    "semantics": 2.7,
-    "name": 1.9,
-    "total": 3.8
+    "walk": 1.4,
+    "visibility": 0.3,
+    "semantics": 3.6,
+    "name": 2.6,
+    "total": 5.3
    }
   }
  },

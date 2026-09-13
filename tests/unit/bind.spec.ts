@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PromptItem, PromptTable } from '@/core/extractor/types';
-import { bindStep, descriptorOf, matchCount } from '@/core/packs/bind';
-import { rankCandidates } from '@/core/locator/lexical';
+import { bindStep, descriptorOf, matchCount } from '@/core/descriptor/bind';
 import type { ElementDescriptor } from '@/shared/protocol';
 import type { Ref } from '@/shared/types';
 
@@ -13,7 +12,7 @@ function table(items: ItemSpec[]): PromptTable {
     url: 'https://example.test/',
     title: 't',
     pageHash: 'h',
-    truncated: false,
+    omitted: 0,
     degraded: false,
     ambiguity: 0,
     stats: {
@@ -117,54 +116,5 @@ describe('bind 的不猜测性质（K-6）', () => {
     const r = bindStep(d({ role: 'button', name: 'Copy' }), t);
     expect(r.kind).toBe('ambiguous');
     if (r.kind === 'ambiguous') expect(r.refs).toHaveLength(n);
-  });
-});
-
-describe('rankCandidates —— K-6 也覆盖词法路径（任务 10）', () => {
-  const items = (specs: Array<{ ref: string; name: string }>) =>
-    table(specs.map((s) => ({ ref: s.ref, role: 'button', name: s.name }))).items;
-
-  it('明确胜出时给唯一解', () => {
-    const r = rankCandidates('create instance', items([
-      { ref: 'e1', name: 'Create instance' },
-      { ref: 'e2', name: 'Delete volume' },
-    ]));
-    expect(r).toMatchObject({ kind: 'unique' });
-  });
-
-  it('同名并列时不挑，而是全部返回', () => {
-    // The exact shape the old `ranked[0]` silently resolved: identical names
-    // score identically, so "first" meant "whichever the DOM order happened to
-    // put first" — a silent mis-point with no signal anywhere.
-    const r = rankCandidates('copy', items([
-      { ref: 'e1', name: 'Copy' },
-      { ref: 'e2', name: 'Copy' },
-    ]));
-    expect(r.kind).toBe('ambiguous');
-    if (r.kind === 'ambiguous') expect(r.items.map((i) => i.ref)).toEqual(['e1', 'e2']);
-  });
-
-  it('分差在阈值内的近似项也算并列', () => {
-    const r = rankCandidates('copy', items([
-      { ref: 'e1', name: 'Copy' },
-      { ref: 'e2', name: 'Copy' },
-      { ref: 'e3', name: 'Download everything as a zip archive' },
-    ]));
-    expect(r.kind).toBe('ambiguous');
-    if (r.kind === 'ambiguous') expect(r.items).toHaveLength(2);
-  });
-
-  it('完全没有匹配时给 none，而不是一个低分的第一名', () => {
-    expect(rankCandidates('', items([{ ref: 'e1', name: 'Copy' }])).kind).toBe('none');
-  });
-
-  it('类型上就无法「从多个里挑一个」', () => {
-    // There is no member of the union that carries both several candidates and
-    // a chosen one, so the tie cannot be resolved by a caller at all.
-    const r = rankCandidates('copy', items([
-      { ref: 'e1', name: 'Copy' },
-      { ref: 'e2', name: 'Copy' },
-    ]));
-    if (r.kind === 'ambiguous') expect('item' in r).toBe(false);
   });
 });

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { PromptItem, PromptTable } from '@/core/extractor/types';
-import { authorDescriptor, toPackYaml } from '@/core/packs/author';
-import { bindStep } from '@/core/packs/bind';
+import { authorDescriptor } from '@/core/descriptor/author';
+import { actionForRole } from '@/shared/protocol';
+import { bindStep } from '@/core/descriptor/bind';
 import type { Ref } from '@/shared/types';
 
 type Spec = { ref: string; role: string; name: string; path?: string[]; nth?: number };
@@ -12,7 +13,7 @@ function table(items: Spec[]): PromptTable {
     url: 'https://example.test/',
     title: 't',
     pageHash: 'h',
-    truncated: false,
+    omitted: 0,
     degraded: false,
     ambiguity: 0,
     stats: {
@@ -120,33 +121,14 @@ describe('authorDescriptor —— L-0 是约束，不是统计量', () => {
   });
 });
 
-describe('toPackYaml', () => {
-  it('产出可直接粘进引导包的片段，并标注脆弱字段', () => {
-    const t = table([
-      { ref: 'e1', role: 'button', name: 'Copy', nth: 1 },
-      { ref: 'e2', role: 'button', name: 'Copy', nth: 2 },
-    ]);
-    const yaml = toPackYaml(authorDescriptor(at(t, 'e2'), t), 'Copy the secret');
-    expect(yaml).toContain('role: button');
-    expect(yaml).toContain('nth: 2');
-    expect(yaml).toContain('脆弱');
-  });
-
-  it('动作由 role 推出，不再一律 click', () => {
+describe('actionForRole —— 检视器产出的一步，动作由 role 推出', () => {
+  it('不再一律 click', () => {
     // The defect: every picked element produced `expectedUserAction: click`, so
     // picking a text field authored a step telling the user to click it. The
     // card renders this value, so it was visible to the user and silent to us.
-    const t = table([
-      { ref: 'e1', role: 'textbox', name: 'Cluster name' },
-      { ref: 'e2', role: 'checkbox', name: 'Enable logging' },
-      { ref: 'e3', role: 'combobox', name: 'Region' },
-      { ref: 'e4', role: 'button', name: 'Create' },
-    ]);
-    const action = (ref: string) =>
-      toPackYaml(authorDescriptor(at(t, ref), t), 'x').match(/expectedUserAction: (\w+)/)![1];
-    expect(action('e1')).toBe('input');
-    expect(action('e2')).toBe('toggle');
-    expect(action('e3')).toBe('select');
-    expect(action('e4')).toBe('click');
+    expect(actionForRole('textbox')).toBe('input');
+    expect(actionForRole('checkbox')).toBe('toggle');
+    expect(actionForRole('combobox')).toBe('select');
+    expect(actionForRole('button')).toBe('click');
   });
 });

@@ -1,10 +1,10 @@
 {
  "slug": "virtual-scroll",
  "table": {
-  "snapshotId": "msr7cjtw-k4nrzunf-1",
-  "url": "http://127.0.0.1:56650/virtual-scroll.html",
+  "snapshotId": "mtzcf1mu-nyhkejbd-1",
+  "url": "http://127.0.0.1:53368/virtual-scroll.html",
   "title": "虚拟滚动：只渲染窗口内的行",
-  "pageHash": "1tljrjs",
+  "pageHash": "1hqd7bp",
   "items": [
    {
     "ref": "e4",
@@ -15,7 +15,7 @@
     ]
    }
   ],
-  "truncated": false,
+  "omitted": 0,
   "degraded": false,
   "ambiguity": 0,
   "stats": {
@@ -27,11 +27,11 @@
    "emptyName": 0,
    "modalScoped": false,
    "ms": {
-    "walk": 0.8,
-    "visibility": 0.1,
-    "semantics": 2.2,
-    "name": 1.5,
-    "total": 3.1
+    "walk": 2.4,
+    "visibility": 0.2,
+    "semantics": 3.1,
+    "name": 1.9,
+    "total": 5.7
    }
   }
  },

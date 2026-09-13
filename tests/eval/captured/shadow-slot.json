@@ -1,10 +1,10 @@
 {
  "slug": "shadow-slot",
  "table": {
-  "snapshotId": "msr7chu7-il8azq88-1",
-  "url": "http://127.0.0.1:56650/shadow-slot.html",
+  "snapshotId": "mtzcezkh-zwae0ehk-1",
+  "url": "http://127.0.0.1:53368/shadow-slot.html",
   "title": "slot 分发",
-  "pageHash": "pizmpl",
+  "pageHash": "5etg3o",
   "items": [
    {
     "ref": "e4",
@@ -13,7 +13,7 @@
     "path": []
    }
   ],
-  "truncated": false,
+  "omitted": 0,
   "degraded": false,
   "ambiguity": 0,
   "stats": {
@@ -25,11 +25,11 @@
    "emptyName": 0,
    "modalScoped": false,
    "ms": {
-    "walk": 1.2,
-    "visibility": 0.1,
-    "semantics": 2.2,
-    "name": 1.7,
-    "total": 3.5
+    "walk": 2.9,
+    "visibility": 0.3,
+    "semantics": 3,
+    "name": 2.1,
+    "total": 6.2
    }
   }
  },

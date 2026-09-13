@@ -18,6 +18,13 @@ import path from 'node:path';
 import fs from 'node:fs';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
+// The product's own budget *and* the product's own context window, not copies
+// of either. Both used to be one literal here, and a literal in a metric
+// harness is a second source of truth: change the product's node cap and the
+// ruler silently keeps measuring the old one. Reached through the alias loader
+// (`tests/alias-loader.mjs`) because these modules use extensionless imports.
+import { budgetFor } from '../../src/core/extractor/project.ts';
+import { DEFAULT_CONFIG } from '../../src/shared/settings.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../..');
@@ -57,13 +64,24 @@ const ctx = await chromium.launchPersistentContext(udd, {
 });
 let sw = ctx.serviceWorkers()[0] ?? (await ctx.waitForEvent('serviceworker', { timeout: 20000 }));
 
-const BUDGET = { maxNodes: 150, viewportBands: 1 };
+// Scored for the context window a user gets before configuring anything.
+// Naming a tier here instead — 64k, say — is the same second-source-of-truth
+// bug one level up: the tiers would drift apart and the ruler would measure one
+// the product does not ship with.
+const BUDGET = budgetFor(DEFAULT_CONFIG.contextWindow);
 let failures = 0;
 
 for (const [slug, notes] of Object.entries(annotations)) {
   const page = await ctx.newPage();
   try {
     await page.goto(`http://127.0.0.1:${PORT}/${slug}.html`, { waitUntil: 'load' });
+    // Where the user is looking, if the fixture says. Scrolled before the
+    // settle wait below, so this costs no extra delay — and so extraction never
+    // sees a half-applied scroll. Which fixture wants what, and why it matters,
+    // is written at the top of the fixture that asks for it.
+    const scrollTo = await page.evaluate(() => Number(document.body.dataset.evalScroll ?? 0));
+    if (scrollTo) await page.evaluate((y) => window.scrollTo(0, y), scrollTo);
+
     await page.waitForTimeout(400);
 
     const tabId = await sw.evaluate(
@@ -118,7 +136,6 @@ for (const [slug, notes] of Object.entries(annotations)) {
               descriptor: note.descriptor,
               expectedUserAction: 'click',
               title: note.goal,
-              confidence: 1,
             },
           },
         ],

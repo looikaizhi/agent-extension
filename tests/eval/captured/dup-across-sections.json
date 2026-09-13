@@ -1,10 +1,10 @@
 {
  "slug": "dup-across-sections",
  "table": {
-  "snapshotId": "msr7cmjv-wh0ms6ty-1",
-  "url": "http://127.0.0.1:56650/dup-across-sections.html",
+  "snapshotId": "mtzcf4l0-7u1udpjk-1",
+  "url": "http://127.0.0.1:53368/dup-across-sections.html",
   "title": "跨区块重名按钮",
-  "pageHash": "1ia2afx",
+  "pageHash": "6s32uq",
   "items": [
    {
     "ref": "e4",
@@ -31,7 +31,7 @@
     ]
    }
   ],
-  "truncated": false,
+  "omitted": 0,
   "degraded": false,
   "ambiguity": 0,
   "stats": {
@@ -43,11 +43,11 @@
    "emptyName": 0,
    "modalScoped": false,
    "ms": {
-    "walk": 1.1,
-    "visibility": 0.1,
-    "semantics": 3.5,
-    "name": 2.3,
-    "total": 4.7
+    "walk": 1.6,
+    "visibility": 0.3,
+    "semantics": 4.2,
+    "name": 2.9,
+    "total": 6.1
    }
   }
  },

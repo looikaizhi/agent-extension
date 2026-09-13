@@ -1,10 +1,10 @@
 {
  "slug": "inert-subtree",
  "table": {
-  "snapshotId": "msr7cjch-93udk6ty-1",
-  "url": "http://127.0.0.1:56650/inert-subtree.html",
+  "snapshotId": "mtzcf143-uesxmu18-1",
+  "url": "http://127.0.0.1:53368/inert-subtree.html",
   "title": "inert 子树必须被排除",
-  "pageHash": "9s3j4o",
+  "pageHash": "hr73ob",
   "items": [
    {
     "ref": "e4",
@@ -15,7 +15,7 @@
     ]
    }
   ],
-  "truncated": false,
+  "omitted": 0,
   "degraded": false,
   "ambiguity": 0,
   "stats": {
@@ -27,11 +27,11 @@
    "emptyName": 0,
    "modalScoped": false,
    "ms": {
-    "walk": 0.7,
+    "walk": 1.6,
     "visibility": 0.1,
-    "semantics": 1.5,
-    "name": 1.1,
-    "total": 2.3
+    "semantics": 3.5,
+    "name": 2.6,
+    "total": 5.2
    }
   }
  },

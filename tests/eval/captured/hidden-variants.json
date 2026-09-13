@@ -1,10 +1,10 @@
 {
  "slug": "hidden-variants",
  "table": {
-  "snapshotId": "msr7cpc5-mcavea3q-1",
-  "url": "http://127.0.0.1:56650/hidden-variants.html",
+  "snapshotId": "mtzcf7kr-ay73fwii-1",
+  "url": "http://127.0.0.1:53368/hidden-variants.html",
   "title": "各种不可见形态都必须排除",
-  "pageHash": "1miyn5b",
+  "pageHash": "x7vu20",
   "items": [
    {
     "ref": "e4",
@@ -15,7 +15,7 @@
     ]
    }
   ],
-  "truncated": false,
+  "omitted": 0,
   "degraded": false,
   "ambiguity": 0,
   "stats": {
@@ -27,11 +27,11 @@
    "emptyName": 0,
    "modalScoped": false,
    "ms": {
-    "walk": 1.2,
-    "visibility": 0.2,
-    "semantics": 2.8,
-    "name": 1.9,
-    "total": 4.2
+    "walk": 1.4,
+    "visibility": 0.3,
+    "semantics": 3.5,
+    "name": 2.5,
+    "total": 5.2
    }
   }
  },

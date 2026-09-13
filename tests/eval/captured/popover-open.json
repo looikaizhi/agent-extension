@@ -1,10 +1,10 @@
 {
  "slug": "popover-open",
  "table": {
-  "snapshotId": "msr7cq84-wx8wvztm-1",
-  "url": "http://127.0.0.1:56650/popover-open.html",
+  "snapshotId": "mtzcf8k7-sheombt9-1",
+  "url": "http://127.0.0.1:53368/popover-open.html",
   "title": "页面自己的 popover 打开时",
-  "pageHash": "tskbtq",
+  "pageHash": "1rx1nv1",
   "items": [
    {
     "ref": "e1",
@@ -13,7 +13,7 @@
     "path": []
    }
   ],
-  "truncated": false,
+  "omitted": 0,
   "degraded": false,
   "ambiguity": 0,
   "stats": {
@@ -25,11 +25,11 @@
    "emptyName": 0,
    "modalScoped": true,
    "ms": {
-    "walk": 0.8,
-    "visibility": 0.1,
-    "semantics": 2.9,
-    "name": 1.8,
-    "total": 3.8
+    "walk": 1.2,
+    "visibility": 0,
+    "semantics": 3.4,
+    "name": 2.3,
+    "total": 4.6
    }
   }
  },

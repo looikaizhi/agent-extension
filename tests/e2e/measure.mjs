@@ -64,7 +64,7 @@ for (const [name, url] of SITES) {
         }
         return await chrome.tabs.sendMessage(id, { type: 'EXTRACT', profile: 'interactive', budget });
       },
-      [tabId, { maxNodes: 150, viewportBands: 1 }],
+      [tabId, { maxNodes: 400 }],
     );
     const t = res?.data;
     if (!t) {

@@ -1,10 +1,10 @@
 {
  "slug": "dup-table-rows",
  "table": {
-  "snapshotId": "msr7cn07-7hqjpd05-1",
-  "url": "http://127.0.0.1:56650/dup-table-rows.html",
+  "snapshotId": "mtzcf530-zifdrk4p-1",
+  "url": "http://127.0.0.1:53368/dup-table-rows.html",
   "title": "表格行内重名操作",
-  "pageHash": "ozb8uc",
+  "pageHash": "15rt57n",
   "items": [
    {
     "ref": "e4",
@@ -34,7 +34,7 @@
     ]
    }
   ],
-  "truncated": false,
+  "omitted": 0,
   "degraded": false,
   "ambiguity": 0,
   "stats": {
@@ -46,11 +46,11 @@
    "emptyName": 0,
    "modalScoped": false,
    "ms": {
-    "walk": 1.7,
-    "visibility": 0.1,
-    "semantics": 2.3,
-    "name": 1.6,
-    "total": 4.1
+    "walk": 1.9,
+    "visibility": 0.2,
+    "semantics": 3.3,
+    "name": 2.2,
+    "total": 5.4
    }
   }
  },

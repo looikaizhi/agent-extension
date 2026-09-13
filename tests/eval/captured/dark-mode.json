@@ -1,10 +1,10 @@
 {
  "slug": "dark-mode",
  "table": {
-  "snapshotId": "msr7cofv-x2lu1s4z-1",
-  "url": "http://127.0.0.1:56650/dark-mode.html",
+  "snapshotId": "mtzcf6kw-1ir4j5dn-1",
+  "url": "http://127.0.0.1:53368/dark-mode.html",
   "title": "暗色模式",
-  "pageHash": "lfersj",
+  "pageHash": "11id3tq",
   "items": [
    {
     "ref": "e4",
@@ -15,7 +15,7 @@
     ]
    }
   ],
-  "truncated": false,
+  "omitted": 0,
   "degraded": false,
   "ambiguity": 0,
   "stats": {
@@ -29,9 +29,9 @@
    "ms": {
     "walk": 1.2,
     "visibility": 0.2,
-    "semantics": 2.8,
-    "name": 2.1,
-    "total": 4.2
+    "semantics": 3.1,
+    "name": 2.2,
+    "total": 4.5
    }
   }
  },

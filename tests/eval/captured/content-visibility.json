@@ -1,10 +1,10 @@
 {
  "slug": "content-visibility",
  "table": {
-  "snapshotId": "msr7ckaq-pwbuxuzh-1",
-  "url": "http://127.0.0.1:56650/content-visibility.html",
+  "snapshotId": "mtzcf24y-5jefpxqx-1",
+  "url": "http://127.0.0.1:53368/content-visibility.html",
   "title": "content-visibility:auto",
-  "pageHash": "50n2dv",
+  "pageHash": "rtnnx0",
   "items": [
    {
     "ref": "e4",
@@ -23,7 +23,7 @@
     ]
    }
   ],
-  "truncated": false,
+  "omitted": 0,
   "degraded": false,
   "ambiguity": 0,
   "stats": {
@@ -35,11 +35,11 @@
    "emptyName": 0,
    "modalScoped": false,
    "ms": {
-    "walk": 1.2,
-    "visibility": 0.2,
-    "semantics": 3.4,
-    "name": 2.4,
-    "total": 4.8
+    "walk": 0.6,
+    "visibility": 0.1,
+    "semantics": 2,
+    "name": 1.4,
+    "total": 2.7
    }
   }
  },

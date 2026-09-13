@@ -1,10 +1,10 @@
 {
  "slug": "sticky-header",
  "table": {
-  "snapshotId": "msr7ckr0-10lkk6q2-1",
-  "url": "http://127.0.0.1:56650/sticky-header.html",
+  "snapshotId": "mtzcf2m7-1r3jtma3-1",
+  "url": "http://127.0.0.1:53368/sticky-header.html",
   "title": "sticky header 覆盖目标",
-  "pageHash": "u1daof",
+  "pageHash": "j7hykk",
   "items": [
    {
     "ref": "e1",
@@ -21,7 +21,7 @@
     ]
    }
   ],
-  "truncated": false,
+  "omitted": 0,
   "degraded": false,
   "ambiguity": 0,
   "stats": {
@@ -33,11 +33,11 @@
    "emptyName": 0,
    "modalScoped": false,
    "ms": {
-    "walk": 1.2,
-    "visibility": 0.1,
-    "semantics": 2.7,
-    "name": 2,
-    "total": 4
+    "walk": 1.7,
+    "visibility": 0.2,
+    "semantics": 3.6,
+    "name": 2.4,
+    "total": 5.5
    }
   }
  },

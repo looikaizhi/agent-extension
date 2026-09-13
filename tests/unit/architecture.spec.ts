@@ -1,54 +1,148 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
+import {
+  ACTING_RULES,
+  N2_RULES,
+  actingOffenders,
+  callsReducerStep,
+  chainHas,
+  factsOf,
+  factsOfText,
+  importClosure,
+  importsRunner,
+  purityOffenders,
+  lastSegment,
+  partyGuessing,
+  reexportsReducerStep,
+  runnerImport,
+  sourceFiles,
+  type Facts,
+} from './fixtures/source-scan';
 
 /**
  * Replaces ESLint with three assertions that actually matter here. Each guards
  * an invariant that would decay silently: nobody notices a slow extractor until
  * a console page janks, and nobody notices an S-05 leak until an audit.
+ *
+ * Every guard reads the source the way the compiler parses it (`factsOf`), not
+ * as text — so a comment, a string that looks like code, and an aliased import
+ * are each seen for what they are. And every guard checks itself twice: its
+ * file scope must match at least one file (a scope that matches nothing passes
+ * vacuously, which is how a guard dies unnoticed), and its detector must fire
+ * somewhere it is allowed to — in the tree when such a place exists, on a
+ * synthetic violation below when it does not.
  */
 
 const SRC = join(process.cwd(), 'src');
 
-function walk(dir: string, out: string[] = []): string[] {
-  for (const e of readdirSync(dir)) {
-    const p = join(dir, e);
-    if (statSync(p).isDirectory()) walk(p, out);
-    else if (/\.tsx?$/.test(p)) out.push(p);
-  }
-  return out;
+/** The same walk `gates.spec.ts` uses — one list of what counts as source. */
+const files = sourceFiles();
+const read = (p: string) => readFileSync(p, 'utf8');
+const rel = (f: string) => f.replace(`${process.cwd()}/`, '');
+
+function scope(label: string, pick: (f: string) => boolean): string[] {
+  const picked = files.filter(pick);
+  expect(picked.length, `${label}：作用范围一个文件都没匹配到——守卫在空集上恒真`).toBeGreaterThan(0);
+  return picked;
+}
+const offending = (inScope: string[], pred: (f: Facts) => boolean) => inScope.filter((f) => pred(factsOf(f))).map(rel);
+function alive(label: string, pred: (f: Facts) => boolean): void {
+  expect(files.filter((f) => pred(factsOf(f))).length, `${label}：判据在整棵源码树上一处都没命中——它可能已经瞎了`).toBeGreaterThan(0);
 }
 
-const files = walk(SRC);
-const read = (p: string) => readFileSync(p, 'utf8');
-/** Strip comments so prose about a banned API does not trip the guard. */
-const code = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+const methodCalls = (f: Facts, name: string) => f.calls.filter((c) => c.chain.includes('.') && lastSegment(c.chain) === name);
+const reaches = (f: Facts, path: string) => f.accesses.some((a) => chainHas(a, path));
+const SECURE_ONLY = ['crypto.randomUUID', 'crypto.subtle', 'navigator.clipboard', 'navigator.locks'];
+
+/** Each guard's question, asked once and used both on the tree and on the synthetic violations below. */
+const detect = {
+  computedStyle: (f: Facts) => f.calls.some((c) => lastSegment(c.chain) === 'getComputedStyle'),
+  readsValue: (f: Facts) => f.accesses.some((a) => lastSegment(a) === 'value'),
+  sorts: (f: Facts) => methodCalls(f, 'sort').length > 0,
+  scores: (f: Facts) => [...f.names].some((n) => /score/i.test(n)),
+  takesFirst: (f: Facts) => f.calls.some((c) => lastSegment(c.chain) === 'slice' && c.args.join(',').replace(/\s/g, '') === '0,1'),
+  secureContext: (f: Facts) => SECURE_ONLY.some((b) => reaches(f, b)),
+  liveViewport: (f: Facts) =>
+    f.accesses.some((a) => a.startsWith('window.') || a.startsWith('document.')) ||
+    ['visualViewport', 'scrollY', 'scrollX', 'getBoundingClientRect'].some((n) => f.names.has(n)),
+  focuses: (f: Facts) => methodCalls(f, 'focus').length > 0,
+  network: (f: Facts) =>
+    f.calls.some((c) => ['fetch', 'sendBeacon'].includes(lastSegment(c.chain))) ||
+    f.names.has('XMLHttpRequest') ||
+    f.news.some((n) => lastSegment(n) === 'WebSocket'),
+  extensionStorage: (f: Facts) => reaches(f, 'chrome.storage'),
+  syncStorage: (f: Facts) => reaches(f, 'storage.sync'),
+  keyNearLogs: (f: Facts) =>
+    f.names.has('apiKey') && f.calls.some((c) => c.chain.startsWith('console.') || ['emit', 'broadcast'].includes(lastSegment(c.chain))),
+  selection: (f: Facts) => ['getSelection', 'addRange', 'execCommand'].some((n) => f.names.has(n)),
+  commandsContent: (f: Facts) => f.names.has('sendToTab') || reaches(f, 'chrome.tabs.sendMessage'),
+  importsAgent: (f: Facts) => f.imports.some((i) => /^(?:@\/agent\/|(?:\.\.\/)+agent\/)/.test(i.module)),
+  flowState: (f: Facts) => f.strings.some((s) => /^(?:thread|guide|effect):/.test(s)) || reaches(f, 'storage.session'),
+  chrome: (f: Facts) => f.names.has('chrome'),
+  importsCore: (f: Facts) => f.imports.some((i) => /^(?:@\/core\/|(?:\.\.\/)+core\/)/.test(i.module)),
+  effectTags: (f: Facts) => [...f.strings, ...f.names].some((w) => /EFFECT_REQUEST|EFFECT_RESULT/.test(w)),
+  runner: runnerImport,
+};
+
+/**
+ * The top-level keys of every object literal sent as a request `body: JSON.stringify({ … })`.
+ *
+ * A spread whose contents are in plain sight — `...(tools ? { tools, tool_choice } : {})` — is
+ * expanded, both branches of it, because that is exactly how the optional keys are sent. Only a
+ * spread of something the source does not spell out is reported as `…`, since its keys cannot be
+ * checked. The indentation-based pattern this replaced read neither: it saw the five keys at one
+ * fixed depth and never the ones inside the spread, which is why those sat on the allowlist unchecked.
+ */
+function requestBodyKeys(src: string): string[] {
+  const sf = ts.createSourceFile('provider.ts', src, ts.ScriptTarget.Latest, true);
+  const keys: string[] = [];
+  const collect = (e: ts.Expression): void => {
+    if (ts.isParenthesizedExpression(e)) return collect(e.expression);
+    if (ts.isConditionalExpression(e)) {
+      collect(e.whenTrue);
+      collect(e.whenFalse);
+      return;
+    }
+    if (!ts.isObjectLiteralExpression(e)) {
+      keys.push(`…${e.getText(sf)}`);
+      return;
+    }
+    for (const p of e.properties) {
+      if (ts.isSpreadAssignment(p)) collect(p.expression);
+      else keys.push(p.name && (ts.isIdentifier(p.name) || ts.isStringLiteral(p.name)) ? p.name.text : `…${p.getText(sf)}`);
+    }
+  };
+  const visit = (n: ts.Node): void => {
+    if (
+      ts.isPropertyAssignment(n) &&
+      ts.isIdentifier(n.name) &&
+      n.name.text === 'body' &&
+      ts.isCallExpression(n.initializer) &&
+      n.initializer.expression.getText(sf) === 'JSON.stringify'
+    ) {
+      const [obj] = n.initializer.arguments;
+      if (obj) collect(obj);
+    }
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+  return keys;
+}
 
 describe('架构护栏', () => {
   it('抽取器不得调用 getComputedStyle（性能护栏）', () => {
-    const offenders = files
-      .filter((f) => f.includes(join('core', 'extractor')))
-      .filter((f) => code(read(f)).includes('getComputedStyle('));
-    expect(offenders).toEqual([]);
+    expect(offending(scope('抽取器', (f) => f.includes(join('core', 'extractor'))), detect.computedStyle)).toEqual([]);
+    // Nothing in the tree calls it, so its liveness is proven on a synthetic call below.
   });
 
   it('抽取管线不得读取输入框的 value（S-05）', () => {
     // `.value` on an <input> is the user's data and must never leave the page.
     // Boolean IDL attributes (checked/disabled/required) are fine.
-    const offenders = files
-      .filter((f) => f.includes(join('core', 'extractor')) || f.includes(join('core', 'security')))
-      .filter((f) => /\.value\b/.test(code(read(f))));
-    expect(offenders).toEqual([]);
-  });
-
-  it('agent 边界不得从排序结果里盲取第一名（K-6 覆盖 baseline 路径）', () => {
-    // `bind` is forbidden from breaking a tie, but the lexical path used to do
-    // exactly that with `scoreNodes(...)[0]` — and that scorer is also step 2's
-    // `relocate`, so the guarantee leaked out through the one path where a
-    // silent mis-point is least visible.
-    const api = code(read(join(SRC, 'agent/api.ts')));
-    expect(api).not.toMatch(/scoreNodes/);
-    expect(api).not.toMatch(/\)\[0\]/);
+    const pipeline = scope('抽取与安全', (f) => f.includes(join('core', 'extractor')) || f.includes(join('core', 'security')));
+    expect(offending(pipeline, detect.readsValue)).toEqual([]);
+    alive('.value', detect.readsValue);
   });
 
   it('绑定逻辑不得排序或打分（K-6）', () => {
@@ -56,19 +150,22 @@ describe('架构护栏', () => {
     // usual way that creeps in is a sort or a score. Indexing `candidates[0]`
     // is fine *inside* a length===1 branch, so that is covered behaviourally in
     // bind.spec.ts rather than by grep.
-    const bind = code(read(join(SRC, 'core/packs/bind.ts')));
-    expect(bind).not.toMatch(/\.sort\(/);
-    expect(bind).not.toMatch(/score/i);
-    expect(bind).not.toMatch(/\.slice\(0,\s*1\)/);
+    const bind = scope('绑定', (f) => f.endsWith(join('core', 'descriptor', 'bind.ts')));
+    expect(offending(bind, detect.sorts)).toEqual([]);
+    expect(offending(bind, detect.scores)).toEqual([]);
+    expect(offending(bind, detect.takesFirst)).toEqual([]);
+    alive('排序', detect.sorts);
+    alive('打分', detect.scores);
   });
 
   it('UINode 的字段白名单不含任何页面文本载体', () => {
-    const types = read(join(SRC, 'core/extractor/types.ts'));
-    const uinode = types.slice(types.indexOf('export interface UINode'));
-    const body = uinode.slice(0, uinode.indexOf('\n}'));
-    for (const banned of ['text:', 'html:', 'value:', 'innerText', 'textContent']) {
-      expect(body).not.toContain(banned);
-    }
+    const types = join(SRC, 'core/extractor/types.ts');
+    const sf = ts.createSourceFile(types, read(types), ts.ScriptTarget.Latest, true);
+    const uinode = sf.statements.find((s): s is ts.InterfaceDeclaration => ts.isInterfaceDeclaration(s) && s.name.text === 'UINode');
+    expect(uinode, 'UINode 不见了——这条守卫在空集上恒真').toBeDefined();
+    const fields = uinode!.members.map((m) => (m.name && ts.isIdentifier(m.name) ? m.name.text : ''));
+    expect(fields.length).toBeGreaterThan(0);
+    for (const banned of ['text', 'html', 'value', 'innerText', 'textContent']) expect(fields).not.toContain(banned);
   });
 
   it('页面侧代码不得依赖仅在安全上下文可用的 API', () => {
@@ -76,14 +173,12 @@ describe('架构护栏', () => {
     // hostname, and nothing caught it: `localhost` and `127.0.0.1` *are* secure
     // contexts, so the entire fixture corpus and every measured real site
     // happened to be immune. Internal consoles on http:// are the target user.
-    const pageSide = files.filter(
+    const pageSide = scope(
+      '页面侧',
       (f) => f.includes(join('core', 'extractor')) || f.includes(join('core', 'overlay')) || f.endsWith(join('entrypoints', 'content.ts')),
     );
-    for (const f of pageSide) {
-      const src = code(read(f));
-      for (const banned of ['crypto.randomUUID', 'crypto.subtle', 'navigator.clipboard', 'navigator.locks'])
-        expect([f, src.includes(banned)]).toEqual([f, false]);
-    }
+    expect(offending(pageSide, detect.secureContext)).toEqual([]);
+    alive('安全上下文 API', detect.secureContext);
   });
 
   it('投影是纯函数：不得读取任何实时视口状态', () => {
@@ -92,17 +187,8 @@ describe('架构护栏', () => {
     // scroll-dependent again. The unit tests run under `environment: 'node'`,
     // so such a read would surface as a confusing ReferenceError deep in a
     // fixture rather than as this sentence.
-    const src = code(read(join(SRC, 'core/extractor/project.ts')));
-    for (const banned of [
-      'window.',
-      'document.',
-      'visualViewport',
-      'scrollY',
-      'scrollX',
-      'getBoundingClientRect',
-    ]) {
-      expect(src).not.toContain(banned);
-    }
+    expect(offending(scope('投影', (f) => f.endsWith(join('core', 'extractor', 'project.ts'))), detect.liveViewport)).toEqual([]);
+    alive('实时视口', detect.liveViewport);
   });
 
   it('第一步不得引入任何 LLM / 编排依赖', () => {
@@ -119,25 +205,51 @@ describe('架构护栏', () => {
    * is a property of this source tree, and nothing else. So it gets asserted.
    */
   it('任何地方都不得操作页面（只指路，不开车）', () => {
-    const ACTING = [
-      /\.click\s*\(/,
-      /\.focus\s*\(/,
-      /\.blur\s*\(/,
-      /\.submit\s*\(/,
-      /dispatchEvent\s*\(/,
-      /new\s+(Mouse|Keyboard|Pointer|Input|Touch)Event/,
-      /execCommand\s*\(/,
-      /\.select\s*\(\s*\)/,
-      /\.setSelectionRange\s*\(/,
-      /document\.designMode/,
-    ];
-    const offenders = files
-      .filter((f) => !f.includes('tests'))
-      .flatMap((f) => {
-        const src = code(read(f));
-        return ACTING.filter((re) => re.test(src)).map((re) => `${f} :: ${re}`);
-      });
+    // The rules and the walk live in `fixtures/source-scan.ts`, shared with
+    // D3's `executed` gate in `gates.spec.ts` — one fact, one implementation,
+    // so the two cannot drift into disagreeing about it. Nothing in the tree
+    // uses any of them, so each rule's liveness is proven on a synthetic
+    // violation below.
+    expect(actingOffenders()).toEqual([]);
+  });
+
+  /**
+   * P-1（品牌—主机不匹配）被推迟了，这条守卫让「推迟」在代码里留不下痕迹。
+   *
+   * 跨站判定只用精确 hostname 比对（`core/security/link-safety.ts` 的
+   * `sameHost`）。一旦有人引入公共后缀表、注册域归并、或任何「这两个 host 是
+   * 不是同一家」的推断，这条就会红——那道题正是 P-1 被推迟的理由，不该从侧门
+   * 溜回来。
+   *
+   * 看的是代码里的名字和字符串：说明「我们不做这个」的注释是文档，不是实现。
+   */
+  it('跨站判定里没有任何注册域/公共后缀推断（P-1 推迟不留痕迹）', () => {
+    const offenders = scope('源码', (f) => !f.includes('tests')).flatMap((f) =>
+      partyGuessing(factsOf(f)).map((re) => `${rel(f)} :: ${re}`),
+    );
     expect(offenders).toEqual([]);
+  });
+
+  /**
+   * `focus()` is the one member of that list with a carve-out, and it is a
+   * narrow one.
+   *
+   * The line the rest of the list draws is *activation*: `click`, `submit`,
+   * `dispatchEvent` and a synthesized `KeyboardEvent` all make the page do
+   * something on the user's behalf. `focus()` cannot — a focused button sits
+   * there until a key is pressed, and that keystroke is a real user gesture
+   * the page receives from the browser, not from us. That is what makes
+   * 「跳到目标」 hand over the keyboard rather than take the wheel.
+   *
+   * It is not free of effect: the page's own `focus`/`focusin` handlers run,
+   * and some sites open a menu on focus. So the permission is scoped to the
+   * single call site that needs it, and this test fails the moment a second
+   * one appears anywhere.
+   */
+  it("focus() 只在 content script 的「跳到目标」那一处，且只有一处", () => {
+    const withFocus = files.filter((f) => !f.includes('tests')).filter((f) => detect.focuses(factsOf(f)));
+    expect(withFocus.map(rel)).toEqual([join('src', 'entrypoints', 'content.ts')]);
+    expect(methodCalls(factsOf(withFocus[0]!), 'focus')).toHaveLength(1);
   });
 
   it('content script 的指令集是封闭的，且没有执行类动词', async () => {
@@ -146,6 +258,12 @@ describe('架构护栏', () => {
     // whitelist `onRequest` enforces, and protocol.ts carries a compile-time
     // proof that it and `ContentRpcMap` cannot drift — so asserting the one
     // value covers both.
+    //
+    // `HostRequest`'s verbs (including the panel-relay pair `PANEL_EXTRACT` /
+    // `PANEL_INSPECT` added when the side panel stopped talking to the content
+    // script directly) are NOT in this list on purpose: that type is "who may
+    // command the host", which is allowed to grow, while `RPC_TYPES` here is
+    // "what the host may command the content script to do", which stays closed.
     const { RPC_TYPES } = await import('@/shared/protocol');
     expect([...RPC_TYPES].sort()).toEqual(
       ['CLEAR', 'DEBUG_GET_OVERLAY_STATE', 'EXTRACT', 'HIGHLIGHT', 'INSPECT', 'PING'].sort(),
@@ -155,37 +273,542 @@ describe('架构护栏', () => {
     }
   });
 
-  it('只有 provider 层可以发起网络请求', () => {
-    // Narrowed from "nothing may" when P-03 arrived. The point was never the
-    // absence of network code — it was that the API key has exactly one
-    // destination. Keeping the assertion but naming the single exception is
-    // what makes "永不出扩展" checkable instead of promised.
-    const offenders = files
-      .filter((f) => !f.includes('tests'))
-      .filter((f) => !f.endsWith(join('agent', 'provider.ts')))
-      .filter((f) => /\bfetch\(|XMLHttpRequest|new WebSocket|sendBeacon/.test(code(read(f))));
-    expect(offenders).toEqual([]);
+  it('只有 provider 层与 fetchDoc 执行器可以发起网络请求', () => {
+    // Narrowed from "nothing may" when P-03 arrived, and widened from a
+    // single exception to two when the effect protocol's `fetchDoc`
+    // executor landed (design doc §11.1: "「只有 provider 层可发网络请求」拆
+    // 成四条:两个 fetch 点白名单"). The point was never the absence of
+    // network code — it was that the *API key* has exactly one destination.
+    // `sidepanel/effects.ts`'s fetch call never sees `cfg.apiKey` (its
+    // `fetchFn` parameter takes a bare `url`, `runFetchDocEffect` has no
+    // `ProviderConfig` in scope at all), so admitting it here does not widen
+    // where the key can travel — the two checks below are what keep that true
+    // instead of assumed.
+    const SECOND_FETCH_POINT = join('entrypoints', 'sidepanel', 'effects.ts');
+    const rest = scope(
+      'provider 与 fetchDoc 之外的源码',
+      (f) => !f.includes('tests') && !f.endsWith(join('agent', 'provider', 'provider.ts')) && !f.endsWith(SECOND_FETCH_POINT),
+    );
+    expect(offending(rest, detect.network)).toEqual([]);
+    alive('网络请求', detect.network);
+
+    // The second point itself: real, callable (not just dodging the check
+    // above by parameter name), anonymous, and never in possession of a key.
+    const effects = factsOf(join(SRC, SECOND_FETCH_POINT));
+    expect(effects.calls.some((c) => c.chain === 'fetchFn')).toBe(true);
+    expect([...effects.names, ...effects.strings].filter((w) => /apiKey|Authorization/.test(w))).toEqual([]);
+    expect(effects.properties.some((p) => p.name === 'credentials' && p.value === 'omit')).toBe(true);
   });
 
   it('content script 不得触碰扩展存储（密钥隔离）', () => {
     // The content script shares a process with the page. Anything it can read,
     // a page bug can eventually reach — so it must never be able to read the
     // key at all, rather than merely choosing not to.
-    const cs = code(read(join(SRC, 'entrypoints/content.ts')));
-    expect(cs).not.toMatch(/chrome\.storage/);
-    for (const f of files.filter((f) => f.includes(join('core', 'extractor')) || f.includes(join('core', 'overlay'))))
-      expect([f, /chrome\.storage/.test(code(read(f)))]).toEqual([f, false]);
+    const pageSide = scope(
+      '页面侧',
+      (f) => f.endsWith(join('entrypoints', 'content.ts')) || f.includes(join('core', 'extractor')) || f.includes(join('core', 'overlay')),
+    );
+    expect(offending(pageSide, detect.extensionStorage)).toEqual([]);
+    alive('扩展存储', detect.extensionStorage);
   });
 
   it('API Key 不得进入日志或事件流', () => {
-    const settings = read(join(SRC, 'shared/settings.ts'));
     // storage.sync would replicate the key to Google's servers, which is the
     // exact opposite of what the UI tells the user.
-    expect(code(settings)).not.toMatch(/storage\.sync/);
-    const offenders = files
-      .filter((f) => !f.includes('tests') && !f.endsWith('settings.ts') && !f.endsWith(join('agent', 'provider.ts')))
-      .filter((f) => /apiKey/.test(code(read(f))) && /console\.|emit\(|broadcast\(/.test(code(read(f))));
-    expect(offenders).toEqual([]);
+    expect(offending(scope('设置', (f) => f.endsWith(join('shared', 'settings.ts'))), detect.syncStorage)).toEqual([]);
+    const rest = scope(
+      '设置与 provider 之外的源码',
+      (f) => !f.includes('tests') && !f.endsWith('settings.ts') && !f.endsWith(join('agent', 'provider', 'provider.ts')),
+    );
+    expect(offending(rest, detect.keyNearLogs)).toEqual([]);
+    // Neither fires anywhere in the tree; both are proven on synthetic violations below.
   });
 
+  it('N-3:页面侧代码不得改用户选区（那属于「开车」）', () => {
+    const pageSide = scope('页面侧', (f) => f.includes(join('core', 'overlay')) || f.endsWith(join('entrypoints', 'content.ts')));
+    expect(offending(pageSide, detect.selection)).toEqual([]);
+  });
+
+  it('N-4:只有宿主可以指挥 content script', () => {
+    // Not just the wrapper name: `chrome.tabs.sendMessage` reaches the content
+    // script exactly the same way `sendToTab` does, and is what Task 6 removed
+    // from the side panel — a bare name-check would not stop it growing back.
+    const rest = scope(
+      '宿主与 rpc 之外的源码',
+      (f) => !f.endsWith(join('entrypoints', 'background.ts')) && !f.endsWith(join('shared', 'rpc.ts')),
+    );
+    expect(offending(rest, detect.commandsContent)).toEqual([]);
+    alive('指挥 content script', detect.commandsContent);
+  });
+
+  it('N-5:core 不得依赖 agent（依赖方向单向）', () => {
+    // Every spelling of the import counts — the `@/agent/` alias, a relative
+    // path (`../agent/`, `../../agent/`, …, exactly what autocomplete offers
+    // from inside `core/`), a re-export, or a dynamic `import()`.
+    expect(offending(scope('core', (f) => f.includes(join('src', 'core'))), detect.importsAgent)).toEqual([]);
+    alive('依赖 agent', detect.importsAgent);
+  });
+
+  it('N-6:侧栏不拥有流程状态', () => {
+    // No session storage at all, and no flow key spelled out — `guide:` and
+    // `effect:` are the host's, and `thread:` is the retired one.
+    expect(offending(scope('侧栏', (f) => f.includes(join('entrypoints', 'sidepanel'))), detect.flowState)).toEqual([]);
+    alive('流程状态', detect.flowState);
+  });
+
+  it('N-1:agent 层不得出现 chrome.*(平台无关,才能在 node 里单测、才能换宿主)', () => {
+    // Any `chrome` name counts — `const c = chrome;` aliases the global and
+    // never spells `chrome.` again. A string such as `chrome-extension://` is
+    // a string in the tree, not a name, so it needs no special case.
+    expect(offending(scope('agent', (f) => f.includes(join('src', 'agent'))), detect.chrome)).toEqual([]);
+    alive('chrome', detect.chrome);
+  });
+
+  it('N-2:归约器在运行时能加载到的每一个文件都不得出现 await / fetch( / chrome.（手写状态机能被信任的唯一理由）', () => {
+    // This is what lets `step` be trusted to run in node, be replayed
+    // deterministically from a persisted `ThreadState`, and survive the service
+    // worker being evicted mid-flight.
+    //
+    // Held over everything the reducer loads, not over one file name. The
+    // pieces its branches share already live next door, and the Output and
+    // Tool modules carry consequences of their own; a rule keyed to one path
+    // stops guarding the moment code moves out of it.
+    const reducer = join(SRC, 'agent', 'thread', 'machine.ts');
+    // Self-check: reaching the reducer and the pieces it is built from is the
+    // least the closure can do — anything less and it has stopped following
+    // imports, which would pass every rule below by checking nothing. It also
+    // reaches past `src/agent`: a `core/` file the reducer loads replays or
+    // fails to replay exactly as the reducer does.
+    expect(importClosure(reducer).map(rel)).toEqual(
+      expect.arrayContaining([
+        rel(reducer),
+        rel(join(SRC, 'agent', 'thread', 'transitions.ts')),
+        rel(join(SRC, 'agent', 'thread', 'fixed-plan.ts')),
+        rel(join(SRC, 'agent', 'tools', 'need-docs.ts')),
+        rel(join(SRC, 'agent', 'agents', 'guide', 'output', 'guide.ts')),
+        rel(join(SRC, 'agent', 'agents', 'guide', 'output', 'done.ts')),
+        rel(join(SRC, 'agent', 'agents', 'guide', 'output', 'clarify.ts')),
+      ]),
+    );
+    expect(purityOffenders(reducer).map((o) => `${rel(o.file)} :: ${o.rules.join(', ')}`), 'N-2 违例').toEqual([]);
+    for (const rule of N2_RULES) alive(`N-2 ${rule.name}`, rule.hit);
+  });
+
+  it('归约器不知道 Plugin：skills 目录下的任何文件与收集 Plugin 贡献的模块都不在它的依赖闭包里', () => {
+    // Collected on the host when a call is sent (`agent/context/plugins.ts`),
+    // because which Plugins are on is a storage read and the reducer reads
+    // nothing. A reducer that reached one would also start deciding what a
+    // thread is told from something that is not in its state.
+    //
+    // The skills by directory: each skill is its own file, and a reducer that
+    // imported one directly would reach it without passing the registry. The
+    // collector by file: `context/` is also where the rest of the Context
+    // assembly is headed (spec A's target tree), which this guard is not about.
+    const closure = importClosure(join(SRC, 'agent', 'thread', 'machine.ts')).map(rel);
+    const skills = join(SRC, 'agent', 'skills');
+    const collector = join(SRC, 'agent', 'context', 'plugins.ts');
+    for (const f of [skills, collector]) expect(existsSync(f), `${rel(f)} 换了位置：这条守卫要跟着改，否则它什么都不守`).toBe(true);
+    expect(closure.filter((f) => f === rel(collector) || f.startsWith(`${rel(skills)}/`))).toEqual([]);
+  });
+
+  it('问答与引导共用的解析、校验、提示词不得加载任何一个 agent 的登记处', () => {
+    // Both agents read envelopes through the same contract, and every module
+    // imports it. If the shared layer loaded a registry — or the intent list
+    // read off both — a module importing the contract would close an import
+    // cycle, and the shared layer would stop being the part that belongs to
+    // neither agent. Each agent hands the contract what it knows instead.
+    const agentOwned = [
+      join(SRC, 'agent', 'agents', 'guide', 'registry.ts'),
+      join(SRC, 'agent', 'agents', 'question', 'registry.ts'),
+      join(SRC, 'agent', 'intents.ts'),
+    ];
+    for (const f of agentOwned) expect(existsSync(f), `${rel(f)} 换了位置：这条守卫要跟着改，否则它什么都不守`).toBe(true);
+    for (const shared of ['envelope/contract.ts', 'envelope/validate.ts', 'prompts/system.ts', 'prompts/repair.ts', 'context/user-message.ts']) {
+      const closure = importClosure(join(SRC, 'agent', shared)).map(rel);
+      for (const f of agentOwned) expect(closure, shared).not.toContain(rel(f));
+    }
+  });
+
+  it('agent 下的每个目录名在词汇表里都有词条', () => {
+    // Reading a directory name should be enough to look it up. Written out
+    // rather than derived from the name: a new directory has to be entered
+    // here, which is the moment to ask what term it stands for.
+    const TERM_OF: Record<string, string> = {
+      agents: 'Agent', guide: 'Guide', question: 'Question', output: 'Output', tools: 'Tool', envelope: 'Envelope',
+      prompts: 'Prompt', context: 'Context', skills: 'Skill', thread: 'Thread', provider: 'Provider',
+    };
+    const glossary = read(join(process.cwd(), 'CONTEXT.md'));
+    const dirs: string[] = [];
+    const walk = (d: string): void => {
+      for (const e of readdirSync(d)) {
+        const p = join(d, e);
+        if (statSync(p).isDirectory()) {
+          dirs.push(p);
+          walk(p);
+        }
+      }
+    };
+    walk(join(SRC, 'agent'));
+    expect(dirs.length, '一个目录都没扫到——判据已经不在守了').toBeGreaterThan(0);
+    expect(dirs.filter((d) => !(basename(d) in TERM_OF)).map(rel), '新目录：先在上面写明它对应哪个词条').toEqual([]);
+    expect(dirs.filter((d) => !glossary.includes(`**${TERM_OF[basename(d)]}**：`)).map((d) => `${rel(d)} → ${TERM_OF[basename(d)]}`)).toEqual([]);
+  });
+
+  it('「同一个地方」的判定在 thread 目录下，是叶子文件：零 import', () => {
+    // Every judgement of Place reads this one definition; a leaf is what lets
+    // the reducer, the guide module and the host all use it without one of
+    // them dragging the others in.
+    const place = join(SRC, 'agent', 'thread', 'place.ts');
+    expect(existsSync(place), `${rel(place)} 换了位置：这条守卫要跟着改，否则它什么都不守`).toBe(true);
+    expect(factsOf(place).imports).toEqual([]);
+  });
+
+  it('路标、到达期望与 Trace 住在零 import 的类型文件里；线上协议与共享层连类型在内都够不着任何一个 agent', () => {
+    // The Thread, the wire messages and the Run record carry these types. Held
+    // by the guide agent, they tied the wire protocol to it in a type cycle —
+    // directly through the guide Output module, and around through the trace,
+    // whose run loop reaches that module again. Types count here: the cycle
+    // was made of nothing else.
+    const types = join(SRC, 'shared', 'types.ts');
+    for (const name of ['GuideRouteHop', 'GuideExpectAfter', 'Trace']) expect(read(types)).toMatch(new RegExp(`export interface ${name}\\b`));
+    expect(factsOf(types).imports).toEqual([]);
+    const agents = rel(join(SRC, 'agent', 'agents'));
+    const sharedLayer = scope('线上协议与共享层', (f) => f.includes(join('src', 'shared')) || f.includes(join('agent', 'envelope')));
+    const reaching = sharedLayer.flatMap((f) =>
+      importClosure(f, undefined, { types: true }).map(rel).filter((c) => c.startsWith(`${agents}/`)).map((c) => `${rel(f)} → ${c}`),
+    );
+    expect(reaching).toEqual([]);
+  });
+
+  it('单写者链：归约器的 step 只有 agent/thread/writer.ts 一个调用者', () => {
+    // The danger is not a defect `step` itself could exhibit (it is a pure
+    // function and cannot refuse a caller) — it is a second process running the
+    // same reducer to "optimistically" predict a cursor move (design doc §2.4).
+    const callers = files.filter((f) => callsReducerStep(read(f))).map((f) => f.slice(SRC.length + 1));
+    // Self-check first. An empty set used to pass — and did, for as long as the
+    // old pattern matched no real import at all.
+    expect(callers.length, '判据在当前源码上一处都没匹配到——它已经不在守了').toBeGreaterThan(0);
+    expect(callers).toEqual([join('agent', 'thread', 'writer.ts')]);
+    // A re-export is a second door: whoever imports from it can call `step` without naming the reducer.
+    expect(files.filter((f) => reexportsReducerStep(read(f))).map(rel)).toEqual([]);
+  });
+
+  it('宿主不得依赖运行循环 guide/runner.ts 与 question/runner.ts（决策与执行的分界没有因为同住一个目录而消失）', () => {
+    // `guide/agent.ts` (pure) and `guide/runner.ts` (one of the two files
+    // under `src/agent` that open a socket) are neighbours now, and that adjacency
+    // is exactly what makes this guard necessary: an import away from
+    // `machine.ts` sits a `complete()` call, and the reducer's whole claim —
+    // that a persisted `ThreadState` replays deterministically in a plain node
+    // test — dies the moment one lands. N-2 would catch a literal `fetch(`
+    // typed into `machine.ts`; it would not catch a `runGuide` import that
+    // reaches the network two files later.
+    //
+    // The panel is where the runner belongs (CONTEXT.md `Panel`: a service worker is
+    // killed at 30s, so the SSE request cannot live in the SW at all). The
+    // question agent's loop opens the same socket and is held to the same rule.
+    expect(scope('宿主', (f) => f.includes(join('agent', 'thread'))).filter((f) => importsRunner(read(f))).map(rel)).toEqual([]);
+    alive('依赖 runner', detect.runner);
+  });
+
+  it('请求体的字段必须落在 OpenAI Chat Completions 的白名单内（这就是这次重构的理由）', () => {
+    // 换掉自定义文本契约、改用工具调用，图的就是「换个模型还能跑」。一个端点
+    // 专有的字段会悄悄把这句话变成假话：多数兼容层对不认识的字段是**静默忽略**
+    // 而不是报错（实测 DeepSeek 连 `__definitely_not_a_field` 都回 200），所以
+    // 线上不会有任何症状，只会在别家少一个能力。
+    //
+    // 白名单按 OpenAI Chat Completions 的请求体来，外加 `strict`（写在
+    // tools[].function 里，Anthropic 明确忽略、DeepSeek 标 beta——发得，但不能
+    // 指望）。要加新字段，先查一手文档，再往这里加一行。
+    const ALLOWED = new Set([
+      'model', 'messages', 'stream', 'stream_options', 'temperature',
+      'tools', 'tool_choice', 'parallel_tool_calls',
+    ]);
+    const keys = requestBodyKeys(read(join(SRC, 'agent/provider/provider.ts')));
+    expect(keys.length, '没解析出任何字段，说明这条判据本身失效了').toBeGreaterThan(3);
+    expect(keys.filter((k) => !ALLOWED.has(k))).toEqual([]);
+  });
+
+  it('provider.ts 不得依赖 core/（依赖方向不能反过来）', () => {
+    // `provider.ts` is the one file with a key and a network call — it knows
+    // `ChatMessage[]` and HTTP, nothing about `UINode` or `PromptTable`. Should
+    // this dependency direction ever flip, swapping the host that runs it
+    // (an offscreen document, some other process) stops being "swap one effect
+    // interpreter" and becomes untangling a page-side import from a
+    // network-only file. A bare side-effect `import '@/core/…'` counts too.
+    expect(offending(scope('provider', (f) => f.endsWith(join('agent', 'provider', 'provider.ts'))), detect.importsCore)).toEqual([]);
+    alive('依赖 core', detect.importsCore);
+  });
+
+  it('效果协议：EFFECT_REQUEST/EFFECT_RESULT 的收发逻辑不在 src/agent 下', () => {
+    // N-1's shape for this task: the two message *envelopes* (with their
+    // `type` tag and any chrome-facing send/receive code) belong to
+    // `entrypoints`/`sidepanel`. `src/agent/thread/effect.ts` only defines the
+    // untagged `EffectRequest`/`EffectResult` *data* shapes — neither tag
+    // ever needs to appear there, or anywhere else under `src/agent`.
+    expect(offending(scope('agent', (f) => f.includes(join('src', 'agent'))), detect.effectTags)).toEqual([]);
+    alive('效果协议标签', detect.effectTags);
+  });
+
+  it('效果协议（收口后）：effects.ts 只在两处调用 sendMessage（EFFECT_CLAIM 仲裁与回传 EFFECT_RESULT）', () => {
+    // Was "只在一处" until the same-tab multi-instance gap (once accepted as
+    // known) turned out to have a cheap fix: an `EFFECT_CLAIM` round trip
+    // *before* `complete()`/`fetch()`, so the host can arbitrate which of
+    // possibly several same-tab panel instances actually runs a dispatched
+    // effect. That is a second, deliberate call site — a *third* would be a
+    // second place the panel could independently decide to talk to the host
+    // about a model call, which is exactly the kind of duplicate authority this
+    // guard exists to keep at zero.
+    const effects = factsOf(join(SRC, 'entrypoints', 'sidepanel', 'effects.ts'));
+    expect(effects.calls.filter((c) => lastSegment(c.chain) === 'sendMessage')).toHaveLength(2);
+    for (const tag of ['EFFECT_CLAIM', 'EFFECT_RESULT'])
+      expect(effects.properties.some((p) => p.name === 'type' && p.value === tag), tag).toBe(true);
+  });
+});
+
+/**
+ * 反向验证（08）：证明上面那些守卫真的会开火。
+ *
+ * 一条永远绿的守卫和一条不存在的守卫，从 CI 看是同一回事。这里把每个判据喂给
+ * 一段**已知违例**的合成源码，断言它被抓住——这样「守卫失效」本身也会变红，而
+ * 不是悄悄地不再拦任何东西。
+ *
+ * 用合成源码而不是真去改文件：这一程里我两次为了做变异检验写坏了已提交的
+ * 语料文件，其中一次差点没发现。判据问的是语法树，喂给它一段源码就够了。
+ */
+describe('架构守卫的反向验证：每一条都要能抓到已知违例', () => {
+  const on = (src: string) => factsOfText(src);
+
+  it('N-2 的三条判据分别抓得住 await / fetch( / chrome.', () => {
+    const [awaits, fetches, chrome] = N2_RULES;
+    expect(awaits!.hit(on('const x = await load();'))).toBe(true);
+    expect(fetches!.hit(on('return fetch("https://x");'))).toBe(true);
+    expect(chrome!.hit(on('chrome.storage.session.get(k)'))).toBe(true);
+    // 而正常的 reducer 代码不该被误伤
+    expect(N2_RULES.some((r) => r.hit(on('const next = { ...state, cursor: state.cursor + 1 };')))).toBe(false);
+    // `chrome-mv3` 这类连字符串是字符串，不是 `chrome` 这个名字
+    expect(chrome!.hit(on('const dir = "dist/chrome-mv3";'))).toBe(false);
+  });
+
+  it('N-2 的范围按依赖闭包：违例藏在第二层也抓得住；import type 不算，import { type X } 算', () => {
+    const at = (p: string) => join(SRC, 'agent', 'thread', p);
+    const tree = new Map<string, string>([
+      [
+        at('machine.ts'),
+        "import { present } from './transitions';\nimport type { T } from './erased';\nimport { type U } from './kept';\nexport const step = () => present();",
+      ],
+      [at('transitions.ts'), "import { load } from '@/agent/thread/io';\nexport const present = () => load;"],
+      [at('io.ts'), 'export const load = async () => await fetch("https://x");'],
+      [at('kept.ts'), 'export type U = 1;\nexport const peek = () => chrome.storage.session.get("k");'],
+      [at('erased.ts'), 'export type T = 1;\nexport const never = async () => await fetch("y");'],
+    ]);
+    const read = (p: string) => tree.get(p);
+    expect([...importClosure(at('machine.ts'), read)].sort()).toEqual(
+      [at('io.ts'), at('kept.ts'), at('machine.ts'), at('transitions.ts')].sort(),
+    );
+    const found = purityOffenders(at('machine.ts'), read).sort((a, b) => a.file.localeCompare(b.file));
+    expect(found).toEqual([
+      { file: at('io.ts'), rules: ['await', 'fetch('] },
+      { file: at('kept.ts'), rules: ['chrome'] },
+    ]);
+  });
+
+  it('依赖闭包认得 WXT 的四个别名、.js 后缀、index.tsx；指向源码树却找不到的 import 直接报错', () => {
+    const root = process.cwd();
+    const src = (p: string) => join(SRC, p);
+    const tree = new Map<string, string>([
+      [src('entry.ts'), ["import '~/a';", "import '@@/scripts/b';", "import '~~/scripts/c';", "import './d.js';", "import './e';"].join('\n')],
+      [src('a.ts'), ''],
+      [join(root, 'scripts', 'b.ts'), ''],
+      [join(root, 'scripts', 'c.ts'), ''],
+      [src('d.ts'), ''],
+      [src(join('e', 'index.tsx')), ''],
+    ]);
+    const read = (p: string) => tree.get(p);
+    expect([...importClosure(src('entry.ts'), read)].sort()).toEqual([...tree.keys()].sort());
+    // Silently dropping this would let the closure stop short and pass.
+    tree.set(src('entry.ts'), "import './gone';");
+    expect(() => importClosure(src('entry.ts'), read)).toThrow('找不到对应的文件');
+    // A package is not this tree's business, and not an error either.
+    tree.set(src('entry.ts'), "import ts from 'typescript';\nimport '@scope/pkg';");
+    expect(importClosure(src('entry.ts'), read)).toEqual([src('entry.ts')]);
+  });
+
+  it('协议白名单判据抓得住一个端点专有字段', () => {
+    // 正向断言全绿，所以这条反向验证不是形式主义：它证明的是「如果有人加了
+    // 一个不该加的字段，上面那条真的会红」，而不是「上面那条恰好扫不到东西」。
+    const ALLOWED = new Set(['model', 'messages', 'stream', 'temperature']);
+    const fake = [
+      'const init = {',
+      '  body: JSON.stringify({',
+      '    model: cfg.model,',
+      '    messages,',
+      '    stream: true,',
+      '    reasoning_content: true,',
+      '  }),',
+      '};',
+    ].join('\n');
+    const keys = requestBodyKeys(fake);
+    expect(keys).toContain('reasoning_content');
+    expect(keys.filter((k) => !ALLOWED.has(k))).toEqual(['reasoning_content']);
+    // A key hidden in a conditional spread is still a key the endpoint receives.
+    expect(requestBodyKeys('const i = { body: JSON.stringify({ model, ...(on ? { tools, secret_field: 1 } : {}) }) };')).toEqual(['model', 'tools', 'secret_field']);
+    // A spread of something the source does not spell out cannot be checked, so it is reported rather than skipped.
+    expect(requestBodyKeys('const i = { body: JSON.stringify({ model, ...extra }) };').some((k) => k.startsWith('…'))).toBe(true);
+  });
+
+  it('宿主-runner 判据抓得住三种 import 写法，且不误伤同目录的纯 agent.ts', () => {
+    expect(importsRunner("import { runGuide } from '@/agent/agents/guide/runner';")).toBe(true);
+    expect(importsRunner("import { runGuide } from '../guide/runner';")).toBe(true);
+    expect(importsRunner("import { runGuide } from './runner';")).toBe(true);
+    // A regex over text saw neither of these.
+    expect(importsRunner("const m = await import('@/agent/agents/guide/runner');")).toBe(true);
+    expect(importsRunner("export { runGuide } from '../guide/runner';")).toBe(true);
+    // 宿主 *应该* 依赖纯的那一半——这正是门面存在的理由，不能被一并拦下。
+    expect(importsRunner("import { guideAgent } from '@/agent/agents/guide/agent';")).toBe(false);
+  });
+
+  it('单写者链判据看的是调用，不是 import', () => {
+    expect(callsReducerStep("import { pageMoved, step } from './machine';\nconst r = step(prior, input);")).toBe(true);
+    expect(callsReducerStep("import { step as reduce } from '../thread/machine';\nreduce(s, i);")).toBe(true);
+    expect(callsReducerStep("import * as machine from '@/agent/thread/machine';\nmachine.step(s, i);")).toBe(true);
+    // Imported but never called, imported only as a type, or someone else's `step`: not a writer.
+    expect(callsReducerStep("import { step } from './machine';\nexport type S = typeof step;")).toBe(false);
+    expect(callsReducerStep("import type { step } from './machine';")).toBe(false);
+    expect(callsReducerStep("import { type MachineEffect } from './machine';\nstep(a, b);")).toBe(false);
+    expect(callsReducerStep("import { step } from './thread';\nstep(a, b);")).toBe(false);
+    // And a second door is seen for what it is.
+    expect(reexportsReducerStep("export { step } from './machine';")).toBe(true);
+    expect(reexportsReducerStep("export * from '@/agent/thread/machine';")).toBe(true);
+    expect(reexportsReducerStep("export { pageMoved } from './machine';")).toBe(false);
+  });
+
+  it('单写者链：把 step 的第二个调用点加进另一个模块，判据就会变红', () => {
+    const writer = read(join(SRC, 'agent', 'thread', 'writer.ts'));
+    const second = "import { step } from '@/agent/thread/machine';\nexport const predict = (s, i) => step(s, i);";
+    expect([writer, second].filter(callsReducerStep)).toHaveLength(2);
+  });
+
+  it('「不得操作页面」判据抓得住每一种让页面替用户动作的写法', () => {
+    const acts = (src: string) => ACTING_RULES.some((r) => r.hit(on(src)));
+    for (const violator of [
+      'el.click()',
+      'input.blur()',
+      'form.submit()',
+      'el.dispatchEvent(ev)',
+      'new KeyboardEvent("keydown")',
+      'document.execCommand("copy")',
+      'input.select()',
+      'input.setSelectionRange(0, 1)',
+      'document.designMode = "on"',
+    ])
+      expect(acts(violator), `没抓住：${violator}`).toBe(true);
+    // focus() 有自己更窄的守卫，不在这条名单里——聚焦不是激活
+    expect(acts('el.focus({ preventScroll: true })')).toBe(false);
+    // Every rule, not just the list as a whole, has to be able to fire.
+    const fired = ACTING_RULES.filter((r) =>
+      ['el.click()', 'input.blur()', 'form.submit()', 'el.dispatchEvent(ev)', 'new KeyboardEvent("k")', 'document.execCommand("c")', 'input.select()', 'input.setSelectionRange(0, 1)', 'document.designMode = "on"'].some((v) => r.hit(on(v))),
+    );
+    expect(fired).toHaveLength(ACTING_RULES.length);
+  });
+
+  it('P-1 判据抓得住任何「猜是不是同一家」的实现', () => {
+    for (const violator of ['getETLDPlusOne(host)', 'const registrable = toRegistrableDomain(h)', 'publicSuffixList.parse(h)'])
+      expect(partyGuessing(on(violator)).length, `没抓住：${violator}`).toBeGreaterThan(0);
+    expect(partyGuessing(on('sameHost(a, b)'))).toEqual([]);
+  });
+
+  it('树上没有真实命中点的判据，用合成违例证明它们没瞎', () => {
+    expect(detect.computedStyle(on('const s = getComputedStyle(el);'))).toBe(true);
+    expect(detect.computedStyle(on('window.getComputedStyle(el).display'))).toBe(true);
+    expect(detect.computedStyle(on('// getComputedStyle(el) is too slow here'))).toBe(false);
+    for (const violator of ['document.getSelection()', 'range.addRange(r)', 'document.execCommand("copy")'])
+      expect(detect.selection(on(violator)), violator).toBe(true);
+    expect(detect.syncStorage(on('chrome.storage.sync.set({ provider })'))).toBe(true);
+    expect(detect.keyNearLogs(on('console.log(cfg.apiKey)'))).toBe(true);
+    expect(detect.keyNearLogs(on('broadcast({ type: "X", key: cfg.apiKey })'))).toBe(true);
+    expect(detect.keyNearLogs(on('const headers = { Authorization: `Bearer ${cfg.apiKey}` };'))).toBe(false);
+  });
+});
+
+describe('注释里的引用必须找得到', () => {
+  /**
+   * Two kinds of pointer rotted the same way. Comments cited twelve plan files
+   * that had been deleted long before — 89 citations of documents nobody could
+   * open — and once the decision records were retired, 67 record numbers would
+   * have pointed at nothing too. A comment that sends the reader to a document
+   * is only worth its line if the document is there.
+   */
+  const REPO = process.cwd();
+  const walkExt = (dir: string, re: RegExp, out: string[] = []): string[] => {
+    for (const e of readdirSync(dir)) {
+      if (e === 'node_modules' || e.startsWith('.')) continue;
+      const p = join(dir, e);
+      if (statSync(p).isDirectory()) walkExt(p, re, out);
+      else if (re.test(p)) out.push(p);
+    }
+    return out;
+  };
+  const referencing = [SRC, join(REPO, 'tests', 'unit'), join(REPO, 'tests', 'e2e')].flatMap((d) =>
+    walkExt(d, /\.(ts|tsx|mjs)$/),
+  );
+  const MD_REF = /(?<![\w/.-])(?:[\w.-]+\/)*[\w-]+\.md\b/g;
+  // A comment can break a citation across lines — `ADR` at one line's end, the
+  // number on the next — so the gap may hold whitespace and comment markers.
+  const RECORD_REF = /\bADR[\s*/-]{0,12}\d{4}\b|docs\/adr\/\d{4}/g;
+  const SOURCE_REF = /(?<![\w/.@-])(?:[\w.-]+\/)*[\w-]+(?:\.[\w-]+)*\.(?:tsx?|mjs)\b/g;
+  const resolves = (ref: string) => existsSync(join(REPO, ref)) || existsSync(join(REPO, 'docs', ref));
+  /** Comment text, as the parser sees it: a string naming some repository's licence file, or a `//` inside a
+   *  URL, is not a comment. Walks token children too, so a comment alone on the line before a `}` is kept. */
+  const commentsOf = (path: string): string => {
+    const text = read(path);
+    const kind = path.endsWith('.tsx') ? ts.ScriptKind.TSX : path.endsWith('.mjs') ? ts.ScriptKind.JS : ts.ScriptKind.TS;
+    const sf = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, kind);
+    const seen = new Map<number, string>();
+    const take = (ranges: ts.CommentRange[] | undefined) => ranges?.forEach((r) => seen.set(r.pos, text.slice(r.pos, r.end)));
+    const visit = (n: ts.Node): void => {
+      take(ts.getLeadingCommentRanges(text, n.pos));
+      take(ts.getTrailingCommentRanges(text, n.end));
+      n.getChildren(sf).forEach(visit);
+    };
+    visit(sf);
+    return [...seen.values()].join('\n');
+  };
+
+  it('注释里每一处 .md 引用都指向一个真实存在的文件', () => {
+    const refs = referencing.flatMap((f) => [...commentsOf(f).matchAll(MD_REF)].map((m) => ({ f, ref: m[0] })));
+    // Self-check first: a detector that sees nothing proves nothing.
+    expect(refs.length, '一处 .md 引用都没扫到——判据已经不在守了').toBeGreaterThan(0);
+    expect(refs.filter(({ ref }) => !resolves(ref)).map(({ f, ref }) => `${rel(f)} → ${ref}`)).toEqual([]);
+  });
+
+  it('注释里点名的源码文件都还在', () => {
+    // A comment naming a deleted module reads as a pointer to something that is
+    // not there — one named a deleted host module for a whole ticket after it
+    // was gone. A path resolves against every source file in the repository;
+    // a bare file name resolves if any file has it.
+    const known = walkExt(REPO, /\.(ts|tsx|mjs)$/).map(rel);
+    const exists = (ref: string) => known.some((k) => k === ref || k.endsWith(`/${ref}`));
+    const refs = referencing.flatMap((f) => [...commentsOf(f).matchAll(SOURCE_REF)].map((m) => ({ f, ref: m[0] })));
+    expect(refs.length, '一处源码文件引用都没扫到——判据已经不在守了').toBeGreaterThan(0);
+    expect(refs.filter(({ ref }) => !exists(ref)).map(({ f, ref }) => `${rel(f)} → ${ref}`)).toEqual([]);
+  });
+
+  it('决策记录已经退场：目录不在了，源码里也不再引用任何编号', () => {
+    expect(existsSync(join(REPO, 'docs', 'adr')), '决策记录目录应已删除').toBe(false);
+    const refs = referencing.flatMap((f) => [...read(f).matchAll(RECORD_REF)].map((m) => `${rel(f)} → ${m[0]}`));
+    expect(refs).toEqual([]);
+  });
+
+  it('两个判据自己抓得住它们要抓的形态', () => {
+    // Built by concatenation so this file never trips its own scan.
+    const plan = '04-effect-protocol' + '.md';
+    expect(`see ${plan}'s notes`.match(MD_REF)).toEqual([plan]);
+    expect(`see docs/plans/x/${plan}`.match(MD_REF)).toEqual([`docs/plans/x/${plan}`]);
+    expect('ships in alias-loader.mjs'.match(MD_REF)).toBeNull();
+    expect('see agent/thread/writer.ts and route-and-steps.spec.ts'.match(SOURCE_REF)).toEqual(['agent/thread/writer.ts', 'route-and-steps.spec.ts']);
+    expect("import { step } from '@/agent/thread/machine';".match(SOURCE_REF)).toBeNull();
+    for (const record of ['ADR' + ' 0009', 'ADR' + '-0008', 'ADR' + '0005', 'ADR' + '\n * 0005', 'ADR' + '\n  // 0006', 'docs/adr/' + '0012-x']) {
+      expect(record.match(RECORD_REF), record).not.toBeNull();
+    }
+  });
 });

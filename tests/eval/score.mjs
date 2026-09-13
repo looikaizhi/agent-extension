@@ -12,7 +12,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { bindStep, matchCount } from '../../src/core/packs/bind.ts';
+import { bindStep, matchCount } from '../../src/core/descriptor/bind.ts';
 import { scoreNodes } from '../../src/core/locator/lexical.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));

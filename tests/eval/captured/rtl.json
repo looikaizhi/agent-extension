@@ -1,10 +1,10 @@
 {
  "slug": "rtl",
  "table": {
-  "snapshotId": "msr7cnzy-i0njlfbr-1",
-  "url": "http://127.0.0.1:56650/rtl.html",
+  "snapshotId": "mtzcf63b-gvrni4s3-1",
+  "url": "http://127.0.0.1:53368/rtl.html",
   "title": "RTL 布局",
-  "pageHash": "1pb5kh9",
+  "pageHash": "1cvkst4",
   "items": [
    {
     "ref": "e4",
@@ -23,7 +23,7 @@
     ]
    }
   ],
-  "truncated": false,
+  "omitted": 0,
   "degraded": false,
   "ambiguity": 0,
   "stats": {
@@ -35,11 +35,11 @@
    "emptyName": 0,
    "modalScoped": false,
    "ms": {
-    "walk": 1.5,
-    "visibility": 0.1,
-    "semantics": 4.8,
-    "name": 3.2,
-    "total": 6.4
+    "walk": 1.6,
+    "visibility": 0.2,
+    "semantics": 4.5,
+    "name": 3.4,
+    "total": 6.3
    }
   }
  },
