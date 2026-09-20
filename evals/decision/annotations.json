@@ -1,0 +1,1166 @@
+[
+  {
+    "state": "t11/aliyun-ecs-regions/P1/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e34",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/aliyun-ecs-regions/P1/2",
+    "intent": "done"
+  },
+  {
+    "state": "t11/aliyun-ecs-regions/P1/3",
+    "intent": "done"
+  },
+  {
+    "state": "t11/aliyun-ecs-regions/P2/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e34",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/aliyun-ecs-regions/P2/2",
+    "intent": "done"
+  },
+  {
+    "state": "t11/aliyun-ecs-regions/P2/3",
+    "intent": "done"
+  },
+  {
+    "state": "t11/aliyun-rds-billing/P1/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e59",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/aliyun-rds-billing/P1/2",
+    "intent": "done"
+  },
+  {
+    "state": "t11/aliyun-rds-billing/P1/3",
+    "intent": "done"
+  },
+  {
+    "state": "t11/aliyun-rds-billing/P2/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e59",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/aliyun-rds-billing/P2/2",
+    "intent": "done"
+  },
+  {
+    "state": "t11/aliyun-sls-query/P1/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e115",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/aliyun-sls-query/P1/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e43",
+        "actions": [
+          "scroll"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/aliyun-sls-query/P1/3",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-branches/P2/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e6",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-branches/P2/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e1",
+        "actions": [
+          "input"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-branches/P2/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e53",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-branches/P2/4",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e33",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-branches/P2/5",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e33",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-branches/P2/6",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-branches/P2/7",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-branches/P2/8",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-commits/P2/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e6",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-commits/P2/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e1",
+        "actions": [
+          "input"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-commits/P2/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e53",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-commits/P2/4",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e38",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-commits/P2/5",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e38",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-commits/P2/6",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-contributing/P1/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e6",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-contributing/P1/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e1",
+        "actions": [
+          "input"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-contributing/P1/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e53",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-contributing/P1/4",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e97",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-contributing/P1/5",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e79",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-contributing/P1/6",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-contributing/P1/7",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-docs-site/P2/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e6",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-docs-site/P2/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e1",
+        "actions": [
+          "input"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-docs-site/P2/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e47",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-docs-site/P2/4",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e47",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-docs-site/P2/5",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e78",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-docs-site/P2/6",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-docs-site/P2/7",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-issues/P1/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e6",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-issues/P1/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e1",
+        "actions": [
+          "input"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-issues/P1/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e53",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-issues/P1/4",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e19",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-issues/P1/5",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e98",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-issues/P1/6",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-issues/P1/7",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-issues/P2/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e6",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-issues/P2/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e1",
+        "actions": [
+          "input"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-issues/P2/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e53",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-issues/P2/4",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e53",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-issues/P2/5",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e19",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-issues/P2/6",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e19",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-issues/P2/7",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e19",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-issues/P2/8",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-issues/P2/9",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-license/P1/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e6",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-license/P1/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e1",
+        "actions": [
+          "input"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-license/P1/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e53",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-license/P1/4",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-license/P1/5",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-license/P2/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e6",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-license/P2/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e1",
+        "actions": [
+          "input"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-license/P2/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e53",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-license/P2/4",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-pulls/P1/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e6",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-pulls/P1/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e1",
+        "actions": [
+          "input"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-pulls/P1/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e53",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-pulls/P1/4",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e20",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-pulls/P1/5",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e20",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-pulls/P1/6",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e30",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-pulls/P1/7",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-pulls/P1/8",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-pulls/P2/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e6",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-pulls/P2/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e1",
+        "actions": [
+          "input"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-pulls/P2/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e53",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-pulls/P2/4",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e20",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-pulls/P2/5",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e18",
+        "actions": [
+          "select"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-pulls/P2/6",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-pulls/P2/7",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e42",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-pulls/P2/8",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-releases/P1/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e6",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-releases/P1/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e1",
+        "actions": [
+          "input"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-releases/P1/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e53",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-releases/P1/4",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e53",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-releases/P1/5",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e24",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-releases/P1/6",
+    "intent": "ask"
+  },
+  {
+    "state": "t11/gh-releases/P1/7",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-releases/P2/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e6",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-releases/P2/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e1",
+        "actions": [
+          "input"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-releases/P2/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e53",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-releases/P2/4",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e34",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-releases/P2/5",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e34",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-releases/P2/6",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-releases/P2/7",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e26",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-releases/P2/8",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-releases/P2/9",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-repo-address/P1/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e6",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-repo-address/P1/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e1",
+        "actions": [
+          "input"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-repo-address/P1/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e53",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-repo-address/P1/4",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e37",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-repo-address/P1/5",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e11",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-repo-address/P1/6",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e6",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gh-repo-address/P1/7",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gitee-closed-issues/P2/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e32",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gitee-closed-issues/P2/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e47",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gitee-closed-issues/P2/3",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gitee-core-pom/P2/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e67",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gitee-core-pom/P2/2",
+    "intent": "read_doc"
+  },
+  {
+    "state": "t11/gitee-core-pom/P2/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e55",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gitee-core-pom/P2/4",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gitee-merged-pulls/P1/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e33",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gitee-merged-pulls/P1/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e44",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gitee-merged-pulls/P1/3",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gitee-org/P1/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e29",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gitee-org/P1/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e27",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gitee-org/P1/3",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e29",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gitee-org/P1/4",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gitee-org/P2/1",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e29",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gitee-org/P2/2",
+    "intent": "point",
+    "acceptable": [
+      {
+        "ref": "e27",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "t11/gitee-org/P2/3",
+    "intent": "done"
+  }
+]

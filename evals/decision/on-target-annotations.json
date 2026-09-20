@@ -1,0 +1,126 @@
+[
+  {
+    "state": "t09/aliyun-ecs-billing-switch/P2/3",
+    "intent": "done"
+  },
+  {
+    "state": "t09/aliyun-ecs-billing-switch/P2/4",
+    "intent": "done"
+  },
+  {
+    "state": "t09/aliyun-ecs-release/P3/2",
+    "intent": "done"
+  },
+  {
+    "state": "t09/aliyun-rds-billing/P2/2",
+    "intent": "done"
+  },
+  {
+    "state": "t09/gh-ci/P1/10",
+    "intent": "done"
+  },
+  {
+    "state": "t09/gh-ci/P1/8",
+    "intent": "done"
+  },
+  {
+    "state": "t09/gh-ci/P1/9",
+    "intent": "done"
+  },
+  {
+    "state": "t09/gh-ci/P2/11",
+    "intent": "done"
+  },
+  {
+    "state": "t09/gh-ci/P3/8",
+    "intent": "done"
+  },
+  {
+    "state": "t09/gh-ci/P3/9",
+    "intent": "done"
+  },
+  {
+    "state": "t09/gitee-core-pom/P2/5",
+    "intent": "done"
+  },
+  {
+    "state": "t09/gitee-maven/P1/1",
+    "intent": "done"
+  },
+  {
+    "state": "t09/gitee-maven/P2/1",
+    "intent": "done"
+  },
+  {
+    "state": "t09/gitee-maven/P2/2",
+    "intent": "done"
+  },
+  {
+    "state": "t09/gitee-maven/P2/3",
+    "intent": "done"
+  },
+  {
+    "state": "t09/gitee-maven/P2/4",
+    "intent": "done"
+  },
+  {
+    "state": "t09/gitee-maven/P3/1",
+    "intent": "done"
+  },
+  {
+    "state": "t09/gitee-maven/P3/2",
+    "intent": "done"
+  },
+  {
+    "state": "t11/aliyun-ecs-billing-switch/P2/5",
+    "intent": "done"
+  },
+  {
+    "state": "t11/aliyun-ecs-create/P2/6",
+    "intent": "done"
+  },
+  {
+    "state": "t11/aliyun-ecs-release/P1/2",
+    "intent": "done"
+  },
+  {
+    "state": "t11/aliyun-ecs-release/P1/3",
+    "intent": "done"
+  },
+  {
+    "state": "t11/aliyun-sls-query/P1/2",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-ci/P1/8",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-ci/P1/9",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-pulls/P2/7",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gh-releases/P2/7",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gitee-closed-issues/P1/3",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gitee-maven/P1/1",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gitee-maven/P2/1",
+    "intent": "done"
+  },
+  {
+    "state": "t11/gitee-maven/P2/2",
+    "intent": "done"
+  }
+]

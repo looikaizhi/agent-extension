@@ -1,0 +1,366 @@
+<title>第一批决策标注</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#f5f6f3; --surface:#ffffff; --raise:#eceee8;
+  --ink:#14181d; --ink-2:#4a524e; --ink-3:#6c746f;
+  --line:#dde0da; --line-2:#c8ccc4;
+  --go:#1f6f5c; --go-bg:#e3efea;
+  --warn:#9a5716; --warn-bg:#f6ebdd;
+  --flat:#646a67; --flat-bg:#e8eae5;
+  --mark:#2f5fa7; --mark-bg:#e4ecf7;
+  --focus:#1f6f5c;
+  --sans:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,'PingFang SC','Hiragino Sans GB','Microsoft YaHei','Noto Sans SC',sans-serif;
+  --mono:'IBM Plex Mono','SF Mono',ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --ground:#0f1211; --surface:#161a18; --raise:#1d2220;
+  --ink:#e7eae6; --ink-2:#a8b0ab; --ink-3:#8a928d;
+  --line:#282e2b; --line-2:#3a423e;
+  --go:#5cb69d; --go-bg:#16302a;
+  --warn:#d59a56; --warn-bg:#332614;
+  --flat:#9aa29d; --flat-bg:#202523;
+  --mark:#86a9e0; --mark-bg:#1b2638;
+  --focus:#5cb69d;
+}}
+:root[data-theme="dark"]{
+  --ground:#0f1211; --surface:#161a18; --raise:#1d2220;
+  --ink:#e7eae6; --ink-2:#a8b0ab; --ink-3:#8a928d;
+  --line:#282e2b; --line-2:#3a423e;
+  --go:#5cb69d; --go-bg:#16302a;
+  --warn:#d59a56; --warn-bg:#332614;
+  --flat:#9aa29d; --flat-bg:#202523;
+  --mark:#86a9e0; --mark-bg:#1b2638;
+  --focus:#5cb69d;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font-family:var(--sans);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;margin:0;padding-inline:16px;padding-block:0 48px}
+.app{max-width:1400px;margin:0 auto}
+button{font:inherit}
+button:focus-visible,input:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.mono,code{font-family:var(--mono);font-size:.92em}
+.top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:8px 24px;padding-block:24px 14px;border-bottom:2px solid var(--ink)}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+h1{margin:4px 0 0;font-size:24px;font-weight:700;letter-spacing:-.01em}
+.progress{display:flex;flex-direction:column;align-items:flex-end;gap:2px;font-size:13px}
+#tally{font-family:var(--mono);font-variant-numeric:tabular-nums}
+#db-status{color:var(--ink-3)}
+#db-status.bad{color:var(--warn)}
+.body{display:grid;grid-template-columns:260px minmax(0,1fr);gap:20px;margin-top:16px;align-items:start}
+.list{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto;border:1px solid var(--line);background:var(--surface)}
+.gname{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;color:var(--ink-3);padding:10px 12px 4px;text-transform:uppercase}
+.item{all:unset;box-sizing:border-box;cursor:pointer;display:grid;grid-template-columns:10px 1fr;column-gap:8px;width:100%;padding:6px 12px;border-left:3px solid transparent}
+.item:hover{background:var(--raise)}
+.item.on{background:var(--go-bg);border-left-color:var(--go)}
+.item:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.dot{width:8px;height:8px;border-radius:50%;margin-top:7px;grid-row:span 2;background:var(--line-2)}
+.dot.done{background:var(--go)}
+.dot.part{background:var(--warn)}
+.iname{font-family:var(--mono);font-size:12.5px;overflow-wrap:anywhere}
+.imeta{font-size:12px;color:var(--ink-3)}
+.main{min-width:0;display:flex;flex-direction:column;gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);padding:14px 16px}
+.goal{font-size:19px;font-weight:600;line-height:1.4}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;font-size:12.5px;color:var(--ink-3)}
+.url{font-family:var(--mono);font-size:12.5px;overflow-wrap:anywhere;color:var(--ink-2);margin-top:4px}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.cap{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin:0 0 6px}
+.walk{margin:0;padding-left:20px;font-size:13px}
+.walk li{margin:2px 0}
+.muted{color:var(--ink-3);margin:0}
+.badge{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:2px;background:var(--flat-bg);color:var(--ink)}
+.steps,.opts{margin:6px 0 0;padding-left:20px;font-size:13px}
+.why{font-size:13px;color:var(--ink-2);margin:6px 0 0}
+.judge{display:flex;flex-direction:column;gap:10px}
+.seg{display:flex;flex-wrap:wrap;border:1px solid var(--line-2);width:max-content;max-width:100%}
+.seg button{border:0;border-right:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);padding:6px 14px;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{background:var(--go-bg);color:var(--go);font-weight:600}
+.seg button:disabled,.plain:disabled{cursor:not-allowed;opacity:.5}
+.hint{font-size:13px;color:var(--ink-2)}
+.hint.warn{color:var(--warn)}
+.sug{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:13px;background:var(--mark-bg);padding:8px 12px}
+.plain{border:1px solid var(--line-2);background:var(--surface);color:var(--ink);padding:4px 12px;cursor:pointer}
+.plain:hover:not(:disabled){background:var(--raise)}
+.tools{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-bottom:8px;font-size:13px}
+.tools input[type=search]{font:inherit;padding:5px 10px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink);width:min(320px,100%)}
+.scroll{overflow-x:auto;border:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:13px;background:var(--surface)}
+th,td{text-align:left;padding:5px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{background:var(--raise);font-size:12px;color:var(--ink-2);font-weight:600;position:sticky;top:0}
+tr.checked td{background:var(--go-bg)}
+tr.dim td{opacity:.55}
+td.path{color:var(--ink-3);font-size:12px;max-width:340px}
+td label{cursor:pointer}
+.tag{display:inline-block;margin-left:6px;font-size:11px;padding:0 6px;border-radius:2px;vertical-align:1px}
+.tag.m{background:var(--mark-bg);color:var(--mark)}
+.tag.s{background:var(--warn-bg);color:var(--warn)}
+.tag.x{background:var(--flat-bg);color:var(--flat)}
+.chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.chip{border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);font-family:var(--mono);font-size:11.5px;padding:0 8px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--go);border-color:var(--go);color:var(--surface)}
+.nav{display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between}
+.kbd{font-family:var(--mono);font-size:11.5px;color:var(--ink-3)}
+@media (max-width:900px){
+  .progress{align-items:flex-start}
+  .body{grid-template-columns:1fr}
+  .list{position:static;max-height:220px}
+  .cols{grid-template-columns:1fr}
+}
+</style>
+
+<div class="app">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Decision eval · 标注</div>
+      <h1>第一批决策标注</h1>
+    </div>
+    <div class="progress"><span id="tally"></span><span id="db-status">正在连接这张页的数据库……</span></div>
+  </header>
+  <div class="body">
+    <nav class="list" id="list" aria-label="状态列表"></nav>
+    <main class="main" id="main"></main>
+  </div>
+</div>
+
+<script>
+(function () {
+  var DATA = /*__DATA__*/null;
+  var S = DATA.states;
+  var ACTIONS = DATA.actions;
+  var INTENTS = [['point', '指路'], ['done', '已经到了'], ['ask', '该问用户'], ['read_doc', '要查文档']];
+  var NAMES = { point: '指路', done: '已经到了', ask: '该问用户', read_doc: '要查文档', none: '没有回答', unreadable: '读不出' };
+  var POS = { opening: '开局', middle: '中途', end: '临近终点' };
+  var STATUS = { todo: '未标', part: '未完成：选了指路，还没勾第一步', done: '已标' };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+
+  var db = null;
+  var ann = {};
+  var pending = {};
+  var cur = 0;
+  var filter = '';
+  var onlyChecked = false;
+  try { var saved = Number(localStorage.getItem('label:cur')); if (saved >= 0 && saved < S.length) cur = saved; } catch (e) {}
+
+  var listEl = document.getElementById('list');
+  var mainEl = document.getElementById('main');
+  var statusEl = document.getElementById('db-status');
+  var tallyEl = document.getElementById('tally');
+
+  function say(text, bad) { statusEl.textContent = text; statusEl.className = bad ? 'bad' : ''; }
+  function annOf(d) { return ann[d.doc] || { intent: null, acceptable: [] }; }
+  function statusOf(d) {
+    var a = ann[d.doc];
+    if (!a || !a.intent) return 'todo';
+    return a.intent === 'point' && !a.acceptable.length ? 'part' : 'done';
+  }
+  function tally() {
+    var n = { todo: 0, part: 0, done: 0 };
+    S.forEach(function (d) { n[statusOf(d)] += 1; });
+    tallyEl.textContent = '已标 ' + n.done + '/' + S.length + (n.part ? '　未完成 ' + n.part : '');
+  }
+
+  function renderList() {
+    var sites = [];
+    S.forEach(function (d) { if (sites.indexOf(d.site) < 0) sites.push(d.site); });
+    listEl.innerHTML = sites.map(function (site) {
+      return '<div class="gname">' + esc(site) + '</div>' + S.map(function (d, i) {
+        if (d.site !== site) return '';
+        var st = statusOf(d);
+        return '<button type="button" class="item' + (i === cur ? ' on' : '') + '" data-i="' + i + '" aria-current="' + (i === cur) + '">' +
+          '<span class="dot ' + st + '" title="' + STATUS[st] + '"></span>' +
+          '<span class="iname">P' + d.pass + ' · ' + esc(d.goalId) + '</span>' +
+          '<span class="imeta">' + POS[d.position] + (d.hop ? ' · 走过 ' + d.hop + ' 跳' : '') + ' · ' + STATUS[st].split('：')[0] + '</span></button>';
+      }).join('');
+    }).join('');
+  }
+
+  function answerHtml(ans) {
+    if (ans.intent === 'none') return '<p class="muted">这一跳没有等到回答。</p>';
+    if (ans.intent === 'unreadable') return '<p class="muted">当时的回答读不出来。</p>';
+    var h = '<span class="badge">' + esc(NAMES[ans.intent] || ans.intent) + '</span>';
+    if (ans.steps && ans.steps.length) h += '<ol class="steps">' + ans.steps.map(function (s) { return '<li><code>' + esc(s.ref) + '</code> <b>' + esc(s.action) + '</b>：' + esc(s.why) + '</li>'; }).join('') + '</ol>';
+    if (ans.question) h += '<p class="why">' + esc(ans.question) + '</p>';
+    if (ans.options && ans.options.length) h += '<ul class="opts">' + ans.options.map(function (o) { return '<li><code>' + esc(o.ref) + '</code> ' + esc(o.label) + '</li>'; }).join('') + '</ul>';
+    if (ans.why) h += '<p class="why">' + esc(ans.why) + '</p>';
+    return h;
+  }
+
+  function tableRows(d) {
+    var a = annOf(d);
+    var acc = {};
+    a.acceptable.forEach(function (x) { acc[x.ref] = x.actions; });
+    var first = d.answer.steps && d.answer.steps[0] ? d.answer.steps[0].ref : null;
+    var sug = {};
+    (d.suggestion ? d.suggestion.acceptable : []).forEach(function (x) { sug[x.ref] = true; });
+    var q = filter.trim().toLowerCase();
+    var guide = a.intent === 'point';
+    var rows = d.items.filter(function (it) {
+      if (onlyChecked && !acc[it.ref]) return false;
+      return !q || (it.ref + ' ' + it.role + ' ' + it.name + ' ' + it.path).toLowerCase().indexOf(q) >= 0;
+    });
+    if (!rows.length) return '<tr><td colspan="5" class="muted">没有匹配的元素。</td></tr>';
+    return rows.map(function (it) {
+      var on = !!acc[it.ref];
+      var tags = (it.ref === first ? '<span class="tag m">模型当时选</span>' : '') + (sug[it.ref] ? '<span class="tag s">建议</span>' : '') + (it.sensitive ? '<span class="tag x">敏感，不能选</span>' : '');
+      var chips = on ? '<div class="chips">' + ACTIONS.map(function (x) {
+        var p = acc[it.ref].indexOf(x) >= 0;
+        return '<button type="button" class="chip" data-act="' + x + '" data-ref="' + esc(it.ref) + '" aria-pressed="' + p + '"' + (db ? '' : ' disabled') + '>' + x + '</button>';
+      }).join('') + '</div>' : '';
+      var off = !db || !guide || it.sensitive;
+      return '<tr class="' + (on ? 'checked' : '') + (guide ? '' : ' dim') + '">' +
+        '<td><input type="checkbox" id="c-' + esc(it.ref) + '" data-ref="' + esc(it.ref) + '"' + (on ? ' checked' : '') + (off ? ' disabled' : '') + '></td>' +
+        '<td class="mono">' + esc(it.ref) + '</td><td>' + esc(it.role) + '</td>' +
+        '<td><label for="c-' + esc(it.ref) + '">' + (esc(it.name) || '<span class="muted">（无名）</span>') + '</label>' + tags + chips + '</td>' +
+        '<td class="path">' + esc(it.path) + '</td></tr>';
+    }).join('');
+  }
+
+  function renderTable() {
+    var body = document.getElementById('rows');
+    if (body) body.innerHTML = tableRows(S[cur]);
+  }
+
+  function renderMain() {
+    var d = S[cur];
+    var a = annOf(d);
+    var done = d.done.length ? '<ol class="walk">' + d.done.map(function (x) { return '<li>' + esc(x.title) + (x.outcome && x.outcome !== 'confirmed' ? ' <span class="muted">（' + esc(x.outcome) + '）</span>' : '') + '</li>'; }).join('') + '</ol>' : '<p class="muted">还没走过任何一步：这是起点页。</p>';
+    var route = d.route.length ? '<ol class="walk">' + d.route.map(function (r) { return '<li>' + esc(r.at) + '：' + esc(r.goal) + '</li>'; }).join('') + '</ol>' : '<p class="muted">没有路线。</p>';
+    var intentHint = a.intent === 'point'
+      ? (a.acceptable.length ? '已勾 ' + a.acceptable.length + ' 个可接受的第一步。每个勾上的元素，再点它可接受的动作。' : '<span class="warn">还没勾第一步：在下面的元素表里勾出所有算对的第一步。</span>')
+      : a.intent ? '意图不是指路时，不用勾第一步。' : '先选：在这一页上，正确的做法是什么？';
+    var sug = d.suggestion && !ann[d.doc]
+      ? '<div class="sug"><span>你判了这一趟「到了」，建议用模型当时的回答：<b>' + esc(NAMES[d.suggestion.intent]) + '</b>' +
+        (d.suggestion.acceptable.length ? '，第一步 <code>' + esc(d.suggestion.acceptable[0].ref) + '</code> ' + esc(d.suggestion.acceptable[0].actions.join('/')) : '') +
+        '</span><button type="button" class="plain" data-adopt' + (db ? '' : ' disabled') + '>采纳建议</button></div>'
+      : '';
+    mainEl.innerHTML =
+      '<section class="card"><div class="goal">' + esc(d.goal) + '</div>' +
+      '<div class="meta"><span>' + esc(d.site) + '</span><span>' + esc(d.goalId) + ' · 第 ' + d.pass + ' 遍</span><span>' + POS[d.position] + (d.hop ? ' · 走过 ' + d.hop + ' 跳' : '') + '</span><span class="mono">' + esc(d.id) + '</span></div>' +
+      '<div class="url">' + esc(d.url) + '</div><div class="meta"><span>' + esc(d.title) + '</span>' + (d.omitted ? '<span>元素表截掉了 ' + d.omitted + ' 个</span>' : '') + '</div></section>' +
+      '<div class="cols"><section class="card"><p class="cap">走过的步骤</p>' + done + '<p class="cap" style="margin-top:10px">模型当时的路线</p>' + route + '</section>' +
+      '<section class="card"><p class="cap">模型当时的回答</p>' + answerHtml(d.answer) + '</section></div>' +
+      '<section class="card judge"><p class="cap" style="margin:0">你的判断</p>' + sug +
+      '<div class="seg" role="group" aria-label="正确的意图">' + INTENTS.map(function (x) {
+        return '<button type="button" data-intent="' + x[0] + '" aria-pressed="' + (a.intent === x[0]) + '"' + (db ? '' : ' disabled') + '>' + x[1] + '</button>';
+      }).join('') + '</div><div class="hint">' + intentHint + '</div>' +
+      (ann[d.doc] ? '<div><button type="button" class="plain" data-clear' + (db ? '' : ' disabled') + '>清空这一条</button></div>' : '') + '</section>' +
+      '<section><div class="tools"><input type="search" id="filter" placeholder="按名字、角色、路径或 ref 过滤" value="' + esc(filter) + '" aria-label="过滤元素">' +
+      '<label><input type="checkbox" id="only-checked"' + (onlyChecked ? ' checked' : '') + '> 只看已勾的</label>' +
+      '<span class="muted">' + d.items.length + ' 个元素</span></div>' +
+      '<div class="scroll"><table><thead><tr><th></th><th>ref</th><th>角色</th><th>名字</th><th>路径</th></tr></thead><tbody id="rows">' + tableRows(d) + '</tbody></table></div></section>' +
+      '<div class="nav"><button type="button" class="plain" data-go="-1">← 上一个</button><span class="kbd">键盘：← → 切换</span><span><button type="button" class="plain" data-next-todo>下一个未标</button> <button type="button" class="plain" data-go="1">下一个 →</button></span></div>';
+  }
+
+  function renderAll() { renderList(); renderMain(); tally(); }
+
+  function go(i) {
+    cur = (i + S.length) % S.length;
+    filter = '';
+    try { localStorage.setItem('label:cur', String(cur)); } catch (e) {}
+    renderAll();
+    window.scrollTo(0, 0);
+  }
+
+  function change(d, next) {
+    if (next) ann[d.doc] = next; else delete ann[d.doc];
+    renderAll();
+    clearTimeout(pending[d.doc]);
+    pending[d.doc] = setTimeout(function () { persist(d); }, 400);
+  }
+
+  function persist(d) {
+    var a = ann[d.doc];
+    var ref = db.doc('annotations/' + d.doc);
+    var op = a && a.intent
+      ? ref.set({ state: d.id, intent: a.intent, acceptable: a.intent === 'point' ? a.acceptable : [], at: new Date().toISOString() })
+      : ref.delete();
+    op.then(function () {
+      delete pending[d.doc];
+      say(a && a.intent ? '已存：' + d.id : '已清空：' + d.id);
+    }, function (err) {
+      delete pending[d.doc];
+      say('没存上（' + (err && err.code) + '）：刷新页面后再改一次', true);
+    });
+  }
+
+  function defaultAction(d, it) {
+    var s = d.suggestion && d.suggestion.acceptable.filter(function (x) { return x.ref === it.ref; })[0];
+    if (s) return s.actions.slice();
+    var f = d.answer.steps && d.answer.steps[0];
+    if (f && f.ref === it.ref) return [f.action];
+    return [/textbox|searchbox|combobox/.test(it.role) ? 'input' : 'click'];
+  }
+
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('button');
+    if (!t) return;
+    var d = S[cur];
+    var a = annOf(d);
+    if (t.classList.contains('item')) return go(Number(t.dataset.i));
+    if (t.dataset.go) return go(cur + Number(t.dataset.go));
+    if (t.hasAttribute('data-next-todo')) {
+      for (var k = 1; k <= S.length; k++) if (statusOf(S[(cur + k) % S.length]) !== 'done') return go(cur + k);
+      return say('全部标完了');
+    }
+    if (!db) return;
+    if (t.dataset.intent) return change(d, { intent: t.dataset.intent, acceptable: a.acceptable });
+    if (t.hasAttribute('data-adopt')) return change(d, { intent: d.suggestion.intent, acceptable: d.suggestion.acceptable.map(function (x) { return { ref: x.ref, actions: x.actions.slice() }; }) });
+    if (t.hasAttribute('data-clear')) return change(d, null);
+    if (t.dataset.act) {
+      var next = a.acceptable.map(function (x) {
+        if (x.ref !== t.dataset.ref) return x;
+        var has = x.actions.indexOf(t.dataset.act) >= 0;
+        return { ref: x.ref, actions: has ? x.actions.filter(function (y) { return y !== t.dataset.act; }) : x.actions.concat(t.dataset.act) };
+      }).filter(function (x) { return x.actions.length; });
+      return change(d, { intent: a.intent, acceptable: next });
+    }
+  });
+
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    var d = S[cur];
+    if (t.id === 'only-checked') { onlyChecked = t.checked; return renderTable(); }
+    if (!t.dataset.ref || !db) return;
+    var a = annOf(d);
+    var it = d.items.filter(function (x) { return x.ref === t.dataset.ref; })[0];
+    var next = t.checked
+      ? a.acceptable.concat({ ref: it.ref, actions: defaultAction(d, it) })
+      : a.acceptable.filter(function (x) { return x.ref !== it.ref; });
+    change(d, { intent: a.intent, acceptable: next });
+  });
+
+  document.addEventListener('input', function (e) {
+    if (e.target.id === 'filter') { filter = e.target.value; renderTable(); }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (/INPUT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName)) return;
+    if (e.key === 'ArrowRight') go(cur + 1);
+    if (e.key === 'ArrowLeft') go(cur - 1);
+  });
+
+  renderAll();
+  if (!window.claude || !window.claude.use) { say('这里存不了标注：页面没有连上数据库', true); return; }
+  window.claude.use('db').then(function (handle) {
+    if (!handle) { say('这里存不了标注：这个视图没有给页面数据库', true); return; }
+    db = handle;
+    say('标注会存进这张页的数据库');
+    db.collection('annotations').onSnapshot(function (snap) {
+      var seen = {};
+      snap.docs.forEach(function (doc) {
+        seen[doc.id] = true;
+        if (pending[doc.id]) return;
+        var x = doc.exists && doc.data();
+        if (x && x.intent) ann[doc.id] = { intent: x.intent, acceptable: Array.isArray(x.acceptable) ? x.acceptable : [] };
+      });
+      Object.keys(ann).forEach(function (k) { if (!seen[k] && !pending[k]) delete ann[k]; });
+      renderAll();
+    }, function (err) {
+      say('标注读不到了（' + (err && err.code) + '）：刷新页面再试', true);
+    });
+    renderAll();
+  });
+})();
+</script>

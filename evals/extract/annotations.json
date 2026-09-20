@@ -1,0 +1,324 @@
+{
+ "shadow-nested": [
+  {
+   "id": "deep-scale",
+   "goal": "scale the node pool",
+   "group": "shadow",
+   "descriptor": {
+    "role": "button",
+    "name": "Scale"
+   }
+  }
+ ],
+ "shadow-slot": [
+  {
+   "id": "slotted-go",
+   "goal": "rotate credentials",
+   "group": "shadow",
+   "descriptor": {
+    "role": "button",
+    "name": "Go"
+   }
+  }
+ ],
+ "iframe-same-origin": [
+  {
+   "id": "outer-only",
+   "goal": "outer action",
+   "group": "iframe",
+   "descriptor": {
+    "role": "button",
+    "name": "Outer action"
+   }
+  }
+ ],
+ "modal-dialog": [
+  {
+   "id": "modal-confirm",
+   "goal": "delete forever",
+   "group": "modal",
+   "descriptor": {
+    "role": "button",
+    "name": "Delete forever"
+   }
+  }
+ ],
+ "inert-subtree": [
+  {
+   "id": "active-next",
+   "goal": "go to next step",
+   "group": "inert",
+   "descriptor": {
+    "role": "button",
+    "name": "Next"
+   }
+  }
+ ],
+ "virtual-scroll": [
+  {
+   "id": "vs-row",
+   "goal": "inspect run 42",
+   "group": "virtual",
+   "descriptor": {
+    "role": "button",
+    "name": "Inspect run 42"
+   }
+  }
+ ],
+ "content-visibility": [
+  {
+   "id": "cv-visible",
+   "goal": "copy the sample",
+   "group": "content-visibility",
+   "descriptor": {
+    "role": "button",
+    "name": "Copy sample"
+   }
+  }
+ ],
+ "sticky-header": [
+  {
+   "id": "sticky-target",
+   "goal": "export csv",
+   "group": "occlusion",
+   "descriptor": {
+    "role": "button",
+    "name": "Export CSV"
+   }
+  }
+ ],
+ "canvas-only": [
+  {
+   "id": "canvas-sibling",
+   "goal": "download the data",
+   "group": "canvas",
+   "descriptor": {
+    "role": "button",
+    "name": "Download data"
+   }
+  }
+ ],
+ "div-button": [
+  {
+   "id": "divbtn",
+   "goal": "publish the draft",
+   "group": "div-button",
+   "descriptor": {
+    "role": "generic",
+    "name": "Publish draft"
+   }
+  }
+ ],
+ "aria-labelledby-chain": [
+  {
+   "id": "labelledby",
+   "goal": "revoke the production key",
+   "group": "aria",
+   "descriptor": {
+    "role": "button",
+    "name": "Revoke production key"
+   }
+  }
+ ],
+ "dup-across-sections": [
+  {
+   "id": "dup-webhooks",
+   "goal": "copy the webhook secret",
+   "group": "duplicate",
+   "descriptor": {
+    "role": "button",
+    "name": "Copy",
+    "scope": "Webhooks"
+   }
+  }
+ ],
+ "dup-table-rows": [
+  {
+   "id": "row-stop",
+   "goal": "stop instance i-bbb222",
+   "group": "duplicate",
+   "descriptor": {
+    "role": "button",
+    "name": "Stop",
+    "scope": "i-bbb222"
+   }
+  }
+ ],
+ "dup-unresolvable": [
+  {
+   "id": "nth-second",
+   "goal": "copy the second token",
+   "group": "duplicate",
+   "descriptor": {
+    "role": "button",
+    "name": "Copy",
+    "nth": 2
+   },
+   "adversarial": true,
+   "note": "刻意构造成 (path,role,name) 不可能唯一；正确行为是落到 nth"
+  }
+ ],
+ "rtl": [
+  {
+   "id": "rtl-save",
+   "goal": "save the changes",
+   "group": "i18n",
+   "descriptor": {
+    "role": "button",
+    "name": "حفظ التغييرات"
+   }
+  }
+ ],
+ "dark-mode": [
+  {
+   "id": "dark-apply",
+   "goal": "apply the theme",
+   "group": "theming",
+   "descriptor": {
+    "role": "button",
+    "name": "Apply theme"
+   }
+  }
+ ],
+ "icon-only": [
+  {
+   "id": "icon-trash",
+   "goal": "delete the file",
+   "group": "icon",
+   "descriptor": {
+    "role": "button",
+    "name": "Delete file"
+   }
+  }
+ ],
+ "hidden-variants": [
+  {
+   "id": "visible-one",
+   "goal": "confirm",
+   "group": "visibility",
+   "descriptor": {
+    "role": "button",
+    "name": "Confirm"
+   }
+  }
+ ],
+ "long-names": [
+  {
+   "id": "long-a",
+   "goal": "apply retention immediately",
+   "group": "truncation",
+   "descriptor": {
+    "role": "button",
+    "name": "immediately",
+    "nameMatch": "contains"
+   }
+  }
+ ],
+ "popover-open": [
+  {
+   "id": "popover-item",
+   "goal": "sign out",
+   "group": "popover",
+   "descriptor": {
+    "role": "button",
+    "name": "Sign out"
+   }
+  }
+ ],
+ "zh-console": [
+  {
+   "id": "zh-icon-delete",
+   "goal": "把这台实例删掉",
+   "group": "i18n-zh",
+   "descriptor": {
+    "role": "button",
+    "name": "删除实例"
+   }
+  },
+  {
+   "id": "zh-long-doc",
+   "goal": "我想找一下开发者文档中心在哪里",
+   "group": "i18n-zh",
+   "descriptor": {
+    "role": "link",
+    "name": "开发者文档中心",
+    "nameMatch": "contains"
+   }
+  },
+  {
+   "id": "zh-row-ssh",
+   "goal": "删掉允许 SSH 入站这一条安全组规则",
+   "group": "i18n-zh",
+   "descriptor": {
+    "role": "button",
+    "name": "删除",
+    "scope": "允许 SSH 入站"
+   }
+  }
+ ],
+ "repo-home": [
+  {
+   "id": "repo-clone",
+   "goal": "带我找到 n8n 这个开源项目，我想把它的仓库地址拿到手",
+   "group": "budget",
+   "descriptor": {
+    "role": "button",
+    "name": "Code"
+   }
+  },
+  {
+   "id": "repo-issues",
+   "goal": "我想看看 n8n 这个项目最近有哪些人提了 issue",
+   "group": "budget",
+   "descriptor": {
+    "role": "link",
+    "name": "Issues (380)"
+   }
+  },
+  {
+   "id": "repo-license",
+   "goal": "帮我找到 n8n 这个项目用的是什么开源许可证",
+   "group": "budget",
+   "descriptor": {
+    "role": "link",
+    "name": "License"
+   }
+  },
+  {
+   "id": "repo-releases",
+   "goal": "带我去看 n8n 这个项目历次发布的版本",
+   "group": "budget",
+   "descriptor": {
+    "role": "link",
+    "name": "Releases"
+   }
+  },
+  {
+   "id": "repo-contributing",
+   "goal": "我想读 n8n 这个项目的贡献指南",
+   "group": "budget",
+   "descriptor": {
+    "role": "link",
+    "name": "Contributing"
+   }
+  },
+  {
+   "id": "repo-docs",
+   "goal": "带我去看 n8n 的官方文档站",
+   "group": "budget",
+   "descriptor": {
+    "role": "link",
+    "name": "Documentation"
+   }
+  },
+  {
+   "id": "repo-actions",
+   "goal": "我想知道 n8n 这个仓库的 CI 是怎么配置的",
+   "group": "budget",
+   "descriptor": {
+    "role": "link",
+    "name": "Actions"
+   }
+  }
+ ]
+}

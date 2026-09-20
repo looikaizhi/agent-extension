@@ -1,0 +1,368 @@
+{
+  "run": "t13-guide-stability-smoke",
+  "startedAt": "2026-09-19T07:02:53.302Z",
+  "goals": [
+    "gh-repo-address",
+    "gh-issues",
+    "gh-license",
+    "gh-releases",
+    "gh-contributing",
+    "gh-docs-site",
+    "gh-ci",
+    "gh-pulls",
+    "gh-branches",
+    "gh-commits"
+  ],
+  "passes": 1,
+  "plugins": [
+    "skill"
+  ],
+  "model": {
+    "baseURL": "https://api.deepseek.com/v1",
+    "model": "deepseek-flash",
+    "price": {
+      "input": 1,
+      "cached": 0.02,
+      "output": 4
+    }
+  },
+  "accounts": [
+    {
+      "host": "github.com",
+      "cookies": []
+    }
+  ],
+  "fingerprint": "b62a1f0a5f6b368e",
+  "trips": [
+    {
+      "pass": 1,
+      "id": "gh-repo-address",
+      "goal": "带我找到 n8n 这个开源项目，我想把它的仓库地址拿到手",
+      "endUrl": "https://github.com/n8n-io/n8n",
+      "lastStep": {
+        "kind": "done",
+        "after": "n8n-io/n8n"
+      },
+      "programmatic": {
+        "arrived": false,
+        "missed": "last_step"
+      },
+      "hops": 3,
+      "visited": [
+        "https://github.com/",
+        "https://github.com/search?q=n8n-io%2Fn8n&type=repositories",
+        "https://github.com/n8n-io/n8n"
+      ],
+      "calls": 7,
+      "requests": 7,
+      "tokens": {
+        "prompt": 40789,
+        "completion": 1750,
+        "cached": 23936
+      },
+      "ending": "model_done",
+      "confirmation": "all",
+      "sensitivePointed": 0,
+      "shot": "10-P1ghrepoaddress-3-第3跳重规划后.png"
+    },
+    {
+      "pass": 1,
+      "id": "gh-issues",
+      "goal": "我想看看 n8n 这个项目最近有哪些人提了 issue",
+      "endUrl": "https://github.com/n8n-io/n8n/issues",
+      "lastStep": {
+        "kind": "done",
+        "after": "Sort by Newest , descending"
+      },
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "hops": 5,
+      "visited": [
+        "https://github.com/",
+        "https://github.com/search?q=n8n-io%2Fn8n&type=repositories",
+        "https://github.com/n8n-io/n8n",
+        "https://github.com/n8n-io/n8n/issues",
+        "https://github.com/n8n-io/n8n/issues"
+      ],
+      "calls": 11,
+      "requests": 11,
+      "tokens": {
+        "prompt": 79128,
+        "completion": 3143,
+        "cached": 44032
+      },
+      "ending": "model_done",
+      "confirmation": "all",
+      "sensitivePointed": 0,
+      "shot": "26-P1ghissues-5-第5跳重规划后.png"
+    },
+    {
+      "pass": 1,
+      "id": "gh-license",
+      "goal": "帮我找到 n8n 这个项目用的是什么开源许可证",
+      "endUrl": "https://github.com/n8n-io/n8n/blob/master/LICENSE.md",
+      "lastStep": {
+        "kind": "done",
+        "after": "LICENSE.md, (File)"
+      },
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "hops": 4,
+      "visited": [
+        "https://github.com/",
+        "https://github.com/search?q=n8n-io%2Fn8n&type=repositories",
+        "https://github.com/n8n-io/n8n",
+        "https://github.com/n8n-io/n8n/blob/master/LICENSE.md"
+      ],
+      "calls": 9,
+      "requests": 9,
+      "tokens": {
+        "prompt": 58709,
+        "completion": 2006,
+        "cached": 38912
+      },
+      "ending": "model_done",
+      "confirmation": "all",
+      "sensitivePointed": 0,
+      "shot": "39-P1ghlicense-4-第4跳重规划后.png"
+    },
+    {
+      "pass": 1,
+      "id": "gh-releases",
+      "goal": "带我去看 n8n 这个项目历次发布的版本",
+      "endUrl": "https://github.com/n8n-io/n8n/tags",
+      "lastStep": {
+        "kind": "done",
+        "after": "Tags"
+      },
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "hops": 4,
+      "visited": [
+        "https://github.com/",
+        "https://github.com/search?q=n8n-io%2Fn8n&type=repositories",
+        "https://github.com/n8n-io/n8n",
+        "https://github.com/n8n-io/n8n/tags"
+      ],
+      "calls": 9,
+      "requests": 9,
+      "tokens": {
+        "prompt": 58789,
+        "completion": 2404,
+        "cached": 38912
+      },
+      "ending": "model_done",
+      "confirmation": "all",
+      "sensitivePointed": 0,
+      "shot": "52-P1ghreleases-4-第4跳重规划后.png"
+    },
+    {
+      "pass": 1,
+      "id": "gh-contributing",
+      "goal": "我想读 n8n 这个项目的贡献指南",
+      "endUrl": "https://github.com/n8n-io/n8n/blob/master/CONTRIBUTING.md",
+      "lastStep": {
+        "kind": "done",
+        "after": "CONTRIBUTING.md, (File)"
+      },
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "hops": 4,
+      "visited": [
+        "https://github.com/",
+        "https://github.com/search?q=n8n-io%2Fn8n&type=repositories",
+        "https://github.com/n8n-io/n8n",
+        "https://github.com/n8n-io/n8n/blob/master/CONTRIBUTING.md"
+      ],
+      "calls": 9,
+      "requests": 9,
+      "tokens": {
+        "prompt": 60780,
+        "completion": 2429,
+        "cached": 39296
+      },
+      "ending": "model_done",
+      "confirmation": "all",
+      "sensitivePointed": 0,
+      "shot": "65-P1ghcontributing-4-第4跳重规划后.png"
+    },
+    {
+      "pass": 1,
+      "id": "gh-docs-site",
+      "goal": "带我去看 n8n 的官方文档站",
+      "endUrl": "https://docs.n8n.io/",
+      "lastStep": {
+        "kind": "done",
+        "after": "docs.n8n.io"
+      },
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "hops": 4,
+      "visited": [
+        "https://github.com/",
+        "https://github.com/search?q=n8n-io%2Fn8n-docs&type=repositories",
+        "https://github.com/n8n-io/n8n-docs",
+        "https://docs.n8n.io/"
+      ],
+      "calls": 8,
+      "requests": 8,
+      "tokens": {
+        "prompt": 47927,
+        "completion": 2166,
+        "cached": 30080
+      },
+      "ending": "model_done",
+      "confirmation": "all",
+      "sensitivePointed": 0,
+      "shot": "78-P1ghdocssite-4-第4跳重规划后.png",
+      "crossSite": [
+        {
+          "hop": 4,
+          "from": "github.com",
+          "to": "docs.n8n.io",
+          "answered": true
+        }
+      ]
+    },
+    {
+      "pass": 1,
+      "id": "gh-ci",
+      "goal": "我想知道 n8n 这个仓库的 CI 是怎么配置的",
+      "endUrl": "https://github.com/n8n-io/n8n/blob/master/.github/workflows/ci-master.yml",
+      "lastStep": {
+        "kind": "done",
+        "after": "ci-master.yml, (File)"
+      },
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "hops": 6,
+      "visited": [
+        "https://github.com/",
+        "https://github.com/search?q=n8n-io%2Fn8n&type=repositories",
+        "https://github.com/n8n-io/n8n",
+        "https://github.com/n8n-io/n8n/tree/master/.github",
+        "https://github.com/n8n-io/n8n/tree/master/.github/workflows",
+        "https://github.com/n8n-io/n8n/blob/master/.github/workflows/ci-master.yml"
+      ],
+      "calls": 15,
+      "requests": 15,
+      "tokens": {
+        "prompt": 124388,
+        "completion": 3910,
+        "cached": 62848
+      },
+      "ending": "model_done",
+      "confirmation": "some",
+      "sensitivePointed": 0,
+      "shot": "97-P1ghci-6-第6跳重规划后.png"
+    },
+    {
+      "pass": 1,
+      "id": "gh-pulls",
+      "goal": "我想看看 n8n 这个项目现在有哪些等着合并的 pull request",
+      "endUrl": "https://github.com/n8n-io/n8n/pulls",
+      "lastStep": {
+        "kind": "done",
+        "after": "Pull requests (769)"
+      },
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "hops": 4,
+      "visited": [
+        "https://github.com/",
+        "https://github.com/search?q=n8n-io%2Fn8n&type=repositories",
+        "https://github.com/n8n-io/n8n",
+        "https://github.com/n8n-io/n8n/pulls"
+      ],
+      "calls": 9,
+      "requests": 9,
+      "tokens": {
+        "prompt": 60918,
+        "completion": 2359,
+        "cached": 38912
+      },
+      "ending": "model_done",
+      "confirmation": "all",
+      "sensitivePointed": 0,
+      "shot": "110-P1ghpulls-4-第4跳重规划后.png"
+    },
+    {
+      "pass": 1,
+      "id": "gh-branches",
+      "goal": "n8n 这个仓库都有哪些分支？",
+      "endUrl": "https://github.com/n8n-io/n8n/branches",
+      "lastStep": {
+        "kind": "done",
+        "after": "Branches"
+      },
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "hops": 4,
+      "visited": [
+        "https://github.com/",
+        "https://github.com/search?q=n8n-io%2Fn8n&type=repositories",
+        "https://github.com/n8n-io/n8n",
+        "https://github.com/n8n-io/n8n/branches"
+      ],
+      "calls": 9,
+      "requests": 9,
+      "tokens": {
+        "prompt": 58439,
+        "completion": 2380,
+        "cached": 39040
+      },
+      "ending": "model_done",
+      "confirmation": "all",
+      "sensitivePointed": 0,
+      "shot": "123-P1ghbranches-4-第4跳重规划后.png"
+    },
+    {
+      "pass": 1,
+      "id": "gh-commits",
+      "goal": "带我看看 n8n 最近都提交了哪些代码",
+      "endUrl": "https://github.com/n8n-io/n8n/commits/master/",
+      "lastStep": {
+        "kind": "done",
+        "after": "24,542 Commits"
+      },
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "hops": 4,
+      "visited": [
+        "https://github.com/",
+        "https://github.com/search?q=n8n-io%2Fn8n&type=repositories",
+        "https://github.com/n8n-io/n8n",
+        "https://github.com/n8n-io/n8n/commits/master/"
+      ],
+      "calls": 9,
+      "requests": 9,
+      "tokens": {
+        "prompt": 64236,
+        "completion": 2440,
+        "cached": 38912
+      },
+      "ending": "model_done",
+      "confirmation": "all",
+      "sensitivePointed": 0,
+      "shot": "136-P1ghcommits-4-第4跳重规划后.png"
+    }
+  ]
+}

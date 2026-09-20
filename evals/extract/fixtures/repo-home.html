@@ -1,0 +1,448 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>n8n-io/n8n: Fair-code workflow automation platform with native AI capabilities</title>
+<style>
+ body{font:14px system-ui;margin:0}
+ header,nav,main,aside{padding:10px 16px}
+ header{background:#161b22;color:#fff}
+ header a{color:#fff}
+ nav[aria-label="Repository"]{border-bottom:1px solid #d0d7de}
+ nav a,header a{margin-right:14px;display:inline-block}
+ .cols{display:flex;gap:24px;align-items:flex-start}
+ main{flex:1;min-width:0}
+ table{border-collapse:collapse;width:100%;margin:12px 0}
+ td{border-top:1px solid #d0d7de;padding:6px 8px;font-size:13px}
+ td:first-child{width:220px}
+ .hist{display:inline-block;width:16px;height:16px;background:#eee;margin-left:6px;vertical-align:middle}
+ .community a,#readme a,aside a{margin-right:12px;display:inline-block;line-height:2}
+ aside{width:296px;flex:none;padding-top:10px}
+ h2{font-size:15px;margin:14px 0 6px}
+</style></head>
+
+<!-- 这张语料存在的理由，以及三条实测事实。改它之前先读完。
+
+     一、为什么抓取前要滚动（data-eval-scroll）
+     真机上用户就是停在文件列表这里问的，此时仓库导航条在视口之外。
+     不滚动的话导航在视口内、拿满视口加分，照样活下来，这张语料就量不到东西。
+     同一张页面两个滚动位置都跑过，缺的是互补的两组：
+       滚到文件列表（本文件）  recall 42.9%，缺 Code 按钮 / Issues / Actions / Releases
+                              这四个的真值 y 都是负的（−852…−654），即视口上方
+       完全不滚动              recall 57.1%，缺 License / Contributing / Documentation
+                              这三个在视口下方
+     所以问题不是「导航特别容易丢」，是预算被用户恰好在看的那一屏吃光。
+     要复现这个对照：把上面那个 data-eval-scroll 改成 0，重跑 npm run eval。
+
+     二、每组文件行是四条 Ref，最后一条是复述
+     第四条自己没有可读文字（可见内容被 aria-hidden 挡掉，和真实的行链接一样），
+     名字整个来自 title，因而完整包含第二条的名字：同一行、同一 path、同一 role，
+     说的是同一个提交。它就是 ADR 0012 要删的那条 Restatement。
+     目录链接与 PR 号链接各自指向不同的地方，必须留下。
+
+     但它**拿不到 ~ 兜底名标记**：computeAccessibleName 自己就把 title 当兜底
+     返回了，于是 classifySource 把它归成 content。实测整份语料一条 nameSource
+     都没有，~ 标记的覆盖率是零。所以去重判据不能指望这个标记，只能靠
+     「名字完整包含同一行另一条的名字」这类可观测事实。这是产品侧的一个独立
+     问题，不属于这张语料，也没有在这里顺手改掉。
+
+     三、repo-clone 这条标注的口径
+     它的 goal「把仓库地址拿到手」按 CONTEXT.md 是一个 Acting goal——看见地址
+     不算完成，得有一步真的生效。本页没有复制控件，真值标在唤出克隆地址的
+     Code 按钮上。这里量的是「表能不能命名这个目标」，不是「有没有到达」，
+     所以标在入口上是对的；但别拿它当到达判定的样本。 -->
+<body data-eval-scroll="1500">
+
+<header>
+  <a href="/">Homepage</a>
+  <button type="button">Open quick search dialog, type / to search</button>
+  <a href="/issues">All issues</a>
+  <a href="/pulls">All pull requests</a>
+  <a href="/notifications">You have no unread notifications</a>
+  <button type="button">Create new...</button>
+  <button type="button">Open user navigation menu</button>
+  <a href="/copilot">Chat with Copilot</a>
+</header>
+
+<nav aria-label="Repository">
+  <a href="/n8n-io/n8n">Code</a>
+  <a href="/n8n-io/n8n/issues" data-eval="repo-issues">Issues (380)</a>
+  <a href="/n8n-io/n8n/pulls">Pull requests (784)</a>
+  <a href="/n8n-io/n8n/actions" data-eval="repo-actions">Actions</a>
+  <a href="/n8n-io/n8n/projects">Projects</a>
+  <a href="/n8n-io/n8n/wiki">Wiki</a>
+  <a href="/n8n-io/n8n/security">Security and quality (180)</a>
+  <a href="/n8n-io/n8n/pulse">Insights</a>
+</nav>
+
+<div class="cols">
+<main>
+  <h1>n8n-io/n8n</h1>
+  <div>
+    <button type="button">Watch 1162</button>
+    <button type="button">Fork 60.6k</button>
+    <button type="button">Star 203k</button>
+    <a href="/n8n-io/n8n/forks">See your forks of this repo</a>
+  </div>
+
+  <h2>Files</h2>
+  <div>
+    <button type="button">master branch</button>
+    <a href="/n8n-io/n8n/branches">1584 Branches</a>
+    <a href="/n8n-io/n8n/tags">792 Tags</a>
+    <button type="button">Go to file</button>
+    <button type="button" data-eval="repo-clone">Code</button>
+  </div>
+
+  <table>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/.devcontainer">.devcontainer, (Directory)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c0">ci: Improve pnpm install performance (no-changelog) (</a><a href="/n8n-io/n8n/pull/30000">#30000</a><a class="hist" href="/n8n-io/n8n/commits/master/.devcontainer" title="ci: Improve pnpm install performance (no-changelog) (#30000)"><span aria-hidden="true">·</span></a></td>
+    <td>1 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/.github">.github, (Directory)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c1">feat(core): Add project-level worker pools (no-changelog) (</a><a href="/n8n-io/n8n/pull/30137">#30137</a><a class="hist" href="/n8n-io/n8n/commits/master/.github" title="feat(core): Add project-level worker pools (no-changelog) (#30137)"><span aria-hidden="true">·</span></a></td>
+    <td>2 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/.vscode">.vscode, (Directory)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c2">refactor(editor): Make the otel module descriptor import-light (</a><a href="/n8n-io/n8n/pull/30274">#30274</a><a class="hist" href="/n8n-io/n8n/commits/master/.vscode" title="refactor(editor): Make the otel module descriptor import-light (#30274)"><span aria-hidden="true">·</span></a></td>
+    <td>3 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/assets">assets, (Directory)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c3">fix(core): Deprecate the legacy Cipher encrypt path (</a><a href="/n8n-io/n8n/pull/30411">#30411</a><a class="hist" href="/n8n-io/n8n/commits/master/assets" title="fix(core): Deprecate the legacy Cipher encrypt path (#30411)"><span aria-hidden="true">·</span></a></td>
+    <td>4 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/cypress">cypress, (Directory)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c4">chore: Add Aikido scan configuration (no-changelog) (</a><a href="/n8n-io/n8n/pull/30548">#30548</a><a class="hist" href="/n8n-io/n8n/commits/master/cypress" title="chore: Add Aikido scan configuration (no-changelog) (#30548)"><span aria-hidden="true">·</span></a></td>
+    <td>5 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/docker">docker, (Directory)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c5">feat(core): Add encryption usage guardrails (no-changelog) (</a><a href="/n8n-io/n8n/pull/30685">#30685</a><a class="hist" href="/n8n-io/n8n/commits/master/docker" title="feat(core): Add encryption usage guardrails (no-changelog) (#30685)"><span aria-hidden="true">·</span></a></td>
+    <td>6 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/docs">docs, (Directory)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c6">ci: Scan release images with syft instead of cdxgen (no-changelog) (</a><a href="/n8n-io/n8n/pull/30822">#30822</a><a class="hist" href="/n8n-io/n8n/commits/master/docs" title="ci: Scan release images with syft instead of cdxgen (no-changelog) (#30822)"><span aria-hidden="true">·</span></a></td>
+    <td>7 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/packages">packages, (Directory)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c7">chore: Update node popularity data (no-changelog) (</a><a href="/n8n-io/n8n/pull/30959">#30959</a><a class="hist" href="/n8n-io/n8n/commits/master/packages" title="chore: Update node popularity data (no-changelog) (#30959)"><span aria-hidden="true">·</span></a></td>
+    <td>8 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/patches">patches, (Directory)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c8">ci: Add blacksmith build step and cache restore (</a><a href="/n8n-io/n8n/pull/31096">#31096</a><a class="hist" href="/n8n-io/n8n/commits/master/patches" title="ci: Add blacksmith build step and cache restore (#31096)"><span aria-hidden="true">·</span></a></td>
+    <td>9 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/scripts">scripts, (Directory)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c9">test(editor): Cover the workflow canvas undo stack (</a><a href="/n8n-io/n8n/pull/31233">#31233</a><a class="hist" href="/n8n-io/n8n/commits/master/scripts" title="test(editor): Cover the workflow canvas undo stack (#31233)"><span aria-hidden="true">·</span></a></td>
+    <td>10 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/security">security, (Directory)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c10">ci: Improve pnpm install performance (no-changelog) (</a><a href="/n8n-io/n8n/pull/31370">#31370</a><a class="hist" href="/n8n-io/n8n/commits/master/security" title="ci: Improve pnpm install performance (no-changelog) (#31370)"><span aria-hidden="true">·</span></a></td>
+    <td>11 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/.actrc">.actrc, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c11">feat(core): Add project-level worker pools (no-changelog) (</a><a href="/n8n-io/n8n/pull/31507">#31507</a><a class="hist" href="/n8n-io/n8n/commits/master/.actrc" title="feat(core): Add project-level worker pools (no-changelog) (#31507)"><span aria-hidden="true">·</span></a></td>
+    <td>12 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/.aikido">.aikido, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c12">refactor(editor): Make the otel module descriptor import-light (</a><a href="/n8n-io/n8n/pull/31644">#31644</a><a class="hist" href="/n8n-io/n8n/commits/master/.aikido" title="refactor(editor): Make the otel module descriptor import-light (#31644)"><span aria-hidden="true">·</span></a></td>
+    <td>1 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/.boundaries-baseline.json">.boundaries-baseline.json, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c13">fix(core): Deprecate the legacy Cipher encrypt path (</a><a href="/n8n-io/n8n/pull/31781">#31781</a><a class="hist" href="/n8n-io/n8n/commits/master/.boundaries-baseline.json" title="fix(core): Deprecate the legacy Cipher encrypt path (#31781)"><span aria-hidden="true">·</span></a></td>
+    <td>2 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/.dockerignore">.dockerignore, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c14">chore: Add Aikido scan configuration (no-changelog) (</a><a href="/n8n-io/n8n/pull/31918">#31918</a><a class="hist" href="/n8n-io/n8n/commits/master/.dockerignore" title="chore: Add Aikido scan configuration (no-changelog) (#31918)"><span aria-hidden="true">·</span></a></td>
+    <td>3 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/.editorconfig">.editorconfig, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c15">feat(core): Add encryption usage guardrails (no-changelog) (</a><a href="/n8n-io/n8n/pull/32055">#32055</a><a class="hist" href="/n8n-io/n8n/commits/master/.editorconfig" title="feat(core): Add encryption usage guardrails (no-changelog) (#32055)"><span aria-hidden="true">·</span></a></td>
+    <td>4 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/.eslintignore">.eslintignore, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c16">ci: Scan release images with syft instead of cdxgen (no-changelog) (</a><a href="/n8n-io/n8n/pull/32192">#32192</a><a class="hist" href="/n8n-io/n8n/commits/master/.eslintignore" title="ci: Scan release images with syft instead of cdxgen (no-changelog) (#32192)"><span aria-hidden="true">·</span></a></td>
+    <td>5 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/.gitattributes">.gitattributes, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c17">chore: Update node popularity data (no-changelog) (</a><a href="/n8n-io/n8n/pull/32329">#32329</a><a class="hist" href="/n8n-io/n8n/commits/master/.gitattributes" title="chore: Update node popularity data (no-changelog) (#32329)"><span aria-hidden="true">·</span></a></td>
+    <td>6 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/.gitignore">.gitignore, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c18">ci: Add blacksmith build step and cache restore (</a><a href="/n8n-io/n8n/pull/32466">#32466</a><a class="hist" href="/n8n-io/n8n/commits/master/.gitignore" title="ci: Add blacksmith build step and cache restore (#32466)"><span aria-hidden="true">·</span></a></td>
+    <td>7 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/.npmrc">.npmrc, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c19">test(editor): Cover the workflow canvas undo stack (</a><a href="/n8n-io/n8n/pull/32603">#32603</a><a class="hist" href="/n8n-io/n8n/commits/master/.npmrc" title="test(editor): Cover the workflow canvas undo stack (#32603)"><span aria-hidden="true">·</span></a></td>
+    <td>8 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/.nvmrc">.nvmrc, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c20">ci: Improve pnpm install performance (no-changelog) (</a><a href="/n8n-io/n8n/pull/32740">#32740</a><a class="hist" href="/n8n-io/n8n/commits/master/.nvmrc" title="ci: Improve pnpm install performance (no-changelog) (#32740)"><span aria-hidden="true">·</span></a></td>
+    <td>9 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/.prettierignore">.prettierignore, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c21">feat(core): Add project-level worker pools (no-changelog) (</a><a href="/n8n-io/n8n/pull/32877">#32877</a><a class="hist" href="/n8n-io/n8n/commits/master/.prettierignore" title="feat(core): Add project-level worker pools (no-changelog) (#32877)"><span aria-hidden="true">·</span></a></td>
+    <td>10 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/CHANGELOG.md">CHANGELOG.md, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c22">refactor(editor): Make the otel module descriptor import-light (</a><a href="/n8n-io/n8n/pull/33014">#33014</a><a class="hist" href="/n8n-io/n8n/commits/master/CHANGELOG.md" title="refactor(editor): Make the otel module descriptor import-light (#33014)"><span aria-hidden="true">·</span></a></td>
+    <td>11 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/CODE_OF_CONDUCT.md">CODE_OF_CONDUCT.md, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c23">fix(core): Deprecate the legacy Cipher encrypt path (</a><a href="/n8n-io/n8n/pull/33151">#33151</a><a class="hist" href="/n8n-io/n8n/commits/master/CODE_OF_CONDUCT.md" title="fix(core): Deprecate the legacy Cipher encrypt path (#33151)"><span aria-hidden="true">·</span></a></td>
+    <td>12 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/CONTRIBUTING.md">CONTRIBUTING.md, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c24">chore: Add Aikido scan configuration (no-changelog) (</a><a href="/n8n-io/n8n/pull/33288">#33288</a><a class="hist" href="/n8n-io/n8n/commits/master/CONTRIBUTING.md" title="chore: Add Aikido scan configuration (no-changelog) (#33288)"><span aria-hidden="true">·</span></a></td>
+    <td>1 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/LICENSE.md">LICENSE.md, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c25">feat(core): Add encryption usage guardrails (no-changelog) (</a><a href="/n8n-io/n8n/pull/33425">#33425</a><a class="hist" href="/n8n-io/n8n/commits/master/LICENSE.md" title="feat(core): Add encryption usage guardrails (no-changelog) (#33425)"><span aria-hidden="true">·</span></a></td>
+    <td>2 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/LICENSE_EE.md">LICENSE_EE.md, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c26">ci: Scan release images with syft instead of cdxgen (no-changelog) (</a><a href="/n8n-io/n8n/pull/33562">#33562</a><a class="hist" href="/n8n-io/n8n/commits/master/LICENSE_EE.md" title="ci: Scan release images with syft instead of cdxgen (no-changelog) (#33562)"><span aria-hidden="true">·</span></a></td>
+    <td>3 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/README.md">README.md, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c27">chore: Update node popularity data (no-changelog) (</a><a href="/n8n-io/n8n/pull/33699">#33699</a><a class="hist" href="/n8n-io/n8n/commits/master/README.md" title="chore: Update node popularity data (no-changelog) (#33699)"><span aria-hidden="true">·</span></a></td>
+    <td>4 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/SECURITY.md">SECURITY.md, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c28">ci: Add blacksmith build step and cache restore (</a><a href="/n8n-io/n8n/pull/33836">#33836</a><a class="hist" href="/n8n-io/n8n/commits/master/SECURITY.md" title="ci: Add blacksmith build step and cache restore (#33836)"><span aria-hidden="true">·</span></a></td>
+    <td>5 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/biome.jsonc">biome.jsonc, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c29">test(editor): Cover the workflow canvas undo stack (</a><a href="/n8n-io/n8n/pull/33973">#33973</a><a class="hist" href="/n8n-io/n8n/commits/master/biome.jsonc" title="test(editor): Cover the workflow canvas undo stack (#33973)"><span aria-hidden="true">·</span></a></td>
+    <td>6 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/codecov.yml">codecov.yml, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c30">ci: Improve pnpm install performance (no-changelog) (</a><a href="/n8n-io/n8n/pull/34110">#34110</a><a class="hist" href="/n8n-io/n8n/commits/master/codecov.yml" title="ci: Improve pnpm install performance (no-changelog) (#34110)"><span aria-hidden="true">·</span></a></td>
+    <td>7 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/cypress.config.js">cypress.config.js, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c31">feat(core): Add project-level worker pools (no-changelog) (</a><a href="/n8n-io/n8n/pull/34247">#34247</a><a class="hist" href="/n8n-io/n8n/commits/master/cypress.config.js" title="feat(core): Add project-level worker pools (no-changelog) (#34247)"><span aria-hidden="true">·</span></a></td>
+    <td>8 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/jest.config.js">jest.config.js, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c32">refactor(editor): Make the otel module descriptor import-light (</a><a href="/n8n-io/n8n/pull/34384">#34384</a><a class="hist" href="/n8n-io/n8n/commits/master/jest.config.js" title="refactor(editor): Make the otel module descriptor import-light (#34384)"><span aria-hidden="true">·</span></a></td>
+    <td>9 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/package.json">package.json, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c33">fix(core): Deprecate the legacy Cipher encrypt path (</a><a href="/n8n-io/n8n/pull/34521">#34521</a><a class="hist" href="/n8n-io/n8n/commits/master/package.json" title="fix(core): Deprecate the legacy Cipher encrypt path (#34521)"><span aria-hidden="true">·</span></a></td>
+    <td>10 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/pnpm-lock.yaml">pnpm-lock.yaml, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c34">chore: Add Aikido scan configuration (no-changelog) (</a><a href="/n8n-io/n8n/pull/34658">#34658</a><a class="hist" href="/n8n-io/n8n/commits/master/pnpm-lock.yaml" title="chore: Add Aikido scan configuration (no-changelog) (#34658)"><span aria-hidden="true">·</span></a></td>
+    <td>11 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/pnpm-workspace.yaml">pnpm-workspace.yaml, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c35">feat(core): Add encryption usage guardrails (no-changelog) (</a><a href="/n8n-io/n8n/pull/34795">#34795</a><a class="hist" href="/n8n-io/n8n/commits/master/pnpm-workspace.yaml" title="feat(core): Add encryption usage guardrails (no-changelog) (#34795)"><span aria-hidden="true">·</span></a></td>
+    <td>12 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/tsconfig.json">tsconfig.json, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c36">ci: Scan release images with syft instead of cdxgen (no-changelog) (</a><a href="/n8n-io/n8n/pull/34932">#34932</a><a class="hist" href="/n8n-io/n8n/commits/master/tsconfig.json" title="ci: Scan release images with syft instead of cdxgen (no-changelog) (#34932)"><span aria-hidden="true">·</span></a></td>
+    <td>1 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/turbo.json">turbo.json, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c37">chore: Update node popularity data (no-changelog) (</a><a href="/n8n-io/n8n/pull/35069">#35069</a><a class="hist" href="/n8n-io/n8n/commits/master/turbo.json" title="chore: Update node popularity data (no-changelog) (#35069)"><span aria-hidden="true">·</span></a></td>
+    <td>2 months ago</td>
+  </tr>
+  <tr>
+    <td><a href="/n8n-io/n8n/tree/master/vitest.config.ts">vitest.config.ts, (File)</a></td>
+    <td><a href="/n8n-io/n8n/commit/c38">ci: Add blacksmith build step and cache restore (</a><a href="/n8n-io/n8n/pull/35206">#35206</a><a class="hist" href="/n8n-io/n8n/commits/master/vitest.config.ts" title="ci: Add blacksmith build step and cache restore (#35206)"><span aria-hidden="true">·</span></a></td>
+    <td>3 months ago</td>
+  </tr>
+  </table>
+
+  <h2>Community</h2>
+  <div class="community">
+    <a href="/n8n-io/n8n/blob/master/CODE_OF_CONDUCT.md">Code of conduct</a>
+    <a href="/n8n-io/n8n/blob/master/CONTRIBUTING.md" data-eval="repo-contributing">Contributing</a>
+    <a href="/n8n-io/n8n/blob/master/LICENSE.md" data-eval="repo-license">License</a>
+    <a href="/n8n-io/n8n/security/policy">Security</a>
+  </div>
+
+  <h2>README.md</h2>
+  <section id="readme">
+    <p>Fair-code platform to build and deploy AI agents and workflows.</p>
+    <a href="https://docs.n8n.io" data-eval="repo-docs">Documentation</a>
+    <a href="#r0">Quickstart</a>
+    <a href="#r1">Self-hosting guide</a>
+    <a href="#r2">Cloud plans</a>
+    <a href="#r3">Node reference</a>
+    <a href="#r4">Workflow templates</a>
+    <a href="#r5">Community forum</a>
+    <a href="#r6">Discord server</a>
+    <a href="#r7">Enterprise licence</a>
+    <a href="#r8">Embed n8n</a>
+    <a href="#r9">Changelog</a>
+    <a href="#r10">Roadmap</a>
+    <a href="#r11">Security policy</a>
+    <a href="#r12">Report a bug</a>
+    <a href="#r13">Request a feature</a>
+    <a href="#r14">Contributor guide</a>
+    <a href="#r15">Code style</a>
+    <a href="#r16">Release process</a>
+    <a href="#r17">Telemetry notes</a>
+    <a href="#r18">Trademark policy</a>
+  </section>
+</main>
+
+<aside aria-label="About">
+  <h2>About</h2>
+  <a href="https://n8n.io">n8n.io</a>
+  <a href="/topics/workflow">workflow</a>
+  <a href="/topics/automation">automation</a>
+  <a href="/n8n-io/n8n#readme">Readme</a>
+  <a href="/n8n-io/n8n#license">MIT license</a>
+  <a href="/n8n-io/n8n/activity">Activity</a>
+  <a href="/n8n-io/n8n/stargazers">203k stars</a>
+  <a href="/n8n-io/n8n/watchers">1162 watching</a>
+  <a href="/n8n-io/n8n/forks">60.6k forks</a>
+
+  <h2>Releases</h2>
+  <a href="/n8n-io/n8n/releases" data-eval="repo-releases">Releases</a>
+  <a href="/n8n-io/n8n/releases/tag/n8n%402.37.10">n8n@2.37.10 Latest</a>
+  <a href="/n8n-io/n8n/packages">Packages</a>
+
+  <h2>Contributors (831)</h2>
+    <a href="/user01">@contributor01</a>
+    <a href="/user02">@contributor02</a>
+    <a href="/user03">@contributor03</a>
+    <a href="/user04">@contributor04</a>
+    <a href="/user05">@contributor05</a>
+    <a href="/user06">@contributor06</a>
+    <a href="/user07">@contributor07</a>
+    <a href="/user08">@contributor08</a>
+    <a href="/user09">@contributor09</a>
+    <a href="/user10">@contributor10</a>
+    <a href="/user11">@contributor11</a>
+    <a href="/user12">@contributor12</a>
+    <a href="/user13">@contributor13</a>
+    <a href="/user14">@contributor14</a>
+    <a href="/user15">@contributor15</a>
+    <a href="/user16">@contributor16</a>
+    <a href="/user17">@contributor17</a>
+    <a href="/user18">@contributor18</a>
+    <a href="/user19">@contributor19</a>
+    <a href="/user20">@contributor20</a>
+    <a href="/user21">@contributor21</a>
+    <a href="/user22">@contributor22</a>
+    <a href="/user23">@contributor23</a>
+    <a href="/user24">@contributor24</a>
+    <a href="/user25">@contributor25</a>
+    <a href="/user26">@contributor26</a>
+    <a href="/user27">@contributor27</a>
+    <a href="/user28">@contributor28</a>
+    <a href="/user29">@contributor29</a>
+    <a href="/user30">@contributor30</a>
+    <a href="/user31">@contributor31</a>
+    <a href="/user32">@contributor32</a>
+    <a href="/user33">@contributor33</a>
+    <a href="/user34">@contributor34</a>
+    <a href="/user35">@contributor35</a>
+    <a href="/user36">@contributor36</a>
+    <a href="/user37">@contributor37</a>
+    <a href="/user38">@contributor38</a>
+    <a href="/user39">@contributor39</a>
+    <a href="/user40">@contributor40</a>
+    <a href="/user41">@contributor41</a>
+    <a href="/user42">@contributor42</a>
+    <a href="/user43">@contributor43</a>
+    <a href="/user44">@contributor44</a>
+    <a href="/user45">@contributor45</a>
+    <a href="/user46">@contributor46</a>
+    <a href="/user47">@contributor47</a>
+    <a href="/user48">@contributor48</a>
+    <a href="/user49">@contributor49</a>
+    <a href="/user50">@contributor50</a>
+    <a href="/user51">@contributor51</a>
+    <a href="/user52">@contributor52</a>
+    <a href="/user53">@contributor53</a>
+    <a href="/user54">@contributor54</a>
+    <a href="/user55">@contributor55</a>
+    <a href="/user56">@contributor56</a>
+    <a href="/user57">@contributor57</a>
+    <a href="/user58">@contributor58</a>
+    <a href="/user59">@contributor59</a>
+    <a href="/user60">@contributor60</a>
+    <a href="/user61">@contributor61</a>
+    <a href="/user62">@contributor62</a>
+    <a href="/user63">@contributor63</a>
+    <a href="/user64">@contributor64</a>
+    <a href="/user65">@contributor65</a>
+    <a href="/user66">@contributor66</a>
+    <a href="/user67">@contributor67</a>
+    <a href="/user68">@contributor68</a>
+    <a href="/user69">@contributor69</a>
+    <a href="/user70">@contributor70</a>
+    <a href="/user71">@contributor71</a>
+    <a href="/user72">@contributor72</a>
+    <a href="/user73">@contributor73</a>
+    <a href="/user74">@contributor74</a>
+    <a href="/user75">@contributor75</a>
+    <a href="/user76">@contributor76</a>
+    <a href="/user77">@contributor77</a>
+    <a href="/user78">@contributor78</a>
+    <a href="/user79">@contributor79</a>
+    <a href="/user80">@contributor80</a>
+    <a href="/user81">@contributor81</a>
+    <a href="/user82">@contributor82</a>
+    <a href="/user83">@contributor83</a>
+    <a href="/user84">@contributor84</a>
+    <a href="/user85">@contributor85</a>
+    <a href="/user86">@contributor86</a>
+    <a href="/user87">@contributor87</a>
+    <a href="/user88">@contributor88</a>
+    <a href="/user89">@contributor89</a>
+    <a href="/user90">@contributor90</a>
+  <a href="/n8n-io/n8n/graphs/contributors">+ 741 contributors</a>
+
+  <h2>Languages</h2>
+    <a href="/n8n-io/n8n/search?l=TypeScript">TypeScript 92.2%</a>
+    <a href="/n8n-io/n8n/search?l=Vue">Vue 6.4%</a>
+    <a href="/n8n-io/n8n/search?l=JavaScript">JavaScript 0.7%</a>
+    <a href="/n8n-io/n8n/search?l=SCSS">SCSS 0.3%</a>
+    <a href="/n8n-io/n8n/search?l=Python">Python 0.3%</a>
+    <a href="/n8n-io/n8n/search?l=Handlebars">Handlebars 0.1%</a>
+    <a href="/n8n-io/n8n/search?l=Shell">Shell 0.1%</a>
+    <a href="/n8n-io/n8n/search?l=Dockerfile">Dockerfile 0.1%</a>
+</aside>
+</div>
+
+</body></html>

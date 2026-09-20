@@ -5,5 +5,10 @@ dist/
 stats.html
 tests/
 
+# 评估的运行产物；evals/ 的其余部分（代码、标注、判定、语料、各轮结果）进版本管理
+evals/extract/captured/
+evals/task/runs/*/raw/
+evals/decision/raw/
+
 # 本地密钥，永不提交
 .env.local

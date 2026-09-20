@@ -1,0 +1,12 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>模态对话框收缩作用域</title>
+<style>body{font:14px system-ui;margin:0;padding:16px}section{margin:12px 0}
+button,a{font:inherit}h2{font-size:15px;margin:8px 0}</style></head><body>
+
+<main><h1>Instances</h1>
+<button>Background button</button>
+<a href="/x">Background link</a></main>
+<dialog id="d" open><h2>Confirm deletion</h2>
+<button data-eval="modal-confirm">Delete forever</button>
+<button>Cancel</button></dialog>
+<script>const d=document.getElementById('d'); d.close(); d.showModal();</script>
+</body></html>

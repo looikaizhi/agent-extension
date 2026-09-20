@@ -1,0 +1,2158 @@
+{
+  "run": {
+    "id": "t09",
+    "startedAt": "2026-09-14T05:27:55.505Z",
+    "passes": 3,
+    "goals": 26,
+    "plugins": [
+      "skill"
+    ],
+    "model": "deepseek-flash",
+    "fingerprint": "4da37ec4e7575086",
+    "sites": [
+      "github.com",
+      "gitee.com",
+      "help.aliyun.com"
+    ],
+    "trips": 78,
+    "instrumentFailures": 0
+  },
+  "arrival": {
+    "rate": 0.5757575757575757,
+    "se": 0.08822393285790923,
+    "interval": {
+      "lo": 0.4040719661078459,
+      "hi": 0.7309190034157061
+    },
+    "goals": 22,
+    "trips": 64,
+    "source": "owner",
+    "judged": 78,
+    "void": 14,
+    "pending": 0,
+    "passK": [
+      0.5757575757575757,
+      0.42857142857142855,
+      0.3333333333333333
+    ],
+    "bySite": [
+      {
+        "site": "github.com",
+        "rate": 0.6333333333333334,
+        "se": 0.1048220125784067,
+        "interval": {
+          "lo": 0.4227279611176746,
+          "hi": 0.8029242471441771
+        },
+        "goals": 10,
+        "trips": 30
+      },
+      {
+        "site": "gitee.com",
+        "rate": 0.5238095238095238,
+        "se": 0.19047619047619047,
+        "interval": {
+          "lo": 0.21613341549980797,
+          "hi": 0.8144159439349299
+        },
+        "goals": 7,
+        "trips": 21
+      },
+      {
+        "site": "help.aliyun.com",
+        "rate": 0.5333333333333333,
+        "se": 0.2260776661041756,
+        "interval": {
+          "lo": 0.18701174027413492,
+          "hi": 0.8502557129828041
+        },
+        "goals": 5,
+        "trips": 13
+      }
+    ],
+    "program": {
+      "arrived": 35,
+      "trips": 78
+    }
+  },
+  "paired": null,
+  "cost": {
+    "hops": 227,
+    "calls": 358,
+    "requests": 363,
+    "tokens": {
+      "prompt": 2213334,
+      "completion": 84210,
+      "cached": 1237760
+    },
+    "cost": 1.3371692
+  },
+  "safety": {
+    "wrongLastStep": 1,
+    "sensitivePointed": 0,
+    "credentialStops": 0
+  },
+  "agreement": {
+    "judged": 64,
+    "void": 14,
+    "tp": 31,
+    "fp": 0,
+    "fn": 5,
+    "tn": 28,
+    "agreement": 0.921875,
+    "precision": 1,
+    "recall": 0.8611111111111112
+  },
+  "trips": [
+    {
+      "key": "P1-gh-repo-address",
+      "id": "gh-repo-address",
+      "site": "github.com",
+      "goal": "带我找到 n8n 这个开源项目，我想把它的仓库地址拿到手",
+      "pass": 1,
+      "endUrl": "https://github.com/search?q=repo%3An8n-io%2Fn8n+%2Fgithub.com%2Fn8n-io%2Fn8n.git&type=code",
+      "lastStep": {
+        "kind": "none",
+        "why": "以 loop_backstop 结束，屏幕上没有高亮"
+      },
+      "reach": "passed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 6,
+      "calls": 7,
+      "ending": "loop_backstop",
+      "confirmation": "some",
+      "shot": "19-P1ghrepoaddress-6-第6跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-issues",
+      "id": "gh-issues",
+      "site": "github.com",
+      "goal": "我想看看 n8n 这个项目最近有哪些人提了 issue",
+      "pass": 1,
+      "endUrl": "https://github.com/n8n-io/n8n/issues",
+      "lastStep": {
+        "kind": "done",
+        "after": "Issues (387)"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 4,
+      "calls": 7,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "32-P1ghissues-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-license",
+      "id": "gh-license",
+      "site": "github.com",
+      "goal": "帮我找到 n8n 这个项目用的是什么开源许可证",
+      "pass": 1,
+      "endUrl": "https://github.com/n8n-io/n8n",
+      "lastStep": {
+        "kind": "done",
+        "after": "n8n-io/n8n"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 3,
+      "calls": 4,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "42-P1ghlicense-3-第3跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-releases",
+      "id": "gh-releases",
+      "site": "github.com",
+      "goal": "带我去看 n8n 这个项目历次发布的版本",
+      "pass": 1,
+      "endUrl": "https://github.com/n8n-io/n8n",
+      "lastStep": {
+        "kind": "done",
+        "after": "Releases"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 5,
+      "calls": 9,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "58-P1ghreleases-5-第5跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-contributing",
+      "id": "gh-contributing",
+      "site": "github.com",
+      "goal": "我想读 n8n 这个项目的贡献指南",
+      "pass": 1,
+      "endUrl": "https://github.com/n8n-io/n8n/blob/master/CONTRIBUTING.md",
+      "lastStep": {
+        "kind": "done",
+        "after": "CONTRIBUTING.md, (File)"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 4,
+      "calls": 7,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "71-P1ghcontributing-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-docs-site",
+      "id": "gh-docs-site",
+      "site": "github.com",
+      "goal": "带我去看 n8n 的官方文档站",
+      "pass": 1,
+      "endUrl": "https://docs.n8n.io/",
+      "lastStep": {
+        "kind": "done",
+        "after": "Documentation"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 4,
+      "calls": 7,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "84-P1ghdocssite-4-第4跳重规划后.png",
+      "crossSite": [
+        {
+          "hop": 4,
+          "from": "github.com",
+          "to": "docs.n8n.io",
+          "answered": true
+        }
+      ],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-ci",
+      "id": "gh-ci",
+      "site": "github.com",
+      "goal": "我想知道 n8n 这个仓库的 CI 是怎么配置的",
+      "pass": 1,
+      "endUrl": "https://github.com/n8n-io/n8n/tree/master/.github/workflows",
+      "lastStep": {
+        "kind": "none",
+        "why": "以 loop_backstop 结束，屏幕上没有高亮"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "last_step"
+      },
+      "verdict": "wrong_end",
+      "hops": 6,
+      "calls": 10,
+      "ending": "loop_backstop",
+      "confirmation": "all",
+      "shot": "103-P1ghci-6-第6跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-pulls",
+      "id": "gh-pulls",
+      "site": "github.com",
+      "goal": "我想看看 n8n 这个项目现在有哪些等着合并的 pull request",
+      "pass": 1,
+      "endUrl": "https://github.com/n8n-io/n8n/pulls",
+      "lastStep": {
+        "kind": "done",
+        "after": "Pull requests (775)"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 4,
+      "calls": 7,
+      "ending": "model_done",
+      "confirmation": "some",
+      "shot": "116-P1ghpulls-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-branches",
+      "id": "gh-branches",
+      "site": "github.com",
+      "goal": "n8n 这个仓库都有哪些分支？",
+      "pass": 1,
+      "endUrl": "https://github.com/n8n-io/n8n/branches",
+      "lastStep": {
+        "kind": "done",
+        "after": "1638Branches"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 4,
+      "calls": 6,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "129-P1ghbranches-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-commits",
+      "id": "gh-commits",
+      "site": "github.com",
+      "goal": "带我看看 n8n 最近都提交了哪些代码",
+      "pass": 1,
+      "endUrl": "https://github.com/n8n-io/n8n/commits/master/",
+      "lastStep": {
+        "kind": "done",
+        "after": "24,229 Commits"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 6,
+      "calls": 12,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "148-P1ghcommits-6-第6跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gitee-repo-address",
+      "id": "gitee-repo-address",
+      "site": "gitee.com",
+      "goal": "我想把 hutool 这个仓库的克隆地址拿到手",
+      "pass": 1,
+      "endUrl": "https://gitee.com/chinabugotech/hutool",
+      "lastStep": {
+        "kind": "none",
+        "why": "以 loop_backstop 结束，屏幕上没有高亮"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "last_step"
+      },
+      "verdict": "wrong_end",
+      "hops": 1,
+      "calls": 2,
+      "ending": "loop_backstop",
+      "confirmation": "all",
+      "shot": "152-P1giteerepoaddress-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gitee-closed-issues",
+      "id": "gitee-closed-issues",
+      "site": "gitee.com",
+      "goal": "hutool 以前被关掉的 issue 有哪些？",
+      "pass": 1,
+      "endUrl": "https://gitee.com/chinabugotech/hutool/issues?q=is%3Aclosed",
+      "lastStep": {
+        "kind": "done",
+        "after": "Closed 4164"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 2,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "159-P1giteeclosedissues-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gitee-merged-pulls",
+      "id": "gitee-merged-pulls",
+      "site": "gitee.com",
+      "goal": "hutool 已经合并过哪些 Pull Request？",
+      "pass": 1,
+      "endUrl": "https://gitee.com/chinabugotech/hutool/pulls?assignee_id=&author_id=&label_ids=&label_text=&milestone_id=&priority=&project_id=chinabugotech%2Fhutool&project_type=&scope=&search=&single_label_id=&single_label_text=&sort=closed_at+desc&status=merged&target_project=&tester_id=",
+      "lastStep": {
+        "kind": "done",
+        "after": "Merged 658"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 2,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "166-P1giteemergedpulls-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gitee-other-branch",
+      "id": "gitee-other-branch",
+      "site": "gitee.com",
+      "goal": "我想看看 hutool v7-dev 分支上的代码",
+      "pass": 1,
+      "endUrl": "https://gitee.com/chinabugotech/hutool",
+      "lastStep": {
+        "kind": "none",
+        "why": "以 loop_backstop 结束，屏幕上没有高亮"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 1,
+      "calls": 2,
+      "ending": "loop_backstop",
+      "confirmation": "all",
+      "shot": "170-P1giteeotherbranch-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gitee-core-pom",
+      "id": "gitee-core-pom",
+      "site": "gitee.com",
+      "goal": "hutool-core 这个模块的 pom.xml 里写了哪些依赖？",
+      "pass": 1,
+      "endUrl": "https://gitee.com/chinabugotech/hutool",
+      "lastStep": {
+        "kind": "step",
+        "role": "textbox",
+        "name": "",
+        "action": "input"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 1,
+      "calls": 1,
+      "ending": "user_ended",
+      "confirmation": "none",
+      "shot": "174-P1giteecorepom-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gitee-org",
+      "id": "gitee-org",
+      "site": "gitee.com",
+      "goal": "hutool 背后的组织 chinabugotech 还有哪些项目？",
+      "pass": 1,
+      "endUrl": "https://gitee.com/chinabugotech/projects",
+      "lastStep": {
+        "kind": "done",
+        "after": "Repositories 6"
+      },
+      "reach": "passed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "arrived",
+      "hops": 2,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "181-P1giteeorg-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gitee-javadoc",
+      "id": "gitee-javadoc",
+      "site": "gitee.com",
+      "goal": "带我去看 hutool 的 API 文档",
+      "pass": 1,
+      "endUrl": "https://gitee.com/chinabugotech/hutool",
+      "lastStep": {
+        "kind": "step",
+        "role": "link",
+        "name": "📙API",
+        "action": "click"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 2,
+      "calls": 2,
+      "ending": "user_ended",
+      "confirmation": "none",
+      "shot": "188-P1giteejavadoc-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gitee-maven",
+      "id": "gitee-maven",
+      "site": "gitee.com",
+      "goal": "hutool 用 Maven 怎么引入？",
+      "pass": 1,
+      "endUrl": "https://gitee.com/chinabugotech/hutool/blob/v5-master/README.md",
+      "lastStep": {
+        "kind": "done",
+        "after": "README.md"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "void",
+      "hops": 1,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "some",
+      "shot": "192-P1giteemaven-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-aliyun-ecs-release",
+      "id": "aliyun-ecs-release",
+      "site": "help.aliyun.com",
+      "goal": "这台 ECS 我不用了，怎么把它释放掉？",
+      "pass": 1,
+      "endUrl": "https://help.aliyun.com/zh/ecs/user-guide/release-an-instance?spm=a2c4g.11174283.help-menu-25365.d_0_1_5.1313bec9Avs7wK",
+      "lastStep": {
+        "kind": "done",
+        "after": "释放实例"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "void",
+      "hops": 1,
+      "calls": 2,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "196-P1aliyunecsrelease-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-aliyun-ecs-create",
+      "id": "aliyun-ecs-create",
+      "site": "help.aliyun.com",
+      "goal": "带我去看怎么创建一台 ECS 实例",
+      "pass": 1,
+      "endUrl": "https://help.aliyun.com/zh/ecs/user-guide/create-a-subscription-instance-on-the-quick-launch-tab?spm=a2c4g.11174283.0.0.1313bec9EO2vsl",
+      "lastStep": {
+        "kind": "done",
+        "after": "快速购买"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 1,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "200-P1aliyunecscreate-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-aliyun-ecs-regions",
+      "id": "aliyun-ecs-regions",
+      "site": "help.aliyun.com",
+      "goal": "ECS 在哪些地域和可用区可以买？",
+      "pass": 1,
+      "endUrl": "https://help.aliyun.com/zh/ecs/user-guide/regions-and-zones?spm=a2c4g.11174283.help-menu-25365.d_0_0_5.1313bec9bxAF6i",
+      "lastStep": {
+        "kind": "done",
+        "after": "地域和可用区"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 1,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "204-P1aliyunecsregions-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-aliyun-ecs-billing-switch",
+      "id": "aliyun-ecs-billing-switch",
+      "site": "help.aliyun.com",
+      "goal": "我的 ECS 是包年包月的，想改成按量付费，怎么操作？",
+      "pass": 1,
+      "endUrl": "https://help.aliyun.com/zh/ecs/user-guide/ecagent-billing-instructions?spm=a2c4g.11174283.help-menu-25365.d_0_9_2.1313bec9j2d3Jk",
+      "lastStep": {
+        "kind": "step",
+        "role": "textbox",
+        "name": "",
+        "action": "input"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 2,
+      "calls": 3,
+      "ending": "user_ended",
+      "confirmation": "some",
+      "shot": "211-P1aliyunecsbillingswitch-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-aliyun-oss-lifecycle-fees",
+      "id": "aliyun-oss-lifecycle-fees",
+      "site": "help.aliyun.com",
+      "goal": "OSS 的生命周期规则会产生哪些费用？",
+      "pass": 1,
+      "endUrl": "https://help.aliyun.com/zh/oss/how-can-i-avoid-the-cost-of-insufficient-storage?spm=a2c4g.11186623.0.0.5ddb782aC9wHzO",
+      "lastStep": {
+        "kind": "done",
+        "after": "如何避免产生存储不足规定时长容量费用？"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "arrived",
+      "hops": 3,
+      "calls": 7,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "221-P1aliyunosslifecyclefees-3-第3跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-aliyun-rds-billing",
+      "id": "aliyun-rds-billing",
+      "site": "help.aliyun.com",
+      "goal": "云数据库 RDS 是怎么收费的？",
+      "pass": 1,
+      "endUrl": "https://help.aliyun.com/zh/rds/billable-items-billing-methods-and-pricing?spm=a2c4g.11174283.0.0.25a420a1plnMmN",
+      "lastStep": {
+        "kind": "done",
+        "after": "如何收费"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 1,
+      "calls": 2,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "225-P1aliyunrdsbilling-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-aliyun-rds-mysql-lifecycle",
+      "id": "aliyun-rds-mysql-lifecycle",
+      "site": "help.aliyun.com",
+      "goal": "RDS MySQL 的各个大版本什么时候停止维护？",
+      "pass": 1,
+      "endUrl": "https://help.aliyun.com/zh/rds/",
+      "lastStep": {
+        "kind": "none",
+        "why": "线程还在，但没有待走的一步"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "void",
+      "hops": 0,
+      "calls": 1,
+      "ending": "user_ended",
+      "confirmation": "none",
+      "shot": "226-P1aliyunrdsmysqllifecycle-1-第一步已高亮.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-aliyun-sls-query",
+      "id": "aliyun-sls-query",
+      "site": "help.aliyun.com",
+      "goal": "日志服务怎么查询和分析日志？先带我看入门的那篇",
+      "pass": 1,
+      "endUrl": "https://help.aliyun.com/zh/sls/quick-guide-to-query-and-analysis?spm=a2c4g.11186623.help-menu-28958.d_5_0.438738f7PMpHl6",
+      "lastStep": {
+        "kind": "done",
+        "after": "查询与分析快速指引"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "void",
+      "hops": 2,
+      "calls": 5,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "233-P1aliyunslsquery-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-repo-address",
+      "id": "gh-repo-address",
+      "site": "github.com",
+      "goal": "带我找到 n8n 这个开源项目，我想把它的仓库地址拿到手",
+      "pass": 2,
+      "endUrl": "https://github.com/n8n-io/n8n",
+      "lastStep": {
+        "kind": "done",
+        "after": "Clone with SSH"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 7,
+      "calls": 10,
+      "ending": "model_done",
+      "confirmation": "some",
+      "shot": "255-P2ghrepoaddress-7-第7跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-issues",
+      "id": "gh-issues",
+      "site": "github.com",
+      "goal": "我想看看 n8n 这个项目最近有哪些人提了 issue",
+      "pass": 2,
+      "endUrl": "https://github.com/",
+      "lastStep": {
+        "kind": "step",
+        "role": "button",
+        "name": "Open quick search dialog, type / to search",
+        "action": "click"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 2,
+      "calls": 2,
+      "ending": "user_ended",
+      "confirmation": "all",
+      "shot": "262-P2ghissues-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-license",
+      "id": "gh-license",
+      "site": "github.com",
+      "goal": "帮我找到 n8n 这个项目用的是什么开源许可证",
+      "pass": 2,
+      "endUrl": "https://github.com/",
+      "lastStep": {
+        "kind": "none",
+        "why": "以 loop_backstop 结束，屏幕上没有高亮"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 3,
+      "calls": 7,
+      "ending": "loop_backstop",
+      "confirmation": "all",
+      "shot": "272-P2ghlicense-3-第3跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-releases",
+      "id": "gh-releases",
+      "site": "github.com",
+      "goal": "带我去看 n8n 这个项目历次发布的版本",
+      "pass": 2,
+      "endUrl": "https://github.com/n8n-io/n8n/releases",
+      "lastStep": {
+        "kind": "done",
+        "after": "Releases"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 6,
+      "calls": 11,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "291-P2ghreleases-6-第6跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-contributing",
+      "id": "gh-contributing",
+      "site": "github.com",
+      "goal": "我想读 n8n 这个项目的贡献指南",
+      "pass": 2,
+      "endUrl": "https://github.com/",
+      "lastStep": {
+        "kind": "step",
+        "role": "button",
+        "name": "Open quick search dialog, type / to search",
+        "action": "click"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 2,
+      "calls": 3,
+      "ending": "user_ended",
+      "confirmation": "all",
+      "shot": "298-P2ghcontributing-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-docs-site",
+      "id": "gh-docs-site",
+      "site": "github.com",
+      "goal": "带我去看 n8n 的官方文档站",
+      "pass": 2,
+      "endUrl": "https://github.com/",
+      "lastStep": {
+        "kind": "done",
+        "after": "Open quick search dialog, type / to search"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 1,
+      "calls": 2,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "302-P2ghdocssite-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-ci",
+      "id": "gh-ci",
+      "site": "github.com",
+      "goal": "我想知道 n8n 这个仓库的 CI 是怎么配置的",
+      "pass": 2,
+      "endUrl": "https://github.com/n8n-io/n8n/blob/master/.github/WORKFLOWS.md",
+      "lastStep": {
+        "kind": "done",
+        "after": "WORKFLOWS.md"
+      },
+      "reach": "passed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 6,
+      "calls": 12,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "321-P2ghci-6-第6跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-pulls",
+      "id": "gh-pulls",
+      "site": "github.com",
+      "goal": "我想看看 n8n 这个项目现在有哪些等着合并的 pull request",
+      "pass": 2,
+      "endUrl": "https://github.com/n8n-io/n8n/pulls",
+      "lastStep": {
+        "kind": "done",
+        "after": "Pull requests (775)"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 4,
+      "calls": 8,
+      "ending": "model_done",
+      "confirmation": "some",
+      "shot": "334-P2ghpulls-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-branches",
+      "id": "gh-branches",
+      "site": "github.com",
+      "goal": "n8n 这个仓库都有哪些分支？",
+      "pass": 2,
+      "endUrl": "https://github.com/n8n-io/n8n/branches",
+      "lastStep": {
+        "kind": "done",
+        "after": "1638Branches"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 4,
+      "calls": 7,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "347-P2ghbranches-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-commits",
+      "id": "gh-commits",
+      "site": "github.com",
+      "goal": "带我看看 n8n 最近都提交了哪些代码",
+      "pass": 2,
+      "endUrl": "https://github.com/n8n-io/n8n/commits/master/",
+      "lastStep": {
+        "kind": "done",
+        "after": "24,229 Commits"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 4,
+      "calls": 6,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "360-P2ghcommits-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gitee-repo-address",
+      "id": "gitee-repo-address",
+      "site": "gitee.com",
+      "goal": "我想把 hutool 这个仓库的克隆地址拿到手",
+      "pass": 2,
+      "endUrl": "https://gitee.com/login?from=project-guide",
+      "lastStep": {
+        "kind": "step",
+        "role": "textbox",
+        "name": "",
+        "action": "input"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 2,
+      "calls": 2,
+      "ending": "user_ended",
+      "confirmation": "some",
+      "shot": "367-P2giteerepoaddress-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gitee-closed-issues",
+      "id": "gitee-closed-issues",
+      "site": "gitee.com",
+      "goal": "hutool 以前被关掉的 issue 有哪些？",
+      "pass": 2,
+      "endUrl": "https://gitee.com/chinabugotech/hutool/issues?q=is%3Aclosed",
+      "lastStep": {
+        "kind": "done",
+        "after": "Closed 4164"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 2,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "374-P2giteeclosedissues-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gitee-merged-pulls",
+      "id": "gitee-merged-pulls",
+      "site": "gitee.com",
+      "goal": "hutool 已经合并过哪些 Pull Request？",
+      "pass": 2,
+      "endUrl": "https://gitee.com/chinabugotech/hutool/pulls?assignee_id=&author_id=&label_ids=&label_text=&milestone_id=&priority=&project_id=chinabugotech%2Fhutool&project_type=&scope=&search=&single_label_id=&single_label_text=&sort=closed_at+desc&status=merged&target_project=&tester_id=",
+      "lastStep": {
+        "kind": "done",
+        "after": "Merged 658"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 2,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "381-P2giteemergedpulls-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gitee-other-branch",
+      "id": "gitee-other-branch",
+      "site": "gitee.com",
+      "goal": "我想看看 hutool v7-dev 分支上的代码",
+      "pass": 2,
+      "endUrl": "https://gitee.com/chinabugotech/hutool",
+      "lastStep": {
+        "kind": "none",
+        "why": "以 loop_backstop 结束，屏幕上没有高亮"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 1,
+      "calls": 2,
+      "ending": "loop_backstop",
+      "confirmation": "all",
+      "shot": "385-P2giteeotherbranch-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gitee-core-pom",
+      "id": "gitee-core-pom",
+      "site": "gitee.com",
+      "goal": "hutool-core 这个模块的 pom.xml 里写了哪些依赖？",
+      "pass": 2,
+      "endUrl": "https://gitee.com/chinabugotech/hutool/blob/v5-master/hutool-core/pom.xml",
+      "lastStep": {
+        "kind": "done",
+        "after": "pom.xml"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 2,
+      "calls": 6,
+      "ending": "model_done",
+      "confirmation": "some",
+      "shot": "392-P2giteecorepom-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gitee-org",
+      "id": "gitee-org",
+      "site": "gitee.com",
+      "goal": "hutool 背后的组织 chinabugotech 还有哪些项目？",
+      "pass": 2,
+      "endUrl": "https://gitee.com/chinabugotech/projects",
+      "lastStep": {
+        "kind": "done",
+        "after": "Repositories 6"
+      },
+      "reach": "passed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "arrived",
+      "hops": 2,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "399-P2giteeorg-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gitee-javadoc",
+      "id": "gitee-javadoc",
+      "site": "gitee.com",
+      "goal": "带我去看 hutool 的 API 文档",
+      "pass": 2,
+      "endUrl": "https://gitee.com/chinabugotech/hutool",
+      "lastStep": {
+        "kind": "step",
+        "role": "link",
+        "name": "📙API",
+        "action": "click"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 2,
+      "calls": 2,
+      "ending": "user_ended",
+      "confirmation": "all",
+      "shot": "406-P2giteejavadoc-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gitee-maven",
+      "id": "gitee-maven",
+      "site": "gitee.com",
+      "goal": "hutool 用 Maven 怎么引入？",
+      "pass": 2,
+      "endUrl": "https://gitee.com/chinabugotech/hutool",
+      "lastStep": {
+        "kind": "step",
+        "role": "link",
+        "name": "https://gitee.com/chinabugotech/hutool",
+        "action": "click"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "last_step"
+      },
+      "verdict": "void",
+      "hops": 6,
+      "calls": 4,
+      "ending": "user_ended",
+      "confirmation": "some",
+      "shot": "425-P2giteemaven-6-第6跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-aliyun-ecs-release",
+      "id": "aliyun-ecs-release",
+      "site": "help.aliyun.com",
+      "goal": "这台 ECS 我不用了，怎么把它释放掉？",
+      "pass": 2,
+      "endUrl": "https://cn.aliyun.com/search/?from_alibabacloud=&k=%E9%87%8A%E6%94%BE+ECS+%E5%AE%9E%E4%BE%8B+%E5%B8%AE%E5%8A%A9%E6%96%87%E6%A1%A3&scene=helpdoc&page=1",
+      "lastStep": {
+        "kind": "step",
+        "role": "link",
+        "name": "释放实例",
+        "action": "click"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "void",
+      "hops": 5,
+      "calls": 4,
+      "ending": "user_ended",
+      "confirmation": "some",
+      "shot": "441-P2aliyunecsrelease-5-第5跳重规划后.png",
+      "crossSite": [
+        {
+          "hop": 3,
+          "from": "cn.aliyun.com",
+          "to": "help.aliyun.com",
+          "answered": true
+        },
+        {
+          "hop": 4,
+          "from": "cn.aliyun.com",
+          "to": "help.aliyun.com",
+          "answered": true
+        }
+      ],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-aliyun-ecs-create",
+      "id": "aliyun-ecs-create",
+      "site": "help.aliyun.com",
+      "goal": "带我去看怎么创建一台 ECS 实例",
+      "pass": 2,
+      "endUrl": "https://help.aliyun.com/zh/ecs/user-guide/create-a-subscription-instance-on-the-quick-launch-tab?spm=a2c4g.11174283.0.0.1313bec9ba7JhG",
+      "lastStep": {
+        "kind": "step",
+        "role": "link",
+        "name": "实例购买页",
+        "action": "click"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 3,
+      "calls": 4,
+      "ending": "user_ended",
+      "confirmation": "some",
+      "shot": "451-P2aliyunecscreate-3-第3跳重规划后.png",
+      "crossSite": [
+        {
+          "hop": 2,
+          "from": "help.aliyun.com",
+          "to": "ecs-buy.aliyun.com",
+          "answered": true
+        }
+      ],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-aliyun-ecs-regions",
+      "id": "aliyun-ecs-regions",
+      "site": "help.aliyun.com",
+      "goal": "ECS 在哪些地域和可用区可以买？",
+      "pass": 2,
+      "endUrl": "https://help.aliyun.com/zh/ecs/user-guide/regions-and-zones?spm=a2c4g.11174283.help-menu-25365.d_0_0_5.1313bec9LDj1wI",
+      "lastStep": {
+        "kind": "done",
+        "after": "地域和可用区"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 1,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "455-P2aliyunecsregions-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-aliyun-ecs-billing-switch",
+      "id": "aliyun-ecs-billing-switch",
+      "site": "help.aliyun.com",
+      "goal": "我的 ECS 是包年包月的，想改成按量付费，怎么操作？",
+      "pass": 2,
+      "endUrl": "https://help.aliyun.com/zh/user-center/description-of-refund-rules-for-transfer-to-pay-as-you-go?spm=a2c4g.11186623.0.0.762b719avHUbFE",
+      "lastStep": {
+        "kind": "step",
+        "role": "link",
+        "name": "控制台",
+        "action": "click"
+      },
+      "reach": "passed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 5,
+      "calls": 6,
+      "ending": "user_ended",
+      "confirmation": "some",
+      "shot": "471-P2aliyunecsbillingswitch-5-第5跳重规划后.png",
+      "crossSite": [
+        {
+          "hop": 4,
+          "from": "help.aliyun.com",
+          "to": "home.console.aliyun.com",
+          "answered": true
+        }
+      ],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-aliyun-oss-lifecycle-fees",
+      "id": "aliyun-oss-lifecycle-fees",
+      "site": "help.aliyun.com",
+      "goal": "OSS 的生命周期规则会产生哪些费用？",
+      "pass": 2,
+      "endUrl": "https://cn.aliyun.com/search/?from_alibabacloud=&k=%E7%94%9F%E5%91%BD%E5%91%A8%E6%9C%9F+%E8%B4%B9%E7%94%A8&scene=helpdoc",
+      "lastStep": {
+        "kind": "none",
+        "why": "以 loop_backstop 结束，屏幕上没有高亮"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "void",
+      "hops": 4,
+      "calls": 6,
+      "ending": "loop_backstop",
+      "confirmation": "all",
+      "shot": "484-P2aliyunosslifecyclefees-4-第4跳重规划后.png",
+      "crossSite": [
+        {
+          "hop": 4,
+          "from": "cn.aliyun.com",
+          "to": "help.aliyun.com",
+          "answered": true
+        }
+      ],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-aliyun-rds-billing",
+      "id": "aliyun-rds-billing",
+      "site": "help.aliyun.com",
+      "goal": "云数据库 RDS 是怎么收费的？",
+      "pass": 2,
+      "endUrl": "https://help.aliyun.com/zh/rds/product-overview/billable-items-billing-methods-and-pricing?spm=a2c4g.11186623.help-menu-26090.d_0_1_1.18d6676bDQ5G0A",
+      "lastStep": {
+        "kind": "done",
+        "after": "计费项"
+      },
+      "reach": "passed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 5,
+      "calls": 4,
+      "ending": "model_done",
+      "confirmation": "some",
+      "shot": "500-P2aliyunrdsbilling-5-第5跳重规划后.png",
+      "crossSite": [
+        {
+          "hop": 2,
+          "from": "help.aliyun.com",
+          "to": "rdsbuy.console.aliyun.com",
+          "answered": true
+        }
+      ],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-aliyun-rds-mysql-lifecycle",
+      "id": "aliyun-rds-mysql-lifecycle",
+      "site": "help.aliyun.com",
+      "goal": "RDS MySQL 的各个大版本什么时候停止维护？",
+      "pass": 2,
+      "endUrl": "https://help.aliyun.com/zh/rds/",
+      "lastStep": {
+        "kind": "none",
+        "why": "线程还在，但没有待走的一步"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "void",
+      "hops": 0,
+      "calls": 1,
+      "ending": "user_ended",
+      "confirmation": "none",
+      "shot": "501-P2aliyunrdsmysqllifecycle-1-第一步已高亮.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-aliyun-sls-query",
+      "id": "aliyun-sls-query",
+      "site": "help.aliyun.com",
+      "goal": "日志服务怎么查询和分析日志？先带我看入门的那篇",
+      "pass": 2,
+      "endUrl": "https://help.aliyun.com/zh/sls/quick-guide-to-query-and-analysis?spm=a2c4g.11174283.0.0.65e938f7XJXgDa",
+      "lastStep": {
+        "kind": "done",
+        "after": "查询与分析快速指引"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "void",
+      "hops": 1,
+      "calls": 2,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "505-P2aliyunslsquery-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gh-repo-address",
+      "id": "gh-repo-address",
+      "site": "github.com",
+      "goal": "带我找到 n8n 这个开源项目，我想把它的仓库地址拿到手",
+      "pass": 3,
+      "endUrl": "https://github.com/n8n-io/n8n",
+      "lastStep": {
+        "kind": "done",
+        "after": "Code"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 5,
+      "calls": 6,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "519-P3ghrepoaddress-5-第5跳点击前.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gh-issues",
+      "id": "gh-issues",
+      "site": "github.com",
+      "goal": "我想看看 n8n 这个项目最近有哪些人提了 issue",
+      "pass": 3,
+      "endUrl": "https://github.com/n8n-io/n8n/issues",
+      "lastStep": {
+        "kind": "done",
+        "after": "Issues (387)"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 4,
+      "calls": 7,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "532-P3ghissues-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gh-license",
+      "id": "gh-license",
+      "site": "github.com",
+      "goal": "帮我找到 n8n 这个项目用的是什么开源许可证",
+      "pass": 3,
+      "endUrl": "https://github.com/n8n-io/n8n",
+      "lastStep": {
+        "kind": "done",
+        "after": "n8n-io/n8n"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 3,
+      "calls": 4,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "542-P3ghlicense-3-第3跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gh-releases",
+      "id": "gh-releases",
+      "site": "github.com",
+      "goal": "带我去看 n8n 这个项目历次发布的版本",
+      "pass": 3,
+      "endUrl": "https://github.com/n8n-io/n8n",
+      "lastStep": {
+        "kind": "done",
+        "after": "Releases"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_last_step",
+      "hops": 5,
+      "calls": 6,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "558-P3ghreleases-5-第5跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gh-contributing",
+      "id": "gh-contributing",
+      "site": "github.com",
+      "goal": "我想读 n8n 这个项目的贡献指南",
+      "pass": 3,
+      "endUrl": "https://github.com/n8n-io/n8n?tab=contributing-ov-file",
+      "lastStep": {
+        "kind": "done",
+        "after": "Contributing"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 4,
+      "calls": 6,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "571-P3ghcontributing-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gh-docs-site",
+      "id": "gh-docs-site",
+      "site": "github.com",
+      "goal": "带我去看 n8n 的官方文档站",
+      "pass": 3,
+      "endUrl": "https://github.com/n8n-io/n8n-docs",
+      "lastStep": {
+        "kind": "done",
+        "after": "n8n-io/n8n-docs"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "last_step"
+      },
+      "verdict": "wrong_end",
+      "hops": 3,
+      "calls": 5,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "581-P3ghdocssite-3-第3跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gh-ci",
+      "id": "gh-ci",
+      "site": "github.com",
+      "goal": "我想知道 n8n 这个仓库的 CI 是怎么配置的",
+      "pass": 3,
+      "endUrl": "https://github.com/n8n-io/n8n/blob/master/.github/WORKFLOWS.md",
+      "lastStep": {
+        "kind": "done",
+        "after": "WORKFLOWS.md"
+      },
+      "reach": "passed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 6,
+      "calls": 10,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "600-P3ghci-6-第6跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gh-pulls",
+      "id": "gh-pulls",
+      "site": "github.com",
+      "goal": "我想看看 n8n 这个项目现在有哪些等着合并的 pull request",
+      "pass": 3,
+      "endUrl": "https://github.com/n8n-io/n8n/pulls",
+      "lastStep": {
+        "kind": "done",
+        "after": "Pull requests (775)"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 4,
+      "calls": 6,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "613-P3ghpulls-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gh-branches",
+      "id": "gh-branches",
+      "site": "github.com",
+      "goal": "n8n 这个仓库都有哪些分支？",
+      "pass": 3,
+      "endUrl": "https://github.com/n8n-io/n8n/branches",
+      "lastStep": {
+        "kind": "done",
+        "after": "View all branches"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 5,
+      "calls": 9,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "629-P3ghbranches-5-第5跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gh-commits",
+      "id": "gh-commits",
+      "site": "github.com",
+      "goal": "带我看看 n8n 最近都提交了哪些代码",
+      "pass": 3,
+      "endUrl": "https://github.com/n8n-io/n8n/commits/master/",
+      "lastStep": {
+        "kind": "none",
+        "why": "以 loop_backstop 结束，屏幕上没有高亮"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "last_step"
+      },
+      "verdict": "arrived",
+      "hops": 4,
+      "calls": 7,
+      "ending": "loop_backstop",
+      "confirmation": "all",
+      "shot": "642-P3ghcommits-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gitee-repo-address",
+      "id": "gitee-repo-address",
+      "site": "gitee.com",
+      "goal": "我想把 hutool 这个仓库的克隆地址拿到手",
+      "pass": 3,
+      "endUrl": "https://gitee.com/chinabugotech/hutool",
+      "lastStep": {
+        "kind": "none",
+        "why": "以 loop_backstop 结束，屏幕上没有高亮"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "last_step"
+      },
+      "verdict": "wrong_end",
+      "hops": 1,
+      "calls": 2,
+      "ending": "loop_backstop",
+      "confirmation": "all",
+      "shot": "646-P3giteerepoaddress-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gitee-closed-issues",
+      "id": "gitee-closed-issues",
+      "site": "gitee.com",
+      "goal": "hutool 以前被关掉的 issue 有哪些？",
+      "pass": 3,
+      "endUrl": "https://gitee.com/chinabugotech/hutool/issues?q=is%3Aclosed",
+      "lastStep": {
+        "kind": "done",
+        "after": "Closed 4164"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 2,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "653-P3giteeclosedissues-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gitee-merged-pulls",
+      "id": "gitee-merged-pulls",
+      "site": "gitee.com",
+      "goal": "hutool 已经合并过哪些 Pull Request？",
+      "pass": 3,
+      "endUrl": "https://gitee.com/chinabugotech/hutool/pulls?assignee_id=&author_id=&label_ids=&label_text=&milestone_id=&priority=&project_id=chinabugotech%2Fhutool&project_type=&scope=&search=&single_label_id=&single_label_text=&sort=closed_at+desc&status=merged&target_project=&tester_id=",
+      "lastStep": {
+        "kind": "done",
+        "after": "Merged 658"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 2,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "660-P3giteemergedpulls-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gitee-other-branch",
+      "id": "gitee-other-branch",
+      "site": "gitee.com",
+      "goal": "我想看看 hutool v7-dev 分支上的代码",
+      "pass": 3,
+      "endUrl": "https://gitee.com/chinabugotech/hutool",
+      "lastStep": {
+        "kind": "none",
+        "why": "以 loop_backstop 结束，屏幕上没有高亮"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 1,
+      "calls": 2,
+      "ending": "loop_backstop",
+      "confirmation": "all",
+      "shot": "664-P3giteeotherbranch-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gitee-core-pom",
+      "id": "gitee-core-pom",
+      "site": "gitee.com",
+      "goal": "hutool-core 这个模块的 pom.xml 里写了哪些依赖？",
+      "pass": 3,
+      "endUrl": "https://gitee.com/chinabugotech/hutool/blob/v5-master/hutool-core/pom.xml",
+      "lastStep": {
+        "kind": "done",
+        "after": "pom.xml"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 2,
+      "calls": 5,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "671-P3giteecorepom-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gitee-org",
+      "id": "gitee-org",
+      "site": "gitee.com",
+      "goal": "hutool 背后的组织 chinabugotech 还有哪些项目？",
+      "pass": 3,
+      "endUrl": "https://gitee.com/chinabugotech/projects",
+      "lastStep": {
+        "kind": "done",
+        "after": "Repositories 6"
+      },
+      "reach": "passed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "arrived",
+      "hops": 2,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "678-P3giteeorg-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gitee-javadoc",
+      "id": "gitee-javadoc",
+      "site": "gitee.com",
+      "goal": "带我去看 hutool 的 API 文档",
+      "pass": 3,
+      "endUrl": "https://gitee.com/chinabugotech/hutool",
+      "lastStep": {
+        "kind": "step",
+        "role": "link",
+        "name": "📙API",
+        "action": "click"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 2,
+      "calls": 2,
+      "ending": "user_ended",
+      "confirmation": "none",
+      "shot": "685-P3giteejavadoc-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-gitee-maven",
+      "id": "gitee-maven",
+      "site": "gitee.com",
+      "goal": "hutool 用 Maven 怎么引入？",
+      "pass": 3,
+      "endUrl": "https://gitee.com/chinabugotech/hutool#maven",
+      "lastStep": {
+        "kind": "step",
+        "role": "link",
+        "name": "",
+        "action": "scroll"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "last_step"
+      },
+      "verdict": "void",
+      "hops": 4,
+      "calls": 2,
+      "ending": "user_ended",
+      "confirmation": "none",
+      "shot": "698-P3giteemaven-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-aliyun-ecs-release",
+      "id": "aliyun-ecs-release",
+      "site": "help.aliyun.com",
+      "goal": "这台 ECS 我不用了，怎么把它释放掉？",
+      "pass": 3,
+      "endUrl": "https://help.aliyun.com/zh/user-center/initiate-unsubscribe?spm=a2c4g.11186623.0.0.2bdb659c5crfxx#2f836ff974t0n",
+      "lastStep": {
+        "kind": "step",
+        "role": "link",
+        "name": "资源退订",
+        "action": "click"
+      },
+      "reach": "passed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "void",
+      "hops": 6,
+      "calls": 5,
+      "ending": "user_ended",
+      "confirmation": "some",
+      "shot": "717-P3aliyunecsrelease-6-第6跳重规划后.png",
+      "crossSite": [
+        {
+          "hop": 2,
+          "from": "help.aliyun.com",
+          "to": "ecs.console.aliyun.com",
+          "answered": true
+        },
+        {
+          "hop": 5,
+          "from": "help.aliyun.com",
+          "to": "billing-cost.console.aliyun.com",
+          "answered": true
+        }
+      ],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-aliyun-ecs-create",
+      "id": "aliyun-ecs-create",
+      "site": "help.aliyun.com",
+      "goal": "带我去看怎么创建一台 ECS 实例",
+      "pass": 3,
+      "endUrl": "https://help.aliyun.com/zh/ecs/user-guide/create-an-instance-by-using-the-wizard?spm=a2c4g.11174283.0.0.1313bec9j1E9ye",
+      "lastStep": {
+        "kind": "done",
+        "after": "自定义购买"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 1,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "721-P3aliyunecscreate-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-aliyun-ecs-regions",
+      "id": "aliyun-ecs-regions",
+      "site": "help.aliyun.com",
+      "goal": "ECS 在哪些地域和可用区可以买？",
+      "pass": 3,
+      "endUrl": "https://help.aliyun.com/zh/ecs/user-guide/regions-and-zones?spm=a2c4g.11174283.help-menu-25365.d_0_0_5.1313bec9mFaQVV",
+      "lastStep": {
+        "kind": "done",
+        "after": "地域和可用区"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 1,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "725-P3aliyunecsregions-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-aliyun-ecs-billing-switch",
+      "id": "aliyun-ecs-billing-switch",
+      "site": "help.aliyun.com",
+      "goal": "我的 ECS 是包年包月的，想改成按量付费，怎么操作？",
+      "pass": 3,
+      "endUrl": "https://cn.aliyun.com/search/?from_alibabacloud=&k=ECS+%E5%8C%85%E5%B9%B4%E5%8C%85%E6%9C%88%E8%BD%AC%E6%8C%89%E9%87%8F%E4%BB%98%E8%B4%B9&scene=helpdoc",
+      "lastStep": {
+        "kind": "step",
+        "role": "link",
+        "name": "包年包月转按量付费 | 云服务器 ECS",
+        "action": "click"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "wrong_end",
+      "hops": 5,
+      "calls": 5,
+      "ending": "user_ended",
+      "confirmation": "some",
+      "shot": "741-P3aliyunecsbillingswitch-5-第5跳重规划后.png",
+      "crossSite": [
+        {
+          "hop": 4,
+          "from": "cn.aliyun.com",
+          "to": "help.aliyun.com",
+          "answered": true
+        }
+      ],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-aliyun-oss-lifecycle-fees",
+      "id": "aliyun-oss-lifecycle-fees",
+      "site": "help.aliyun.com",
+      "goal": "OSS 的生命周期规则会产生哪些费用？",
+      "pass": 3,
+      "endUrl": "https://help.aliyun.com/zh/oss/",
+      "lastStep": {
+        "kind": "none",
+        "why": "线程还在，但没有待走的一步"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "void",
+      "hops": 0,
+      "calls": 1,
+      "ending": "user_ended",
+      "confirmation": "none",
+      "shot": "742-P3aliyunosslifecyclefees-1-第一步已高亮.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-aliyun-rds-billing",
+      "id": "aliyun-rds-billing",
+      "site": "help.aliyun.com",
+      "goal": "云数据库 RDS 是怎么收费的？",
+      "pass": 3,
+      "endUrl": "https://help.aliyun.com/zh/rds/billable-items-billing-methods-and-pricing?spm=a2c4g.11174283.0.0.25a420a1Uj6qED",
+      "lastStep": {
+        "kind": "done",
+        "after": "如何收费"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "arrived",
+      "hops": 1,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "746-P3aliyunrdsbilling-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-aliyun-rds-mysql-lifecycle",
+      "id": "aliyun-rds-mysql-lifecycle",
+      "site": "help.aliyun.com",
+      "goal": "RDS MySQL 的各个大版本什么时候停止维护？",
+      "pass": 3,
+      "endUrl": "https://help.aliyun.com/zh/rds/apsaradb-rds-for-mysql/major-version-lifecycle-description?spm=a2c4g.11186623.help-menu-26090.d_4_1.2f6220a18buhrF",
+      "lastStep": {
+        "kind": "done",
+        "after": "大版本生命周期说明"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": "void",
+      "hops": 2,
+      "calls": 5,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "753-P3aliyunrdsmysqllifecycle-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P3-aliyun-sls-query",
+      "id": "aliyun-sls-query",
+      "site": "help.aliyun.com",
+      "goal": "日志服务怎么查询和分析日志？先带我看入门的那篇",
+      "pass": 3,
+      "endUrl": "https://help.aliyun.com/zh/sls/",
+      "lastStep": {
+        "kind": "step",
+        "role": "link",
+        "name": "快速入门：使用Logtail采集ECS文本日志并分析",
+        "action": "click"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": "void",
+      "hops": 1,
+      "calls": 1,
+      "ending": "user_ended",
+      "confirmation": "none",
+      "shot": "757-P3aliyunslsquery-1-第1跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    }
+  ]
+}

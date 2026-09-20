@@ -1,0 +1,603 @@
+{
+  "run": {
+    "id": "t12-github-none",
+    "startedAt": "2026-09-15T14:04:04.294Z",
+    "passes": 2,
+    "goals": 10,
+    "plugins": [],
+    "model": "deepseek-flash",
+    "fingerprint": "4da37ec4e7575086",
+    "sites": [
+      "github.com"
+    ],
+    "trips": 20,
+    "instrumentFailures": 0
+  },
+  "arrival": {
+    "rate": 0.4,
+    "se": 0.1,
+    "interval": {
+      "lo": 0.21880653237281705,
+      "hi": 0.6134184992377469
+    },
+    "goals": 10,
+    "trips": 20,
+    "source": "program",
+    "judged": 0,
+    "void": 0,
+    "pending": 20,
+    "passK": [
+      0.4,
+      0.1,
+      null
+    ],
+    "bySite": [
+      {
+        "site": "github.com",
+        "rate": 0.4,
+        "se": 0.1,
+        "interval": {
+          "lo": 0.21880653237281705,
+          "hi": 0.6134184992377469
+        },
+        "goals": 10,
+        "trips": 20
+      }
+    ],
+    "program": {
+      "arrived": 8,
+      "trips": 20
+    }
+  },
+  "paired": {
+    "previousRun": "t11",
+    "source": "program",
+    "diff": {
+      "diff": -0.25,
+      "se": 0.11180339887498948,
+      "ci": {
+        "lo": -0.4691306351441454,
+        "hi": -0.03086936485585462
+      },
+      "pairs": 10,
+      "onlyA": 0,
+      "onlyB": 16
+    },
+    "detectable": {
+      "z": 0.3132267496229586,
+      "t": 0.351684413682386
+    }
+  },
+  "cost": {
+    "hops": 62,
+    "calls": 97,
+    "requests": 98,
+    "tokens": {
+      "prompt": 566120,
+      "completion": 23038,
+      "cached": 317696
+    },
+    "cost": 0.34692992000000006
+  },
+  "safety": {
+    "wrongLastStep": null,
+    "sensitivePointed": 0,
+    "credentialStops": 0
+  },
+  "agreement": null,
+  "trips": [
+    {
+      "key": "P1-gh-repo-address",
+      "id": "gh-repo-address",
+      "site": "github.com",
+      "goal": "带我找到 n8n 这个开源项目，我想把它的仓库地址拿到手",
+      "pass": 1,
+      "endUrl": "https://github.com/n8n-io/n8n",
+      "lastStep": {
+        "kind": "none",
+        "why": "以 loop_backstop 结束，屏幕上没有高亮"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "last_step"
+      },
+      "verdict": null,
+      "hops": 8,
+      "calls": 8,
+      "ending": "loop_backstop",
+      "confirmation": "some",
+      "shot": "25-P1ghrepoaddress-8-第8跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-issues",
+      "id": "gh-issues",
+      "site": "github.com",
+      "goal": "我想看看 n8n 这个项目最近有哪些人提了 issue",
+      "pass": 1,
+      "endUrl": "https://github.com/search?q=n8n%2Fn8n+repo&type=repositories",
+      "lastStep": {
+        "kind": "step",
+        "role": "combobox",
+        "name": "Search or jump to",
+        "action": "input"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": null,
+      "hops": 3,
+      "calls": 3,
+      "ending": "user_ended",
+      "confirmation": "all",
+      "shot": "33-P1ghissues-3-第3跳点击前.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-license",
+      "id": "gh-license",
+      "site": "github.com",
+      "goal": "帮我找到 n8n 这个项目用的是什么开源许可证",
+      "pass": 1,
+      "endUrl": "https://github.com/n8n-io/n8n",
+      "lastStep": {
+        "kind": "done",
+        "after": "n8n-io/n8n"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": null,
+      "hops": 3,
+      "calls": 4,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "43-P1ghlicense-3-第3跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-releases",
+      "id": "gh-releases",
+      "site": "github.com",
+      "goal": "带我去看 n8n 这个项目历次发布的版本",
+      "pass": 1,
+      "endUrl": "https://github.com/n8n-io/n8n/releases",
+      "lastStep": {
+        "kind": "none",
+        "why": "以 quota_exhausted 结束，屏幕上没有高亮"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "last_step"
+      },
+      "verdict": null,
+      "hops": 6,
+      "calls": 12,
+      "ending": "quota_exhausted",
+      "confirmation": "all",
+      "shot": "62-P1ghreleases-6-第6跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-contributing",
+      "id": "gh-contributing",
+      "site": "github.com",
+      "goal": "我想读 n8n 这个项目的贡献指南",
+      "pass": 1,
+      "endUrl": "https://github.com/",
+      "lastStep": {
+        "kind": "none",
+        "why": "线程还在，但没有待走的一步"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": null,
+      "hops": 0,
+      "calls": 1,
+      "ending": "user_ended",
+      "confirmation": "none",
+      "shot": "63-P1ghcontributing-1-第一步已高亮.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-docs-site",
+      "id": "gh-docs-site",
+      "site": "github.com",
+      "goal": "带我去看 n8n 的官方文档站",
+      "pass": 1,
+      "endUrl": "https://docs.n8n.io/",
+      "lastStep": {
+        "kind": "done",
+        "after": "Documentation"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": null,
+      "hops": 4,
+      "calls": 5,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "76-P1ghdocssite-4-第4跳重规划后.png",
+      "crossSite": [
+        {
+          "hop": 4,
+          "from": "github.com",
+          "to": "docs.n8n.io",
+          "answered": true
+        }
+      ],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-ci",
+      "id": "gh-ci",
+      "site": "github.com",
+      "goal": "我想知道 n8n 这个仓库的 CI 是怎么配置的",
+      "pass": 1,
+      "endUrl": "https://github.com/",
+      "lastStep": {
+        "kind": "none",
+        "why": "线程还在，但没有待走的一步"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": null,
+      "hops": 0,
+      "calls": 1,
+      "ending": "user_ended",
+      "confirmation": "none",
+      "shot": "77-P1ghci-1-第一步已高亮.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-pulls",
+      "id": "gh-pulls",
+      "site": "github.com",
+      "goal": "我想看看 n8n 这个项目现在有哪些等着合并的 pull request",
+      "pass": 1,
+      "endUrl": "https://github.com/n8n-io/n8n/pulls",
+      "lastStep": {
+        "kind": "done",
+        "after": "Pull requests (768)"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": null,
+      "hops": 4,
+      "calls": 7,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "90-P1ghpulls-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-branches",
+      "id": "gh-branches",
+      "site": "github.com",
+      "goal": "n8n 这个仓库都有哪些分支？",
+      "pass": 1,
+      "endUrl": "https://github.com/",
+      "lastStep": {
+        "kind": "step",
+        "role": "button",
+        "name": "Open quick search dialog, type / to search",
+        "action": "click"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": null,
+      "hops": 2,
+      "calls": 3,
+      "ending": "user_ended",
+      "confirmation": "all",
+      "shot": "97-P1ghbranches-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P1-gh-commits",
+      "id": "gh-commits",
+      "site": "github.com",
+      "goal": "带我看看 n8n 最近都提交了哪些代码",
+      "pass": 1,
+      "endUrl": "https://github.com/search?q=n8n+repo&type=repositories",
+      "lastStep": {
+        "kind": "none",
+        "why": "以 loop_backstop 结束，屏幕上没有高亮"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": null,
+      "hops": 2,
+      "calls": 3,
+      "ending": "loop_backstop",
+      "confirmation": "all",
+      "shot": "104-P1ghcommits-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-repo-address",
+      "id": "gh-repo-address",
+      "site": "github.com",
+      "goal": "带我找到 n8n 这个开源项目，我想把它的仓库地址拿到手",
+      "pass": 2,
+      "endUrl": "https://github.com/n8n-io/n8n",
+      "lastStep": {
+        "kind": "none",
+        "why": "以 loop_backstop 结束，屏幕上没有高亮"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": false,
+        "missed": "last_step"
+      },
+      "verdict": null,
+      "hops": 3,
+      "calls": 6,
+      "ending": "loop_backstop",
+      "confirmation": "all",
+      "shot": "114-P2ghrepoaddress-3-第3跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-issues",
+      "id": "gh-issues",
+      "site": "github.com",
+      "goal": "我想看看 n8n 这个项目最近有哪些人提了 issue",
+      "pass": 2,
+      "endUrl": "https://github.com/n8n-io/n8n/issues",
+      "lastStep": {
+        "kind": "done",
+        "after": "Issues (388)"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": null,
+      "hops": 4,
+      "calls": 7,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "127-P2ghissues-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-license",
+      "id": "gh-license",
+      "site": "github.com",
+      "goal": "帮我找到 n8n 这个项目用的是什么开源许可证",
+      "pass": 2,
+      "endUrl": "https://github.com/search?q=n8n&type=repositories",
+      "lastStep": {
+        "kind": "done",
+        "after": "Search or jump to"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": null,
+      "hops": 2,
+      "calls": 3,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "134-P2ghlicense-2-第2跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-releases",
+      "id": "gh-releases",
+      "site": "github.com",
+      "goal": "带我去看 n8n 这个项目历次发布的版本",
+      "pass": 2,
+      "endUrl": "https://github.com/n8n-io/n8n/tags",
+      "lastStep": {
+        "kind": "done",
+        "after": "Tags"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": null,
+      "hops": 4,
+      "calls": 6,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "147-P2ghreleases-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-contributing",
+      "id": "gh-contributing",
+      "site": "github.com",
+      "goal": "我想读 n8n 这个项目的贡献指南",
+      "pass": 2,
+      "endUrl": "https://github.com/",
+      "lastStep": {
+        "kind": "none",
+        "why": "线程还在，但没有待走的一步"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": null,
+      "hops": 0,
+      "calls": 1,
+      "ending": "user_ended",
+      "confirmation": "none",
+      "shot": "148-P2ghcontributing-1-第一步已高亮.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-docs-site",
+      "id": "gh-docs-site",
+      "site": "github.com",
+      "goal": "带我去看 n8n 的官方文档站",
+      "pass": 2,
+      "endUrl": "https://github.com/search?q=n8n+org&type=repositories",
+      "lastStep": {
+        "kind": "step",
+        "role": "combobox",
+        "name": "Search or jump to",
+        "action": "input"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": null,
+      "hops": 3,
+      "calls": 3,
+      "ending": "user_ended",
+      "confirmation": "all",
+      "shot": "156-P2ghdocssite-3-第3跳点击前.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-ci",
+      "id": "gh-ci",
+      "site": "github.com",
+      "goal": "我想知道 n8n 这个仓库的 CI 是怎么配置的",
+      "pass": 2,
+      "endUrl": "https://github.com/n8n-io/n8n/tree/master/.github/workflows",
+      "lastStep": {
+        "kind": "done",
+        "after": "workflows, (Directory)"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": null,
+      "hops": 5,
+      "calls": 10,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "172-P2ghci-5-第5跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-pulls",
+      "id": "gh-pulls",
+      "site": "github.com",
+      "goal": "我想看看 n8n 这个项目现在有哪些等着合并的 pull request",
+      "pass": 2,
+      "endUrl": "https://github.com/n8n-io/n8n/pulls?q=is%3Aopen",
+      "lastStep": {
+        "kind": "done",
+        "after": "Search pull requests"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": null,
+      "hops": 5,
+      "calls": 7,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "188-P2ghpulls-5-第5跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-branches",
+      "id": "gh-branches",
+      "site": "github.com",
+      "goal": "n8n 这个仓库都有哪些分支？",
+      "pass": 2,
+      "endUrl": "https://github.com/",
+      "lastStep": {
+        "kind": "none",
+        "why": "线程还在，但没有待走的一步"
+      },
+      "reach": "never",
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "verdict": null,
+      "hops": 0,
+      "calls": 1,
+      "ending": "user_ended",
+      "confirmation": "none",
+      "shot": "189-P2ghbranches-1-第一步已高亮.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    },
+    {
+      "key": "P2-gh-commits",
+      "id": "gh-commits",
+      "site": "github.com",
+      "goal": "带我看看 n8n 最近都提交了哪些代码",
+      "pass": 2,
+      "endUrl": "https://github.com/n8n-io/n8n/commits/master/",
+      "lastStep": {
+        "kind": "done",
+        "after": "24,340 Commits"
+      },
+      "reach": "stayed",
+      "programmatic": {
+        "arrived": true,
+        "missed": null
+      },
+      "verdict": null,
+      "hops": 4,
+      "calls": 6,
+      "ending": "model_done",
+      "confirmation": "all",
+      "shot": "202-P2ghcommits-4-第4跳重规划后.png",
+      "crossSite": [],
+      "instrumentFailure": null
+    }
+  ]
+}

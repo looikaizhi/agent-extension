@@ -1,0 +1,55 @@
+{
+  "run": "t09-flash-smoke",
+  "startedAt": "2026-09-14T05:24:52.927Z",
+  "goals": [
+    "gh-issues"
+  ],
+  "passes": 1,
+  "plugins": [
+    "skill"
+  ],
+  "model": {
+    "baseURL": "https://api.deepseek.com/v1",
+    "model": "deepseek-flash",
+    "price": {
+      "input": 1,
+      "cached": 0.02,
+      "output": 4
+    }
+  },
+  "fingerprint": "4da37ec4e7575086",
+  "trips": [
+    {
+      "pass": 1,
+      "id": "gh-issues",
+      "goal": "我想看看 n8n 这个项目最近有哪些人提了 issue",
+      "endUrl": "https://github.com/",
+      "lastStep": {
+        "kind": "step",
+        "role": "button",
+        "name": "Open quick search dialog, type / to search",
+        "action": "click"
+      },
+      "programmatic": {
+        "arrived": false,
+        "missed": "url"
+      },
+      "hops": 2,
+      "visited": [
+        "https://github.com/",
+        "https://github.com/"
+      ],
+      "calls": 2,
+      "requests": 2,
+      "tokens": {
+        "prompt": 7868,
+        "completion": 422,
+        "cached": 6400
+      },
+      "ending": "user_ended",
+      "confirmation": "all",
+      "sensitivePointed": 0,
+      "shot": "07-P1ghissues-2-第2跳重规划后.png"
+    }
+  ]
+}
