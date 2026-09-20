@@ -25,14 +25,14 @@ export interface RunRecord {
   url: string;
   route: readonly GuideRouteHop[];
   /** Every step that reached the screen, oldest first. */
-  steps: { title: string; outcome: GuideHistoryEntry['outcome'] }[];
+  steps: Pick<GuideHistoryEntry, 'title' | 'action' | 'effect'>[];
   /** How the run ended. */
   ending: Ending;
   /** How many of its steps were confirmed — never inferred from `ending`. */
   confirmation: Confirmation;
   evidence: Evidence;
   check: Check;
-  /** §5.10's model-call count at the end of the run. */
+  /** Model calls the run made, repair rounds included — what it cost. */
   calls: number;
   /** The Plugins this run was made with (CONTEXT.md `Plugin`): read from the
    *  switches when it started and used for every call it sent, so an eval can
@@ -54,9 +54,14 @@ export interface RunRecord {
  *
  * Confirmed is not arrived (CONTEXT.md `Arrival`): a confirmed step says the
  * user activated it and the page moved, not that it moved the right way.
+ *
+ * A step counts when it was taken *and* the page changed after it — moved or
+ * changed in place. A step taken on a page that then read back unchanged does
+ * not: that is what the record can prove, not a verdict on whether it worked
+ * (a copy button changes nothing and still does its job).
  */
 export function judgeConfirmation(history: readonly GuideHistoryEntry[]): Confirmation {
-  const confirmed = history.filter((h) => h.outcome === 'confirmed').length;
+  const confirmed = history.filter((h) => h.action === 'taken' && h.effect !== undefined && h.effect.kind !== 'none').length;
   if (confirmed === 0) return 'none';
   return confirmed === history.length ? 'all' : 'some';
 }
@@ -74,7 +79,7 @@ export function buildRunRecord(
     goal: state.goal,
     url: state.table.url,
     route: state.route,
-    steps: state.history.map((h) => ({ title: h.title, outcome: h.outcome })),
+    steps: state.history.map(({ title, action, effect }) => ({ title, ...(action ? { action } : {}), ...(effect ? { effect } : {}) })),
     ending,
     confirmation: judgeConfirmation(state.history),
     evidence: state.evidence,

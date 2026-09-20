@@ -1,36 +1,54 @@
-import type { ClarifyOption } from '@/agent/envelope/contract';
 import type { GuideHistory } from '@/agent/context/user-message';
+import type { Reading, Since, ToolCall, ToolResult, TurnOnWire } from '@/agent/context/turn';
 import type { PromptTable } from '@/core/extractor/types';
-import type { GuideStep, HighlightMode } from '@/shared/protocol';
-import type { GuideExpectAfter, GuideRouteHop, Ref } from '@/shared/types';
+import type { GuideStep } from '@/shared/protocol';
+import type { AskOption, AskWants, GuideExpectAfter, GuideRouteHop, Ref, WaitUntil } from '@/shared/types';
 import type { EffectOutcome } from './effect';
 
-/** Every reason a thread can be parked on a question (design doc §5.8). What
- *  `ThreadState.clarify` records. */
-export type ClarifyTrigger = 'CL-1' | 'CL-2';
+/**
+ * CONTEXT.md's `Outcome`, first half: what happened to the step on screen.
+ * `taken` — the step was done; `skipped` — the user pressed 跳过;
+ * `unavailable` — a safety rule stopped the run on the page it led to (P-3).
+ * A target that could not be found is not an action: it is a reading
+ * (CONTEXT.md `Reading`), and the model decides what it means.
+ */
+export type StepAction = 'taken' | 'skipped' | 'unavailable';
 
 /**
- * CONTEXT.md's four step-level judgments. `undefined` (absence from
- * `ThreadState.outcomes` at that index) means "not yet judged" — 03 only
- * ever writes `invalidated` (the "未能定位" fallback, see machine.ts); the
- * rest arrive with 07's `confirmed` judgement (D4).
+ * CONTEXT.md's `Outcome`, second half: what the page did afterwards — the page
+ * the step was pointed on against the page last read when it was settled
+ * (`effectOf` in transitions.ts). `moved` onto a different `View`, carrying
+ * where it went; `changed_in_place` on the same view; `none`, the page was
+ * read again and nothing on it had changed; `unknown`, every read since
+ * failed, so nothing was seen at all.
+ *
+ * `none` is not "did not work". Live run t11 recorded nine steps this way and
+ * none of them was a dead control: two copied the clone address, and the rest
+ * were links whose page did not change in this tab.
  */
-export type Outcome = 'confirmed' | 'skipped' | 'failed' | 'invalidated';
+export type StepEffect = { kind: 'moved'; to: string } | { kind: 'changed_in_place' } | { kind: 'none' } | { kind: 'unknown' };
 
 /**
  * How a run ended (CONTEXT.md `Run record`) — one half of what a Run record
  * says; how many steps were confirmed is the other, and neither is read off
- * the other. The first five are the reducer's own terminals; the rest happen
+ * the other. The first six are the reducer's own terminals; the rest happen
  * outside it, when the host ends a run that is still active.
+ *
+ * A run that never pointed at a step leaves no Run record at all (CONTEXT.md
+ * `Question`), so `answered` — and any other ending such a run meets — is
+ * never written down; it is what tells the host how to end it.
  */
 export type Ending =
   /** The model said the user has arrived (`done`). */
   | 'model_done'
+  /** A run that had pointed at nothing got its answer — `explain`, or an
+   *  `ask` back to the user: it was a question, and it is over. */
+  | 'answered'
   /** A fixed plan reached its last step. */
   | 'steps_walked'
   /** The model pointed again at a control that had already moved nobody. */
   | 'loop_backstop'
-  /** The model-call or doc-fetch quota ran out. */
+  /** The run took all the steps it may (ticket 09). */
   | 'quota_exhausted'
   /** A page reached across sites asked for credentials. */
   | 'credentials_stop'
@@ -44,7 +62,7 @@ export type Ending =
   | 'superseded';
 
 /** The endings the reducer reaches by itself — the ones a `ThreadState` carries. */
-export type ReducerEnding = Extract<Ending, 'model_done' | 'steps_walked' | 'loop_backstop' | 'quota_exhausted' | 'credentials_stop'>;
+export type ReducerEnding = Extract<Ending, 'model_done' | 'answered' | 'steps_walked' | 'loop_backstop' | 'quota_exhausted' | 'credentials_stop'>;
 
 /** The endings only the host sees: the run was still active when it stopped. */
 export type ExternalEnding = Exclude<Ending, ReducerEnding>;
@@ -55,20 +73,20 @@ export type Confirmation = 'all' | 'some' | 'none';
 
 /**
  * Design doc §5.7's three orthogonal axes — `Binding` is not one
- * of them: it is stamped by the renderer at paint time (machine.ts's own
- * `Binding` type) and never stored on `ThreadState`, because it answers "can
- * I point at it *right now*", a question with a fresh answer on every paint
- * attempt. `Evidence`/`Check` answer questions about the *run*, so they live
- * here instead.
+ * of them: it is stamped by the renderer at paint time (`binding.ts`) and
+ * never reaches the Thread, because it answers "can I point at it *right
+ * now*", a question with a fresh answer on every paint attempt.
+ * `Evidence`/`Check` answer questions about the *run*, so they live here
+ * instead.
  *
- * `'walked'` is declared now (S3's shape is already known) but no code path
- * under S2 ever assigns it — `architecture.spec.ts` greps for this; see this
- * file's own `evidence` field doc comment.
  */
-/** §5.7's first axis — where this flow's knowledge comes from, strongest first.
- *  `'handpicked'` is a fixed plan's: the person chose the element themselves, which
- *  is more direct than a document or an inference, but nobody has proven it works. */
-export type Evidence = 'walked' | 'handpicked' | 'documented' | 'model';
+/** §5.7's first axis — what the step on screen stands on, strongest first.
+ *  `'handpicked'` is a fixed plan's: the person chose the element themselves,
+ *  which is more direct than a document or an inference, but nobody has proven
+ *  it works. `'documented'` is a model's answer given after it read a document
+ *  on this site (`read_doc`) in the same conversation; `'model'` is one it gave
+ *  without. */
+export type Evidence = 'handpicked' | 'documented' | 'model';
 
 /** `'pass'` is produced by `judgeArrival` (07) when the arrived page really
  *  contains the shape the model predicted in `expect_after`. It was declared
@@ -93,9 +111,25 @@ export interface InflightEffect {
 }
 
 /**
+ * CONTEXT.md `Turn`, as the Thread holds it: the conversation inside the step
+ * being decided now. Opened afresh by every wake, cleared when an `Output`
+ * lands.
+ *
+ * `pending` is a tool call the host is carrying out right now. It is not an
+ * `inflight` effect on purpose: the host reads the page itself, in the same
+ * handler, and a tombstone for that would only be one more thing a worker
+ * evicted mid-read could leave behind to weld the thread shut. A read that
+ * never comes back costs nothing — the next wake opens a new turn, and a late
+ * reading with no pending call to match is dropped.
+ */
+export interface Turn extends TurnOnWire {
+  pending?: { effectId: string; call: ToolCall };
+}
+
+/**
  * The full state of one guided run — `step`'s sole state shape (machine.ts).
  * `rev`/`inflight` are design doc §10's two concurrency mechanisms; `goal`/`route`/
- * `steps`/`cursor`/`outcomes`/`ending` are design doc §10's "流程" row.
+ * `steps`/`cursor`/`ending` are design doc §10's "流程" row.
  *
  * `table` is this file's one deliberate addition beyond §10's literal list.
  * `steps[i].ref` is a snapshot-scoped handle (CONTEXT.md), and validating a
@@ -107,50 +141,56 @@ export interface InflightEffect {
  */
 /**
  * One step this thread has already put on screen. Deliberately *not* a
- * `GuideStep` and not an index into `steps`: `steps`/`cursor`/`outcomes` are
- * replaced wholesale every time a `guide` envelope lands (`guide/output/guide.ts`'s
+ * `GuideStep` and not an index into `steps`: `steps`/`cursor` are
+ * replaced wholesale every time a `point` lands (`guide/output/point.ts`'s
  * `consequence`), so anything hanging off them is erased on every
  * replan — which is exactly what made the guide re-propose the step the user
  * had just completed, on every page, in all five live GitHub rounds.
  *
- * `outcome` is `Outcome` narrowed to the three values this stage can honestly
- * decide. Each has one source and no other: `confirmed` from `page_changed`
- * (where `pageMoved` has already proven the page really moved), `invalidated`
- * from a `bind_result` of `unbound`, `unknown` for a step still on screen.
+ * `action` and `effect` are two separate facts and neither is read off the
+ * other. Both are absent while the step is still on screen and undecided.
  */
 export interface GuideHistoryEntry {
   /** The control's name as the user reads it on screen. */
   title: string;
   /** The page this step was proposed on. */
   url: string;
-  /** `failed` is 设计文档's "点了但没到": the user activated the control and
-   *  the page never moved. Before it existed such a step stayed `unknown`
-   *  forever — neither done nor failed — and the run's verdict counted it as
-   *  still in progress. */
-  outcome: Extract<Outcome, 'confirmed' | 'invalidated' | 'failed'> | 'unknown';
-  /** Where this step actually took the user. Set only alongside `confirmed`,
-   *  from the table of the page that was arrived at.
+  /** What happened to the step, proven by a reading (`used`), the user's
+   *  跳过, or the host failing to find it. The first answer is the one kept. */
+  action?: StepAction;
+  /** What the page did afterwards, settled once: when the model answers
+   *  next, or, on a fixed plan, when the user acts on the step after it.
    *
-   *  Without it the memory reads "you clicked Search" and the model cannot
-   *  tell a search it has *run* from one it has yet to run — live round 1
-   *  typed `n8n`, landed on `search?q=n8n`, and was then advised to open the
-   *  search box again "以便输入 n8n 找到仓库". The control name records what
-   *  was pressed; this records what it accomplished. */
-  landedAt?: string;
+   *  `moved.to` is what the model reads as 「之后到了 …」. Without it the
+   *  memory reads "you clicked Search" and the model cannot tell a search it
+   *  has *run* from one it has yet to run — live round 1 typed `n8n`, landed
+   *  on `search?q=n8n`, and was then advised to open the search box again
+   *  "以便输入 n8n 找到仓库". The control name records what was pressed; this
+   *  records what it accomplished. */
+  effect?: StepEffect;
 }
 
 export interface ThreadState {
   rev: number;
   goal: string;
-  /** The table the *current* `steps`/pending `callModel` were built against.
-   *  `table.pageHash`/`table.url`/`table.snapshotId` are ThreadState's only
-   *  record of "world state" — nothing duplicates them as separate fields. */
+  /** The page as last read — by the start, a reading, or a tool. What a model
+   *  call is sent with and its answer checked against: a read that lands while
+   *  the model is being asked voids that answer, so the two never differ. */
   table: PromptTable;
+  /** The page the step on screen was pointed on: the page the model's last
+   *  answer was checked against, or, on a fixed plan, the page read when its
+   *  current step went up. What a step did is this page against the last one
+   *  read (`effectOf`), and it is what the model is told the page changed
+   *  from when it is woken. */
+  pointedOn: PromptTable;
+  /** Readings that arrived since the model last answered and that no call
+   *  has carried to it yet (CONTEXT.md `Reading`). Present only when there
+   *  are some; one arriving while the model is being asked is what voids that
+   *  answer. */
+  readings?: readonly Reading[];
   route: readonly GuideRouteHop[];
   steps: readonly GuideStep[];
   cursor: number;
-  /** Parallel to `steps`. */
-  outcomes: readonly (Outcome | undefined)[];
   /** Every step already shown, oldest first, across every replan. Never
    *  reset — see `GuideHistoryEntry`. This is what the next user message
    *  reads so the model is told where the user has already been. */
@@ -169,16 +209,9 @@ export interface ThreadState {
    *  enforced at the one place a model call is emitted (`tryEmitCallModel`)
    *  rather than trusted to every input handler. */
   planSource: 'model' | 'fixed';
-  /** A fixed plan's step whose own target the user has just used, while the
-   *  page answers. It is the only thing allowed to move a fixed plan forward:
-   *  a page that changed on its own — a wander elsewhere, a re-render, a
-   *  target that vanished unused — gets the same step painted again instead of
-   *  having it claimed done. Never set on a model-driven run, which re-plans on
-   *  every change anyway. */
-  used?: boolean;
-  /** §5.7: "这个流程的知识从哪来". Set once, at the start of a run: `'model'`
-   *  for a plan the model makes, `'handpicked'` for a fixed plan the user
-   *  picked in the element table. */
+  /** §5.7: "这一步的知识从哪来". `'handpicked'` for the whole of a fixed plan;
+   *  on the model's run, set again by every answer that lands — `'documented'`
+   *  when the conversation it came out of read a document, `'model'` when not. */
   evidence: Evidence;
   /** §5.7: "到达期望验证的结果". Settled at each breakpoint by `judgeArrival`
    *  against the freshly extracted table: `'pass'` when the predicted shape is
@@ -198,15 +231,21 @@ export interface ThreadState {
    *  and only there, because "a page asks for your password" is unremarkable
    *  on the site you chose and worth stopping for on one you just arrived at. */
   crossedTo?: string;
-  /** Set while a question is waiting on the user to resolve it — CL-1 (the
-   *  model asked) or CL-2 (the first step bound ambiguously); absent the rest
-   *  of the time. */
-  clarify?: ClarifyTrigger;
-  /** §5.10's quota: model calls, including repair calls and replans. Cap 12. */
+  /** Model calls this run has made, repair rounds included — what it cost,
+   *  shown to the user and kept in the Run record. Not a limit: the two
+   *  budgets below are (ticket 09). */
   callCount: number;
-  /** §5.10's quota, independent of `callCount`. Cap 5. */
-  docFetchCount: number;
+  /** Model calls made since the step being decided began — since the last
+   *  answer landed. A step may make four (`transitions.ts`); the fourth
+   *  offers only answers. */
+  stepCalls: number;
+  /** Steps this run has taken: every answer that landed, and every step that
+   *  ran out of calls without one. A run may take twelve. */
+  spentSteps: number;
   inflight: InflightEffect | null;
+  /** The conversation with the model inside the step being decided now —
+   *  absent when no model is being asked anything. */
+  turn?: Turn;
 }
 
 /* ═══════════ what `step` (machine.ts) reads and returns ═══════════
@@ -214,21 +253,12 @@ export interface ThreadState {
  * Beside the state it changes rather than inside the reducer, so that anything
  * deciding a consequence can name them without importing the reducer. */
 
-/** CONTEXT.md's renderer-stamped axis: "此刻能不能把它指出来". Distinct from
- *  `core/descriptor/bind.ts`'s `BindResult` — that is a table-only match attempt
- *  (`'unique' | 'ambiguous' | 'not_found'`) this file never runs itself
- *  (bindStep needs no `chrome.*`, but its inputs — a live snapshot — are the
- *  content script's, not this reducer's to fabricate). A `Binding` value only
- *  ever arrives *already computed*, via a `bind_result` input, from the
- *  renderer's own attempt against whatever page is on screen right now. */
-export type Binding = 'bound' | 'ambiguous' | 'unbound';
-
 /** design doc §2.6's `EffectRequest.at` / `EffectResult.at`: the world state
  *  a dispatched effect was issued against. */
 export interface WorldAt {
   threadRev: number;
   snapshotId: string;
-  pageHash: string;
+  structureHash: string;
   url: string;
 }
 
@@ -240,7 +270,7 @@ export interface WorldAt {
  * reading directly.
  *
  * `nextEffectId` is required on `effect_result` even though only two of its
- * branches ever spend one (an E-3 replan, a `need_docs` envelope asking for a
+ * branches ever spend one (an E-3 replan, a `read_doc` envelope asking for a
  * fetch). It used to be optional, guarded by a throw on each of those two
  * branches — which made correctness depend on the caller predicting which
  * branch this reducer would take, and that prediction needs the payload
@@ -263,7 +293,7 @@ export type MachineInput =
    *
    * `goal` and `table` are required for the same reasons the model-driven
    * start needs them: `ThreadState` has no meaning without a goal, the Run
-   * record writes it, and the table is what `pageMoved` compares the next page
+   * record writes it, and the table is what `pageChange` compares the next page
    * against.
    *
    * `steps` is non-empty by type: a plan with nothing in it has nothing to show
@@ -279,18 +309,19 @@ export type MachineInput =
       outcome: EffectOutcome;
       nextEffectId: string;
     }
-  | { kind: 'bind_result'; binding: Binding }
   | { kind: 'cross_site_decision'; confirmed: boolean }
-  /** The settle window closed and the page never moved — `background.ts`'s
-   *  re-plan loop is the only thing that can observe that, because deciding
-   *  it requires a clock. */
-  | { kind: 'step_settle_timeout'; effectId: string }
   /** The user pressed 跳过 on the step on screen (`handleStepSkipped`). */
   | { kind: 'step_skipped' }
-  /** The user activated the target of the step on screen, on the page at `at`
-   *  — where the click happened, not where the tab is now (`handleStepUsed`). */
-  | { kind: 'step_used'; at: string }
-  | { kind: 'page_changed'; table: PromptTable; effectId: string };
+  /**
+   * An observation source saw something (CONTEXT.md `Reading`), and `table`
+   * is the page the host read right after — `null` when it could not be
+   * read. `nextEffectId` is for the model call it may wake (`handleReading`).
+   */
+  | { kind: 'reading'; reading: Reading; table: PromptTable | null; nextEffectId: string }
+  /** What the host brought back for a tool the model called — the page read
+   *  again (`observe`), or how a wait went (`wait_for`). `effectId` names the
+   *  call it answers; `nextEffectId` is for the model call that carries it back. */
+  | { kind: 'tool_result'; effectId: string; result: ToolResult; nextEffectId: string };
 
 /**
  * The two effect families design doc §2.1/§2.6 name — platform effects Host
@@ -301,13 +332,16 @@ export type MachineInput =
  *
  * `extract` (the Seam's other platform effect) is not a member yet: every
  * one of this task's fifteen slices hands `step` an already-extracted table
- * directly (`start`/`page_changed`'s `table` field) rather than asking the
+ * directly (`start`/`reading`'s `table` field) rather than asking the
  * reducer to request one — nothing in 03 ever needs to *decide* an
  * extraction is required. It joins this union in whichever later stage
  * first needs the reducer to ask for one.
  */
 export type MachineEffect =
-  | { kind: 'present'; step: GuideStep; index: number; total: number; mode: HighlightMode }
+  /** Paint the step on screen. `index` is which step of the run it is;
+   *  `total` is how many a plan written in advance has, and `null` for the
+   *  model's — it points at one step at a time, and nobody knows the count. */
+  | { kind: 'present'; step: GuideStep; index: number; total: number | null }
   | {
       kind: 'callModel';
       effectId: string;
@@ -317,21 +351,43 @@ export type MachineEffect =
       /** Refs that appeared since the last call, when the page did not
        *  navigate (`freshRefsBetween`). Absent otherwise. */
       freshRefs?: readonly Ref[];
+      /** What woke the model, when a reading did. Absent otherwise. */
+      since?: Since;
+      /** The step's last call: only answers are on offer, and the model is
+       *  told to give one. Absent on every other call. */
+      final?: true;
+      /** The step's conversation so far, once it has a round. `table` above
+       *  is then the page read last, and this carries the one the step opened on. */
+      turn?: TurnOnWire;
     }
+  /** Read the page as it is now, for the model that asked (`observe`). The
+   *  host does it itself and answers with a `tool_result`. */
+  | { kind: 'observe'; effectId: string }
+  /** Wait until `text` appears on the page (or goes), for at most `seconds`
+   *  — already capped — then read the page (`wait_for`). The content script
+   *  waits; the host answers with a `tool_result`. */
+  | { kind: 'waitFor'; effectId: string; until: WaitUntil; text: string; seconds: number }
   /** `url` is already approved: the host decided, the panel only fetches
    *  (§8.3). It arrives here from the page's own link, never from the model. */
   | { kind: 'fetchDoc'; effectId: string; viaRef: Ref; query: string; url: string }
-  /** CL-1: the model asked the user a question instead of planning a step
-   *  (§5.8). Carries the question and *every* candidate the model listed, in
-   *  the model's own order — narrowing them to one here would be the K-6
-   *  violation the whole clarify channel exists to avoid. */
-  | { kind: 'clarify'; question: string; options: readonly ClarifyOption[] }
+  /** CL-1: the model asked the user instead of pointing at a step (§5.8).
+   *  Carries what it wants back and *every* candidate it listed, in its own
+   *  order — narrowing them to one here would be the K-6 violation asking
+   *  exists to avoid. */
+  | { kind: 'ask'; question: string; wants: AskWants; options: readonly AskOption[] }
+  /** The model answered a question about the page (`explain`): the answer,
+   *  and the elements that back it up — outlined, none of them singled out. */
+  | { kind: 'explain'; answer: string; refs: readonly Ref[] }
   /** This step leaves the site. Ask before the user commits to it — the
    *  promise is that they see the destination *before* going, not after
    *  (§8.4). `from`/`to` are full hostnames: this stage has no brand
    *  extraction, so the card says the literal address and claims nothing
    *  about who owns it. */
   | { kind: 'requestCrossSiteConfirm'; from: string; to: string }
+  /** Stop the call or fetch still out under this id: whatever it brings back
+   *  answers a question nobody is asking any more (the user said something
+   *  new). Its result, if it still arrives, is stale and dropped (E-2). */
+  | { kind: 'cancel'; effectId: string }
   /** The run is over, and says why. Terminal: the thread already has its
    *  ending when this is emitted, and disagreeing means starting a new
    *  guide (`start` is the one input a finished thread accepts).

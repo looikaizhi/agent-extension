@@ -1,5 +1,5 @@
 /** Frame-qualified element handle. `e{n}` for the top frame, `f{frameId}e{n}` otherwise.
- *  Valid only within one snapshot — see K-1 in step1-implementation-plan.md. */
+ *  Valid only within one snapshot (CONTEXT.md `Ref`). */
 export type Ref = string & { readonly __brand: 'Ref' };
 
 /** Refuses to compile unless `T` is `never` — how the compile-time checks fail. */
@@ -37,7 +37,7 @@ export type NameSource =
   | 'href'
   | 'none';
 
-/** One coarse waypoint in a `guide` envelope's `route`. No `ref`, no control
+/** One coarse waypoint in a `point`'s `route`. No `ref`, no control
  *  name — see design doc §1.3/§5.4 and `TOOL_CHOICE_CLOSING`: `route`
  *  is allowed to be invented, so its shape carries nothing a `Ref` could be. */
 export interface GuideRouteHop {
@@ -45,12 +45,27 @@ export interface GuideRouteHop {
   goal: string;
 }
 
-/** The optional arrival check on a `guide` step. `must_contain` is optional
+/** The optional arrival check on a `point`. `must_contain` is optional
  *  *within* an optional field — the model may give `via_ref` without a shape
  *  expectation, or omit `expect_after` entirely (§5.4: "宁可不给，也不要瞎编"). */
 export interface GuideExpectAfter {
   via_ref: Ref;
   must_contain?: { role: string; name?: string };
+}
+
+/** What an `ask` wants back from the user: one of its options, or words only
+ *  they have. Here for the same reason as the two types above — the Thread and
+ *  the wire message carry it. */
+export type AskWants = 'choice' | 'text';
+
+/** What a `wait_for` waits for its text to do on the page. Here because the
+ *  content-script verb, the Thread and the wire all carry it. */
+export type WaitUntil = 'appears' | 'gone';
+
+/** One candidate an `ask` lists for the user to choose from. */
+export interface AskOption {
+  ref: Ref;
+  label: string;
 }
 
 /* What a guide run sent and got back, as the panel hands it to the worker —
@@ -78,5 +93,11 @@ export interface Trace {
    * fresh minimal conversation that never sees the page (§5.9).
    */
   system: string;
+  /**
+   * The tool schema the request offered, rendered as JSON — stored once, like
+   * `system`, and for the same reason. What the model could answer with is
+   * half of what it was asked; replaying a call without it is guessing.
+   */
+  tools: string;
   entries: TraceEntry[];
 }

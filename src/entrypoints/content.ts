@@ -1,22 +1,18 @@
-import { extract, extractPageHash } from '@/core/extractor/extract';
+import { extract, extractStructureHash } from '@/core/extractor/extract';
 import { pageStructureChanged } from '@/core/extractor/fingerprint';
 import { fullTable, project } from '@/core/extractor/project';
 import { registry } from '@/core/extractor/registry';
 import { bindStep } from '@/core/descriptor/bind';
 import { authorDescriptor } from '@/core/descriptor/author';
-import type { ExtractProfile, ProjectBudget, PromptItem, PromptTable } from '@/core/extractor/types';
+import type { ExtractProfile, PromptItem, PromptTable } from '@/core/extractor/types';
 import { Overlay } from '@/core/overlay/overlay';
-import { scrollToTarget, TargetTracker } from '@/core/overlay/tracker';
-import type {
-  ContentRequest,
-  ContentResponse,
-  GuideStep,
-  HighlightAck,
-  HighlightCommand,
-  HighlightFailure,
-} from '@/shared/protocol';
+import { presenterDom, rectOf } from '@/core/overlay/dom';
+import { domWaitPorts, waitForText } from '@/core/wait/wait-for-text';
+import { createPresenter } from '@/core/overlay/presenter';
+import type { ContentRequest, ContentResponse, GuideStep, HighlightAck } from '@/shared/protocol';
 import { emit, onRequest } from '@/shared/rpc';
-import type { Rect, Ref } from '@/shared/types';
+import type { Ref } from '@/shared/types';
+import { sameView } from '@/shared/view';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -29,13 +25,6 @@ export default defineContentScript({
   allFrames: false,
   main() {
     let overlay: Overlay | null = null;
-    let tracker: TargetTracker | null = null;
-    /** The element the current step is pointing at, for `onNext` to hand the
-     *  keyboard to. Kept beside `tracker` because both are per-step and both
-     *  are cleared by `teardown`. */
-    let targetEl: HTMLElement | null = null;
-    /** The one step currently on screen. There is no flow here, by design. */
-    let current: HighlightCommand | null = null;
     let off: (() => void) | null = null;
 
     /**
@@ -71,67 +60,56 @@ export default defineContentScript({
         // `el.click()` from here would be the extension acting, which is the
         // one thing this product does not do («只指路，不开车», CONTEXT.md).
         //
-        // It does *not* report `STEP_CONFIRMED`: the button no longer claims
-        // the step was done, so it must not say so. The existing activation
-        // listener below already reports the moment the user really fires it.
+        // It does *not* report `STEP_USED`: the button no longer claims
+        // the step was done, so it must not say so. The presenter's activation
+        // listener already reports the moment the user really fires it.
         onNext: () => {
-          targetEl?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-          targetEl?.focus({ preventScroll: true });
+          const target = presenter.target;
+          if (!(target instanceof HTMLElement)) return;
+          target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          target.focus({ preventScroll: true });
         },
-        onSkip: () => report('STEP_SKIPPED'),
+        onSkip: () => presenter.skip(),
         onExit: () => {
+          const current = presenter.current;
           if (current) emit({ type: 'SESSION_ENDED', sessionId: current.sessionId, reason: 'user_closed' });
           teardown();
         },
-        onRetry: () => void render(),
+        onRetry: () => presenter.retry(),
+        // The message card's own buttons: closed, or a cross-site answer. What
+        // the screen does next is the host's to say; a note is only read.
+        onCloseMessage: (kind) => {
+          overlay?.say(null);
+          if (kind === 'ask' || kind === 'answer') emit({ type: 'MESSAGE_CLOSED' });
+        },
+        onCrossSite: (go) => {
+          overlay?.say(null);
+          emit({ type: 'CROSS_SITE_DECIDED', confirmed: go });
+        },
       });
       return overlay;
     };
 
-    function report(type: 'STEP_CONFIRMED' | 'STEP_SKIPPED'): void {
-      if (!current) return;
-      emit({ type, sessionId: current.sessionId, stepIndex: current.progress.index });
-    }
-
-    /** Removes the activation listener for the step currently on screen. */
-    let unwatchActivation: (() => void) | null = null;
-
     /**
-     * How long 「这一步完成了，正在看新页面…」 may stand before it stops being
-     * true.
-     *
-     * Nothing in this file can make the next step arrive, and there are live
-     * paths where it never does: a re-plan that cannot read the page it landed
-     * on returns silently, and so does one that has run out of model calls.
-     * Without a deadline the user is left reading a progress message with no
-     * buttons under it, which is worse than the failure screen it replaced —
-     * that screen at least carries 重试 and 结束.
+     * The step on screen, and everything that keeps it there. Extraction, the
+     * sensitive-field set and the overlay itself stay in this file — authoring
+     * and `EXTRACT` use them too — and are lent to the presenter.
      */
-    const SETTLING_GRACE_MS = 5000;
-    let settleTimer = 0;
-
-    function stopSettling(): void {
-      if (settleTimer) clearTimeout(settleTimer);
-      settleTimer = 0;
-    }
+    const presenter = createPresenter({
+      overlay: () => ensureOverlay(),
+      bind: (step) => bindHere(step),
+      isSensitive: (refs) => sensitiveOf(refs),
+      emit,
+      dom: presenterDom,
+    });
 
     function teardown(): void {
-      unwatchActivation?.();
-      unwatchActivation = null;
-      stopSettling();
-      targetEl = null;
-      stopWatching();
+      presenter.teardown();
       stopWatchingPageStructure();
-      tracker?.detach();
-      tracker = null;
+      overlay?.setWaiting(false);
+      overlay?.say(null);
       overlay?.hide();
-      current = null;
     }
-
-    const failed = (failure: HighlightFailure): ContentResponse<'HIGHLIGHT'> => ({
-      ok: true,
-      data: { resolved: null, rect: null, scrolled: false, failure },
-    });
 
     /**
      * Late binding — the heart of task 8, and the only interface an agent can
@@ -170,294 +148,62 @@ export default defineContentScript({
     }
 
     /**
-     * Returns whether anything was actually put on screen, not just whether it
-     * succeeded. The lost screen is a *rendered* state — it carries the only
-     * buttons the user has at that moment — so the command that produced it has
-     * to stay adopted. Reverting it left the overlay showing a step the content
-     * script no longer remembered, and 跳到目标 / 跳过 / 结束 all silently did
-     * nothing. Only a refusal that paints nothing may leave no trace.
-     */
-    async function render(): Promise<{ res: ContentResponse<'HIGHLIGHT'>; painted: boolean }> {
-      const cmd = current;
-      if (!cmd) return { res: failed('ref_not_found'), painted: false };
-      const step = cmd.step;
-
-      // Fast path: the handle is still valid, so use it. `registry.resolve`
-      // carries R-04's snapshot guard itself, so a stale handle simply yields
-      // null and falls through to rebinding rather than being refused.
-      let el = step.ref ? registry.resolve(cmd.snapshotId, step.ref) : null;
-      let resolved: Ref | null = el ? step.ref! : null;
-      let also = (step.alsoRefs ?? [])
-        .map((r) => registry.resolve(cmd.snapshotId, r))
-        .filter((x): x is Element => x !== null);
-      let candidates: readonly Ref[] | undefined;
-
-      // `alsoRefs` carry no descriptor of their own, so they cannot be rebound.
-      // Dropping the dead ones silently would paint fewer highlights than the
-      // caller asked for, and the caller would never know.
-      const declared = step.alsoRefs ?? [];
-      if (declared.length > 0 && also.length !== declared.length) return { res: failed('snapshot_stale'), painted: false };
-
-      if (!el) {
-        if (declared.length > 0) {
-          // The caller named the set explicitly — `explain` / `diagnose`, or a
-          // step already known to be ambiguous. Honour it; rebinding here would
-          // silently substitute our own idea of the target for theirs.
-          candidates = declared;
-        } else if (cmd.mode === 'explain') {
-          // A QA reference is a point-in-time assertion ("the one I
-          // read just then"), not a durable intent like a guide Step. Rebinding
-          // by descriptor here would silently swap in whatever element happens
-          // to match now — right role, right name, wrong moment — and paint it
-          // with the same confidence as the original, which is the exact shape
-          // of L-4. So `explain` trusts only the snapshot it was given: if the
-          // fast path above did not resolve, the snapshot is stale — full stop,
-          // not "let's go look again". This must not fall through to the
-          // unbound/`lost` screen below either: that screen means "never found
-          // it", `snapshot_stale` means "found it once, not anymore" — a
-          // different fact than the renderer owes the user a different way.
-          return { res: failed('snapshot_stale'), painted: false };
-        } else {
-          const rebound = bindHere(step);
-          el = rebound.el;
-          resolved = rebound.el ? rebound.refs[0]! : null;
-          if (!rebound.el && rebound.also.length > 0) {
-            also = rebound.also;
-            candidates = rebound.refs;
-          }
-        }
-      }
-
-      // S-03, second and independent enforcement point: a hand-written fixed plan is
-      // blocked exactly like a model would be. It sits in front of every paint,
-      // and covers *every* ref the step can put on screen — `alsoRefs` cuts a
-      // hole in the scrim just as `ref` does, and it is the path `explain` /
-      // `diagnose` will take (F-1). Evaluated after binding, because binding is
-      // what decides which refs are actually involved.
-      if (sensitiveOf([...(resolved ? [resolved] : []), ...(candidates ?? step.alsoRefs ?? [])]))
-        return { res: failed('sensitive_blocked'), painted: false };
-
-      const ui = ensureOverlay();
-      ui.setStep(view(cmd));
-
-      if (!el) {
-        if (also.length > 0) {
-          attachTracker(ui, also[0]!, also.slice(1), step, 'ambiguous');
-          return {
-            res: { ok: true, data: { resolved: null, rect: rectOf(also[0]!), scrolled: false, candidates } },
-            painted: true,
-          };
-        }
-        ui.paint([], 'lost');
-        // Painted: the user is looking at the lost screen right now.
-        return { res: failed('ref_not_found'), painted: true };
-      }
-
-      const scrolled = cmd.autoScroll ? await scrollToTarget(el) : false;
-      // `current` may have been cleared while we awaited the scroll.
-      if (current !== cmd) return { res: failed('ref_not_found'), painted: false };
-
-      attachTracker(ui, el, also, step, 'shown');
-      return { res: { ok: true, data: { resolved, rect: rectOf(el), scrolled } }, painted: true };
-    }
-
-    function attachTracker(
-      ui: Overlay,
-      el: Element,
-      also: Element[],
-      step: GuideStep,
-      initial: 'shown' | 'ambiguous',
-    ): void {
-      tracker?.detach();
-      // Someone took over: whatever this step becomes now, it is no longer the
-      // previous step waiting for a successor.
-      stopSettling();
-      // Whether the user has fired *this* target since it was attached. The
-      // activation listener below is the only writer, and every re-attach
-      // starts a fresh target, so this can never carry a previous step's
-      // answer forward.
-      let used = false;
-      tracker = new TargetTracker({
-        paint: (rects, status) => ui.paint(rects, initial === 'ambiguous' ? 'ambiguous' : status),
-        onLost: (reason) => {
-          // A target that vanished because the user just used it is not a
-          // target we failed to find — it is a step that succeeded. On the DOM
-          // the two are identical (the element is simply gone), which is why
-          // pressing a link on github.com painted the "找不到这一步的目标"
-          // screen ~50ms after the click and left it up for the whole second
-          // the next plan took to arrive.
-          if (used) {
-            ui.paint([], 'settling');
-            stopSettling();
-            settleTimer = setTimeout(() => {
-              settleTimer = 0;
-              if (!current) return;
-              ui.paint([], 'lost');
-              const late = current.step.ref ?? step.ref;
-              if (late) emit({ type: 'TARGET_LOST', sessionId: current.sessionId, ref: late, reason });
-            }, SETTLING_GRACE_MS) as unknown as number;
-            return;
-          }
-          ui.paint([], 'lost');
-          // Read from `current`, never from a captured step: one tracker used to
-          // be built for the whole flow and reported step 0's ref forever.
-          const ref = current?.step.ref ?? step.ref;
-          if (current && ref) emit({ type: 'TARGET_LOST', sessionId: current.sessionId, ref, reason });
-        },
-        isOccluded: (t) => ui.isOccluded(t),
-      });
-      tracker.attach(el, also);
-      targetEl = el instanceof HTMLElement ? el : null;
-
-      // Watch the target being used. This is now the *only* thing that reports
-      // a step done: 「跳到目标」 hands over the keyboard and claims nothing, so
-      // whether the step actually happened is answered by the page, never by a
-      // button the user pressed for a different reason.
-      //
-      // §2.3 U-03 says "不自动跳步", and this does not break it: the rule exists
-      // to stop the guide advancing on *no* evidence. Advancing on the evidence
-      // of the actual click is the opposite of that.
-      //
-      // Listening is not acting. The listener is passive and never cancels.
-      unwatchActivation?.();
-      if (ADVANCING_ACTIONS.has(step.expectedUserAction)) {
-        const onActivate = () => {
-          // Set before reporting, because the target can be torn out of the DOM
-          // by the very handler this click is about to run.
-          used = true;
-          report('STEP_CONFIRMED');
-        };
-        el.addEventListener('click', onActivate, { capture: true, once: true, passive: true });
-        unwatchActivation = () => el.removeEventListener('click', onActivate, { capture: true });
-      }
-    }
-
-    /** Clicking is completion for these; for `input` / `observe` it is not. */
-    const ADVANCING_ACTIONS = new Set(['click', 'toggle', 'select']);
-
-    /**
-     * A lost step is not a dead end — it is a step whose target has not appeared
-     * *yet*. The user has just been told to open a menu, so the very next thing
-     * that happens is the DOM changing. Sitting still through that is why the
-     * guide looked frozen: it only ever reacted to its own buttons.
-     */
-    let lostWatch: (() => void) | null = null;
-
-    function stopWatching(): void {
-      lostWatch?.();
-      lostWatch = null;
-    }
-
-    /**
-     * Backoff, *and* mutations — not mutations alone.
-     *
-     * The first version only retried when the DOM changed, which sounds
-     * sufficient and is not: a page that has just finished loading produces no
-     * mutations at all. The host would render one step into a page that was a
-     * few milliseconds from being ready, get `ref_not_found`, and nothing would
-     * ever try again. That was a hard-reproducible failure of the cross-page
-     * guide, not a flake — it only ever "passed" when instrumentation happened
-     * to add a millisecond of delay.
-     *
-     * Mutations still matter: on an SPA they are what says "the menu opened",
-     * and reacting to them is far faster than waiting out the schedule.
-     */
-    const RETRY_MS = [250, 500, 900, 1500, 2500, 4000, 6000];
-
-    function watchForTarget(): void {
-      if (lostWatch) return; // already watching this step
-      let attempt = 0;
-      let timer = 0;
-      let stopped = false;
-
-      const schedule = (delay?: number) => {
-        if (stopped || timer) return;
-        if (attempt >= RETRY_MS.length) return stopWatching();
-        timer = setTimeout(attemptBind, delay ?? RETRY_MS[attempt++]!) as unknown as number;
-      };
-
-      const attemptBind = () => {
-        timer = 0;
-        if (stopped || !current) return stopWatching();
-        void render().then(({ res }) => {
-          if (stopped) return;
-          if (res.ok && !res.data.failure) {
-            const found = current;
-            stopWatching();
-            if (found && res.data.resolved)
-              emit({ type: 'TARGET_FOUND', sessionId: found.sessionId, ref: res.data.resolved });
-            return;
-          }
-          schedule();
-        });
-      };
-
-      // A mutation only pulls the next attempt forward; it never buys extra
-      // attempts, so a page that churns constantly cannot keep us extracting.
-      const mo = new MutationObserver(() => {
-        if (timer) {
-          clearTimeout(timer);
-          timer = 0;
-        }
-        schedule(200);
-      });
-      mo.observe(document, {
-        subtree: true,
-        childList: true,
-        attributes: true,
-        attributeFilter: ['aria-expanded', 'hidden', 'aria-hidden', 'class', 'style'],
-      });
-
-      lostWatch = () => {
-        stopped = true;
-        mo.disconnect();
-        if (timer) clearTimeout(timer);
-      };
-      schedule();
-    }
-
-    /**
      * A second, independent subscription on top
      * of the same DOM-observation machinery `TargetTracker` already uses.
      * `TargetTracker` watches one highlighted element; this watches whatever
-     * landmark/heading nodes feed `pageFingerprint` — the exact "一小撮
+     * landmark/heading nodes feed `structureFingerprint` — the exact "一小撮
      * landmark/heading 节点" the Seam names, reached here not by writing a
      * second, narrower DOM scanner but by recomputing the *existing*
-     * `pageFingerprint` (already, by construction, insensitive to anything
+     * `structureFingerprint` (already, by construction, insensitive to anything
      * else — `core/extractor/fingerprint.ts`'s own doc comment) after any
      * mutation and comparing against the last hash *this content script*
      * reported. `pageStructureChanged` is the one-line decision; this
      * function is only the DOM plumbing around it.
      *
-     * Debounced rather than run on every mutation: `TargetTracker`'s own doc
-     * comment notes a `MutationObserver` can fire hundreds of times a second
-     * on a busy console page, and this watcher's own check is far from free
-     * enough to run at that rate. Uses `extractPageHash()`, never `extract()`
-     * — see that function's own doc comment for why calling the *full*,
-     * registry-committing extraction from an unrelated background watcher
-     * would silently break every other live `HIGHLIGHT` on the page.
+     * Checked once the page's main thread has nothing more urgent
+     * (`presenterDom.whenIdle`), not on every mutation: `TargetTracker`'s own
+     * doc comment notes a `MutationObserver` can fire hundreds of times a
+     * second on a busy console page, and this watcher's own check walks the
+     * whole document. Not after a guessed quiet period, which on a page that
+     * keeps changing keeps restarting and never ends; and not in an idle
+     * period either, which a page that spends every frame never has. Uses `extractStructureHash()`,
+     * never `extract()` — see that function's own doc comment for why calling
+     * the *full*, registry-committing extraction from an unrelated background
+     * watcher would silently break every other live `HIGHLIGHT` on the page.
      */
-    const STRUCTURE_DEBOUNCE_MS = 400;
     let structureWatch: (() => void) | null = null;
-    let lastReportedPageHash: string | null = null;
+    let lastReportedStructureHash: string | null = null;
+    /**
+     * The address the last report was about. The structure hash no longer
+     * carries the address — which page this is belongs to CONTEXT.md's `View`
+     * — so a same-document navigation onto a page with the same landmarks
+     * would otherwise go unreported. The hash used to catch that only because
+     * the path was hashed in with the structure, and no other trigger does:
+     * `chrome.tabs.onUpdated` never completes for a same-document navigation,
+     * and the user need not have clicked the step on screen.
+     */
+    let lastReportedUrl = '';
 
     function watchPageStructure(): void {
       if (structureWatch) return; // already watching this session
-      lastReportedPageHash = extractPageHash();
-      let timer = 0;
+      lastReportedStructureHash = extractStructureHash();
+      lastReportedUrl = location.href;
+      let pending: (() => void) | null = null;
 
       const check = () => {
-        timer = 0;
-        if (!current) return; // session ended while the debounce was pending
-        const hash = extractPageHash();
-        if (!pageStructureChanged(lastReportedPageHash, hash)) return;
-        lastReportedPageHash = hash;
-        emit({ type: 'PAGE_STRUCTURE_CHANGED', sessionId: current.sessionId, pageHash: hash });
+        pending = null;
+        const current = presenter.current;
+        if (!current) return; // session ended while the check was pending
+        const hash = extractStructureHash();
+        const url = location.href;
+        if (!pageStructureChanged(lastReportedStructureHash, hash) && sameView(lastReportedUrl, url)) return;
+        lastReportedStructureHash = hash;
+        lastReportedUrl = url;
+        emit({ type: 'PAGE_STRUCTURE_CHANGED', sessionId: current.sessionId, structureHash: hash });
       };
 
       const mo = new MutationObserver(() => {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(check, STRUCTURE_DEBOUNCE_MS) as unknown as number;
+        pending ??= presenterDom.whenIdle(check);
       });
       mo.observe(document, {
         subtree: true,
@@ -468,33 +214,16 @@ export default defineContentScript({
 
       structureWatch = () => {
         mo.disconnect();
-        if (timer) clearTimeout(timer);
-        timer = 0;
+        pending?.();
+        pending = null;
       };
     }
 
     function stopWatchingPageStructure(): void {
       structureWatch?.();
       structureWatch = null;
-      lastReportedPageHash = null;
-    }
-
-    const rectOf = (el: Element): Rect => {
-      const r = el.getBoundingClientRect();
-      return [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)];
-    };
-
-    function view(cmd: HighlightCommand) {
-      const d = cmd.step.descriptor;
-      return {
-        index: cmd.progress.index,
-        total: cmd.progress.total,
-        title: cmd.step.title,
-        detail: cmd.step.detail,
-        value: cmd.step.value,
-        skippable: cmd.skippable,
-        looking: `找的是：${d.role}｜${d.name}${d.scope ? `（在「${d.scope}」内）` : ''}${d.nth !== undefined ? `（第 ${d.nth} 个）` : ''}`,
-      };
+      lastReportedStructureHash = null;
+      lastReportedUrl = '';
     }
 
     let sensitiveRefs = new Set<string>();
@@ -502,9 +231,8 @@ export default defineContentScript({
     const sensitiveOf = (refs: readonly Ref[]): boolean => refs.some((r) => sensitiveRefs.has(r));
 
     // Binding needs the same lens the caller extracted through, so the profile
-    // and budget of the last EXTRACT are remembered rather than guessed.
+    // of the last EXTRACT is remembered rather than guessed.
     let lastProfile: ExtractProfile = 'interactive';
-    let lastBudget: ProjectBudget = { maxNodes: 400 };
 
     /* ═══════════ authoring: pick an element, get a descriptor ═══════════ */
 
@@ -585,7 +313,6 @@ export default defineContentScript({
 
         case 'EXTRACT': {
           lastProfile = req.profile;
-          lastBudget = req.budget;
           const view = extract(req.profile);
           // Sensitivity is tracked over the *full* set, not the projected one:
           // a password field pruned for being off screen is still a password
@@ -598,36 +325,17 @@ export default defineContentScript({
           return { ok: true, data: project(view, req.budget) };
         }
 
-        case 'HIGHLIGHT': {
-          // A refusal that painted nothing must leave no trace — adopting it
-          // would keep a blocked step reachable through "重试定位". But a lost
-          // screen *is* painted, and the command behind it must stay adopted or
-          // its buttons report nothing.
-          //
-          // `current === mine` is the reentrancy guard, and it is load-bearing.
-          // `render()` awaits `scrollToTarget` for up to 800 ms, and the host
-          // legitimately sends two commands in a row after a navigation (the
-          // step the user confirmed, then the same step replayed against the new
-          // page). Without the guard the *older* render would wake up and
-          // restore its own `previous`, wiping out the newer command — so both
-          // renders then failed their own `current !== cmd` check and the guide
-          // silently died on exactly the transition it exists to handle.
-          const previous = current;
-          const mine = req.command;
-          current = mine;
+        case 'HIGHLIGHT':
           // Starts once per session (idempotent — see the guard inside), and
           // keeps running across every subsequent step of the same guide, not
-          // just this one command: §5.3's re-planning trigger has to notice a
-          // structural change no matter which step happens to be on screen
-          // when it happens.
+          // just this one command: the page changing by itself is one of the
+          // observation sources (CONTEXT.md `Reading`), whichever step happens
+          // to be on screen when it happens.
           watchPageStructure();
-          const { res, painted } = await render();
-          if (!painted && current === mine) current = previous;
-          // Keep looking while the step is on screen but unresolved.
-          if (painted && res.ok && res.data.failure === 'ref_not_found') watchForTarget();
-          else stopWatching();
-          return res;
-        }
+          // A step on screen supersedes whatever the card was saying; an
+          // outline is what the card is about, and leaves it.
+          if (req.command.mode === 'guide') overlay?.say(null);
+          return presenter.show(req.command);
 
         case 'INSPECT':
           if (req.on) startInspect();
@@ -640,11 +348,27 @@ export default defineContentScript({
           return { ok: true, data: null };
 
         case 'DEBUG_GET_OVERLAY_STATE':
-          return { ok: true, data: overlay ? overlay.getState() : null };
+          return { ok: true, data: overlay ? { ...overlay.getState(), watch: presenter.watch } : null };
+
+        case 'WAIT_FOR':
+          // `wait_for`: reads the page until a piece of text appears or goes.
+          // The host caps the time; this only honours it.
+          return { ok: true, data: await waitForText(domWaitPorts, req.until, req.text, req.timeoutMs) };
+
+        case 'WAITING_FOR_PANEL':
+          // Our own card, and nothing of the page's. An overlay that was never
+          // made has nothing to take down.
+          if (req.waiting || overlay) ensureOverlay().setWaiting(req.waiting);
+          return { ok: true, data: null };
+
+        case 'SAY':
+          if (req.message || overlay) ensureOverlay().say(req.message);
+          return { ok: true, data: null };
       }
     });
 
     addEventListener('pagehide', () => {
+      const current = presenter.current;
       if (current) emit({ type: 'SESSION_ENDED', sessionId: current.sessionId, reason: 'navigated' });
     });
   },

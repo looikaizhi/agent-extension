@@ -1,6 +1,9 @@
-import { needDocs } from '@/agent/tools/need-docs';
-import { clarify } from './output/clarify';
-import { guide } from './output/guide';
+import { readDoc } from '@/agent/tools/read-doc';
+import { observe } from '@/agent/tools/observe';
+import { waitFor } from '@/agent/tools/wait-for';
+import { ask } from './output/ask';
+import { explain } from './output/explain';
+import { point } from './output/point';
 import { done } from './output/done';
 import type { GuideIntentModule } from './intent-module';
 
@@ -14,7 +17,7 @@ import type { GuideIntentModule } from './intent-module';
  * the guide agent answers with is here; the contract keeps only what both
  * agents share.
  */
-export const GUIDE_INTENT_MODULES = [guide, clarify, needDocs, done] as const;
+export const GUIDE_INTENT_MODULES = [point, ask, explain, observe, waitFor, readDoc, done] as const;
 
 type EnvelopeOf<M> = M extends GuideIntentModule<infer E> ? E : never;
 

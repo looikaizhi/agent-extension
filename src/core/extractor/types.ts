@@ -49,7 +49,9 @@ export interface LocatorView {
   snapshotId: string;
   url: string;
   title: string;
-  pageHash: string;
+  /** Landmark/heading structure only — never which page this is. That is `url`,
+   *  compared as CONTEXT.md's `View`. */
+  structureHash: string;
   profile: ExtractProfile;
   /** Captured here so `project()` stays free of DOM globals and can run in Node. */
   viewport: { width: number; height: number };
@@ -139,7 +141,9 @@ export interface PromptTable {
   snapshotId: string;
   url: string;
   title: string;
-  pageHash: string;
+  /** Landmark/heading structure only — never which page this is. That is `url`,
+   *  compared as CONTEXT.md's `View`. */
+  structureHash: string;
   items: PromptItem[];
   /** How many elements the budget cut from the document's tail. `0` means the
    *  table is the whole page. A count rather than a flag because the model is

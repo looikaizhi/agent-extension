@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { PromptTable } from '@/core/extractor/types';
 import { descriptorOf } from '@/core/descriptor/bind';
 import { testConnection } from '@/agent/provider/provider';
-import { questionAgent } from '@/agent/agents/question/agent';
-import { runQuestion } from '@/agent/agents/question/runner';
 import { DEFAULT_CONFIG, loadConfig, PRESETS, saveConfig, type ProviderConfig } from '@/shared/settings';
 import {
   type ContentEvent,
-  type GuideClarify,
+  type ElementDescriptor,
+  type GuideAsk,
+  type GuideExplain,
   type GuideCrossSite,
   type GuideState,
   type GuideStep,
@@ -18,25 +18,17 @@ import { onEvent } from '@/shared/rpc';
 import type { GuideInflightResponse, WireBinding, WireCheck, WireEvidence } from '@/shared/protocol';
 import type { GuideRouteHop } from '@/shared/types';
 import { NodeTable } from './components/NodeTable';
+import { Prose } from './Prose';
 import { StatsBar } from './components/StatsBar';
 import { recoverInflightOnMount, startEffectListener } from './effects';
-import {
-  type CallRecord,
-  type QaContext,
-  describeBinding,
-  describeCheck,
-  describeEvidence,
-  sameQaContext,
-  summarizeCost,
-} from './qa';
+import { type CallRecord, describeBinding, describeCheck, describeEvidence, summarizeCost } from './view-model';
 
 /**
- * "账单前置": the model's latest coarse `route` plus
- * §5.7's three axes, shown next to whatever step is on screen — present only
- * while an S2 model-driven guide is running (`GuideState`'s optional fields
- * are absent for every S1 path, `App.tsx` never fabricates a placeholder for
- * them). Replaced wholesale on every `GUIDE_STATE` broadcast, never merged
- * with what was shown before (the Seam: "不做跨调用的路标拼接或去重").
+ * "账单前置": the model's latest coarse `route` plus §5.7's three axes, shown
+ * next to whatever step is on screen. Replaced wholesale on every
+ * `GUIDE_STATE` broadcast, never merged with what was shown before (the Seam:
+ * "不做跨调用的路标拼接或去重") — which is why the host sends all of it every
+ * time.
  */
 type GuideAxes = {
   route: readonly GuideRouteHop[];
@@ -46,45 +38,31 @@ type GuideAxes = {
   /** The model's own reason for the control on screen. */
   why?: string;
   /** Steps already walked, with how each turned out. */
-  walked?: readonly { title: string; url: string; outcome: string; landedAt?: string }[];
+  walked?: readonly WalkedStep[];
   calls?: number;
+  spentSteps?: number;
 };
 
-const OUTCOME_LABEL: Record<string, string> = {
-  confirmed: '已完成',
-  invalidated: '目标消失',
-  unknown: '进行中',
+type WalkedStep = NonNullable<GuideState['walked']>[number];
+
+/** What the user reads beside each step already walked. A step taken on a page
+ *  that did not change is said as exactly that — a copy button, or a link that
+ *  opened a new tab, did its job without this page moving. */
+const walkedLabel = (w: WalkedStep): string => {
+  if (w.action === 'unavailable') return '为安全停下';
+  if (w.action === 'skipped') return '跳过';
+  if (w.action !== 'taken' || w.effect === undefined) return '进行中';
+  if (w.effect.kind === 'unknown') return '点了，之后读不到这一页';
+  return w.effect.kind === 'none' ? '点了，这一页没有变化' : '已完成';
 };
 
 type Status = { kind: 'idle' | 'busy' | 'ok' | 'error'; text: string };
 
-/**
- * What "问这个页面" currently shows. Deliberately separate from `Status`
- * above (which belongs to the goal-guide input): the two inputs are two
- * different product capabilities, and conflating their
- * status lines would mean asking a question could stomp on a guide-in-
- * progress message, or vice versa.
- */
-type QaViewState =
-  | { kind: 'idle' }
-  | { kind: 'busy'; message: string }
-  // `highlightIssue` is set only when the *panel's own* page-identity check
-  // (`sameQaContext`) passed but the host's later, narrower check (it
-  // can only see `chrome.tabs.get`, not `snapshotId`) rejected the
-  // highlight anyway, or the host could not reach the content script at
-  // all. The answer text is still shown — the panel already trusts it —
-  // this only says the highlight itself did not make it onto the page.
-  | { kind: 'explain'; message: string; highlightIssue?: string }
-  | { kind: 'clarify'; message: string; options: readonly { ref: string; label: string }[]; highlightIssue?: string }
-  | { kind: 'need_text'; message: string }
-  | { kind: 'error'; message: string };
-
 const FAILURE_TEXT: Record<HighlightFailure, string> = {
+  view_moved: '页面已经换了，这一步没有画出来',
   snapshot_stale: '页面已变化，请重新抽取',
   ref_not_found: '找不到目标元素',
   sensitive_blocked: '目标是敏感输入框，已拒绝高亮',
-  not_visible: '目标当前不可见',
-  frame_unreachable: '目标在无法访问的 iframe 中',
 };
 
 export function App() {
@@ -96,12 +74,11 @@ export function App() {
   const [log, setLog] = useState<string[]>([]);
   // `null` whenever no guide is currently reporting axes — see `GuideAxes`'s own doc comment.
   const [guideAxes, setGuideAxes] = useState<GuideAxes | null>(null);
-  /** CL-1's question and its candidates, verbatim. `null` whenever the guide
-   *  is not waiting on an answer. */
-  const [guideClarify, setGuideClarify] = useState<{
-    question: string;
-    options: readonly { ref: string; label: string }[];
-  } | null>(null);
+  /** CL-1's question, what it wants back and its candidates, verbatim.
+   *  `null` whenever the guide is not waiting on an answer. */
+  const [guideAsk, setGuideAsk] = useState<Pick<GuideAsk, 'question' | 'wants' | 'options' | 'runGoesOn'> | null>(null);
+  /** The guide agent's answer to a question about the page (`explain`). */
+  const [guideExplain, setGuideExplain] = useState<string | null>(null);
   /** P-2: the next step leaves the site, and nothing is shown until the user
    *  answers. `null` whenever no such card is waiting. */
   const [crossSite, setCrossSite] = useState<{ from: string; to: string } | null>(null);
@@ -110,66 +87,18 @@ export function App() {
   const [cfg, setCfg] = useState<ProviderConfig>(DEFAULT_CONFIG);
   const [showKey, setShowKey] = useState(false);
   const [keyState, setKeyState] = useState<Status>({ kind: 'idle', text: '尚未配置模型' });
-  const abort = useRef<AbortController | null>(null);
 
-  // ═══════════ "问这个页面" ═══════════
-  const [question, setQuestion] = useState('');
-  const [qaView, setQaView] = useState<QaViewState>({ kind: 'idle' });
+  /** Every model call this panel carried out, for the cost line. Kept in
+   *  memory only: closing the panel starts it over. */
   const [costCalls, setCostCalls] = useState<CallRecord[]>([]);
-  /** One real `AbortController` per question, truly passed to `complete`
-   *  (要害一). A new question, a tab switch, or the panel unmounting all
-   *  abort whatever this currently points to — see `askPage`, `sync`
-   *  below, and the unmount effect further down. */
-  const qaAbort = useRef<AbortController | null>(null);
-  /** Mirrors of the latest known tab/page state, updated the instant `sync`
-   *  or `doExtract`/`askPage` learn something new. `askPage`'s own
-   *  `tabId`/`url` closure params stay pinned to the values *when the
-   *  question was asked* (ordinary JS closure semantics); these refs are
-   *  what let it also see the *current* values once the model call returns,
-   *  for the page-identity check (要害二). */
-  const tabIdRef = useRef<number | null>(null);
-  const urlRef = useRef('');
-  const tableRef = useRef<PromptTable | null>(null);
-  /** The tab a QA highlight is currently showing on, and whether that tab
-   *  had a guide thread parked when we drew it. `null` when nothing is
-   *  highlighted. Consumed by `endQaHighlight` to decide whether — and
-   *  where — to call `PANEL_RESUME_GUIDE` (要害四). */
-  const activeQaHighlight = useRef<{ tabId: number; guideActive: boolean } | null>(null);
-  /** The exact text last submitted, for the error state's retry button —
-   *  retrying re-runs `askPage` from scratch (a whole new call), it does
-   *  not resume anything, so it needs the original question even if the
-   *  input box has since been edited. */
-  const lastQuestion = useRef('');
 
   const pushLog = useCallback((s: string) => {
     setLog((l) => [`${new Date().toLocaleTimeString()} ${s}`, ...l].slice(0, 40));
   }, []);
 
-  /**
-   * Ends whatever QA highlight is currently showing, and — only when that
-   * highlight's tab had a guide thread parked (`guideActive`) — asks the
-   * host to redraw it (`PANEL_RESUME_GUIDE`). No button drives this; it is
-   * called at exactly the three moments 07 names: closing the answer,
-   * starting a new question, and switching tabs (要害四).
-   */
-  const endQaHighlight = useCallback(async () => {
-    const active = activeQaHighlight.current;
-    activeQaHighlight.current = null;
-    if (!active?.guideActive) return;
-    await chrome.runtime.sendMessage({ type: 'PANEL_RESUME_GUIDE', tabId: active.tabId });
-  }, []);
-
   useEffect(() => {
     const sync = async () => {
-      // A different tab (or a navigation within this one) means the tab we
-      // are leaving owns whatever question/highlight was in flight — both
-      // end here, not later (要害一 / 要害四).
-      qaAbort.current?.abort();
-      void endQaHighlight();
-      setQaView({ kind: 'idle' });
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      tabIdRef.current = tab?.id ?? null;
-      urlRef.current = tab?.url ?? '';
       setTabId(tab?.id ?? null);
       setUrl(tab?.url ?? '');
     };
@@ -183,13 +112,7 @@ export function App() {
       chrome.tabs.onActivated.removeListener(sync);
       chrome.tabs.onUpdated.removeListener(onUpdated);
     };
-  }, [endQaHighlight]);
-
-  // The panel unmounting (sidebar closed) is also an abort trigger (要害一)
-  // — but not a `PANEL_RESUME_GUIDE` trigger: 07 names three explicit
-  // moments for that (close answer / new question / switch tab), and
-  // nobody is looking at this tab's overlay right now anyway.
-  useEffect(() => () => qaAbort.current?.abort(), []);
+  }, []);
 
   const doExtract = useCallback(async (): Promise<PromptTable | null> => {
     if (tabId === null) return null;
@@ -199,7 +122,6 @@ export function App() {
       setStatus({ kind: 'error', text: `抽取失败：${res.message}` });
       return null;
     }
-    tableRef.current = res.data;
     setTable(res.data);
     if (res.data.items.length === 0) {
       setStatus({ kind: 'error', text: '本页面未提供可识别的控件（可能由 Canvas 绘制）' });
@@ -226,7 +148,11 @@ export function App() {
   useEffect(() => {
     const listener = (msg: unknown) => {
       const a = msg as { type?: string; text?: string } | undefined;
-      if (a?.type === 'AGENT_ANSWER' && a.text) setStatus({ kind: 'error', text: a.text });
+      if (a?.type !== 'AGENT_ANSWER' || !a.text) return;
+      setStatus({ kind: 'error', text: a.text });
+      // Whatever the guide says next, a cross-site question it asked is no
+      // longer waiting — it was answered on the overlay's card, or the run moved on.
+      setCrossSite(null);
     };
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
@@ -238,7 +164,7 @@ export function App() {
         // Events from a tab we are not looking at would otherwise be reported as
         // if they were ours — true the moment the user switches tabs mid-guide.
         if (from !== null && tabId !== null && from !== tabId) return;
-        if (e.type === 'STEP_CONFIRMED') pushLog(`用户确认了第 ${e.stepIndex + 1} 步`);
+        if (e.type === 'STEP_USED') pushLog(e.how === 'typed' ? '用户在这一步里填了内容' : '用户点了这一步');
         if (e.type === 'STEP_SKIPPED') pushLog(`跳过第 ${e.stepIndex + 1} 步`);
         if (e.type === 'TARGET_LOST') pushLog(`目标丢失 (${e.reason})：${e.ref}`);
         if (e.type === 'SESSION_ENDED') {
@@ -259,10 +185,23 @@ export function App() {
   // on screen to report an index for.
   useEffect(() => {
     const listener = (msg: unknown) => {
-      const c = msg as GuideClarify | undefined;
-      if (c?.type !== 'GUIDE_CLARIFY' || (tabId !== null && c.tabId !== tabId)) return;
-      setGuideClarify({ question: c.question, options: c.options });
+      const c = msg as GuideAsk | undefined;
+      if (c?.type !== 'GUIDE_ASK' || (tabId !== null && c.tabId !== tabId)) return;
+      setGuideAsk({ question: c.question, wants: c.wants, options: c.options, runGoesOn: c.runGoesOn });
       setStatus({ kind: 'ok', text: '引导需要你先说清楚一件事' });
+    };
+    chrome.runtime.onMessage.addListener(listener);
+    return () => chrome.runtime.onMessage.removeListener(listener);
+  }, [tabId]);
+
+  // explain: the model answered a question about the page. What backs the
+  // answer up is already outlined on the page by the host.
+  useEffect(() => {
+    const listener = (msg: unknown) => {
+      const c = msg as GuideExplain | undefined;
+      if (c?.type !== 'GUIDE_EXPLAIN' || (tabId !== null && c.tabId !== tabId)) return;
+      setGuideExplain(c.answer);
+      setStatus({ kind: 'ok', text: '已回答' });
     };
     chrome.runtime.onMessage.addListener(listener);
     return () => chrome.runtime.onMessage.removeListener(listener);
@@ -291,14 +230,15 @@ export function App() {
       setCrossSite(null);
       // A step is on screen again, so the question that was blocking is
       // answered — clear it rather than stacking two competing asks.
-      setGuideClarify(null);
-      const at = `第 ${g.index + 1} / ${g.total} 步`;
+      setGuideAsk(null);
+      setGuideExplain(null);
+      const at = g.total === null ? `第 ${g.index + 1} 步` : `第 ${g.index + 1} / ${g.total} 步`;
       if (g.candidates) setStatus({ kind: 'error', text: `${at}匹配到 ${g.candidates} 个候选，已全部框出` });
       else if (g.failure) setStatus({ kind: 'error', text: `${at}未能渲染：${FAILURE_TEXT[g.failure]}` });
       else setStatus({ kind: 'ok', text: `已高亮${at}` });
 
       // Wholesale replace, never merge — the Seam's "展示的都是这次返回的
-      //最新 route", and only ever present on an S2 model-driven broadcast.
+      // 最新 route".
       setGuideAxes(
         g.route !== undefined && g.evidence !== undefined && g.check !== undefined && g.binding !== undefined
           ? {
@@ -309,6 +249,7 @@ export function App() {
               ...(g.why !== undefined ? { why: g.why } : {}),
               ...(g.walked !== undefined ? { walked: g.walked } : {}),
               ...(g.calls !== undefined ? { calls: g.calls } : {}),
+              ...(g.spentSteps !== undefined ? { spentSteps: g.spentSteps } : {}),
             }
           : null,
       );
@@ -326,12 +267,11 @@ export function App() {
   }, []);
 
   // The effect protocol (design doc §2.6): the executor for whatever `EFFECT_REQUEST`s the
-  // host broadcasts. Mounted once — `startEffectListener` itself decides,
-  // per message, whether the tab it is currently tracking (`tabIdRef`) is
-  // the one the request is for.
+  // host broadcasts. Mounted once, and it answers every tab's requests, not
+  // only the tab this panel is showing — see `startEffectListener`.
   useEffect(
     () =>
-      startEffectListener(() => tabIdRef.current, loadConfig, ({ providerCalls, usage }) =>
+      startEffectListener(loadConfig, ({ providerCalls, usage }) =>
         setCostCalls((cs) => [
           ...cs,
           // The endpoint reports one figure for the whole effect, because the
@@ -347,7 +287,8 @@ export function App() {
 
   // E-6: pulled once per tab, never on a timer and never re-issuing an
   // `EffectRequest` of its own — a reopened panel only ever *reports* what
-  // the host already knows.
+  // the host already knows. A call that expired is not reported here: the
+  // host sweeps it while answering and tells every panel itself.
   useEffect(() => {
     if (tabId === null) return;
     let cancelled = false;
@@ -355,8 +296,7 @@ export function App() {
       chrome.runtime.sendMessage({ type: 'PANEL_GUIDE_INFLIGHT', tabId: id }) as Promise<GuideInflightResponse>,
     ).then(({ recovery }) => {
       if (cancelled) return;
-      if (recovery === 'expired') pushLog('上一次模型调用已超时，未完成（如需重试，请重新发起）');
-      else if (recovery === 'in_progress') pushLog('上一次模型调用仍在进行中，请稍候');
+      if (recovery === 'in_progress') pushLog('上一次模型调用仍在进行中，请稍候');
     });
     return () => {
       cancelled = true;
@@ -374,149 +314,35 @@ export function App() {
 
   const onAsk = useCallback(async () => {
     if (tabId === null) return;
-    abort.current?.abort();
-    abort.current = new AbortController();
-    setStatus({ kind: 'busy', text: '正在定位…' });
+    setGuideExplain(null);
+    setStatus({ kind: 'busy', text: '正在想…' });
     // The panel does not resolve anything. It states the goal; the host runs the
     // agent, owns the thread, and reports back through GUIDE_STATE.
     await chrome.runtime.sendMessage({ type: 'START_GUIDE', tabId, goal });
   }, [tabId, goal]);
 
   /**
-   * "问这个页面" — the panel's half of a question: extract the page, hand the
-   * question to the question agent (`agent/agents/question/runner.ts`, where the one
-   * primary call and the at-most-one repair live), check the page is still the
-   * one that was asked about, then show the answer and its highlight.
+   * One element, pointed at as a one-step fixed plan — a row of the element
+   * table, or what the inspector picked. No `ref`: a ref belongs to the
+   * snapshot it came from, and the host takes a fresh one before painting.
+   * The descriptor is what survives.
    */
-  const askPage = useCallback(
-    async (raw: string) => {
-      const q = raw.trim();
-      if (tabId === null || !q) return;
-      lastQuestion.current = q;
-
-      // Single-flight (要害一): a new question supersedes whatever the last
-      // one was doing. Ends the previous highlight first, same as a tab
-      // switch would — see `endQaHighlight`.
-      qaAbort.current?.abort();
-      void endQaHighlight();
-      const controller = new AbortController();
-      qaAbort.current = controller;
-
-      setQaView({ kind: 'busy', message: '正在抽取页面元素…' });
-      const extractRes = await chrome.runtime.sendMessage({ type: 'PANEL_EXTRACT', tabId });
-      if (controller.signal.aborted) return; // superseded while extracting — say nothing
-      if (!extractRes.ok) {
-        setQaView({ kind: 'error', message: `抽取失败：${extractRes.message}` });
-        return;
-      }
-      const snapshot: PromptTable = extractRes.data;
-      tableRef.current = snapshot;
-      setTable(snapshot);
-
-      // What "the page" meant when this question was asked. `tabId`/`url`
-      // here are this closure's own params — pinned to their values right
-      // now by ordinary JS closure semantics — never the live `tabIdRef`/
-      // `urlRef` a later render might update while we are still awaiting
-      // below (要害二).
-      const captured: QaContext = { tabId, url, snapshotId: snapshot.snapshotId };
-
-      setQaView({ kind: 'busy', message: '正在询问模型…' });
-
-      const result = await runQuestion({ question: q, table: snapshot }, cfg, controller.signal, (e) => {
-        if (e.kind === 'billed') setCostCalls((cs) => [...cs, { kind: e.call, usage: e.usage }]);
-        else if (e.kind === 'repairing') setQaView({ kind: 'busy', message: '首次输出无法解析，正在尝试一次修复…' });
-        else
-          setQaView({
-            kind: 'busy',
-            message: e.call === 'primary' ? `正在生成回答…（已收到 ${e.chars} 字）` : `正在修复…（已收到 ${e.chars} 字）`,
-          });
-      });
-      if (result.kind === 'aborted') return; // superseded — say nothing
-      if (result.kind === 'failed') {
-        setQaView({ kind: 'error', message: result.message });
-        return;
-      }
-
-      // Page identity, re-checked against the *live* refs (要害二). This is
-      // independent of — and in addition to — the URL check the host makes
-      // before forwarding a highlight: that one only decides
-      // whether to paint an overlay; this one decides whether the panel
-      // trusts the answer text enough to show it at all.
-      const current: QaContext = {
-        tabId: tabIdRef.current,
-        url: urlRef.current,
-        snapshotId: tableRef.current?.snapshotId ?? null,
-      };
-      if (!sameQaContext(captured, current)) {
-        setQaView({ kind: 'error', message: '页面已经变化，这条回答可能不再适用，请重新提问。' });
-        return;
-      }
-
-      const answer = questionAgent.answer(result.envelope, snapshot);
-      setQaView(
-        answer.intent === 'clarify'
-          ? { kind: 'clarify', message: answer.message, options: answer.options ?? [] }
-          : { kind: answer.intent, message: answer.message },
-      );
-
-      if (answer.items.length > 0) {
-        const hl = await chrome.runtime.sendMessage({
-          type: 'PANEL_SHOW_QA_RESULT',
-          tabId,
-          snapshotId: snapshot.snapshotId,
-          url,
-          items: answer.items,
-          mode: 'explain',
-          title: answer.intent === 'clarify' ? '需要你先选一个' : '依据',
-        });
-        if (controller.signal.aborted) return; // a newer question already owns the screen
-        if (hl.ok) {
-          activeQaHighlight.current = { tabId, guideActive: hl.data.guideActive };
-        } else {
-          // Our own `sameQaContext` check already passed above — this is the
-          // narrower host-side rejection (a race in the small gap between
-          // that check and this message arriving, or the content script
-          // being unreachable). The answer text stays on screen; say so
-          // honestly rather than pretending the highlight worked.
-          activeQaHighlight.current = null;
-          setQaView((v) =>
-            v.kind === 'explain' || v.kind === 'clarify' ? { ...v, highlightIssue: hl.message } : v,
-          );
-        }
-      }
+  const pointAt = useCallback(
+    async (descriptor: ElementDescriptor, detail: string) => {
+      const title = descriptor.name || descriptor.role;
+      await startFlow(`定位「${title}」`, [
+        { descriptor, expectedUserAction: actionForRole(descriptor.role), title, detail },
+      ]);
     },
-    [tabId, url, cfg, endQaHighlight],
+    [startFlow],
   );
-
-  const onAskQuestion = useCallback(() => void askPage(question), [question, askPage]);
-  const cancelQuestion = useCallback(() => {
-    qaAbort.current?.abort();
-    setQaView({ kind: 'idle' });
-  }, []);
-  const closeQaAnswer = useCallback(() => {
-    void endQaHighlight();
-    setQaView({ kind: 'idle' });
-  }, [endQaHighlight]);
-  const retryQuestion = useCallback(() => void askPage(lastQuestion.current), [askPage]);
 
   const onRowClick = useCallback(
     async (ref: string) => {
-      if (!table) return;
-      const item = table.items.find((i) => i.ref === ref);
-      if (!item) return;
-      // No `ref`: this one belongs to the panel's own snapshot, and the host
-      // takes a fresh one before painting. The descriptor is what survives.
-      const title = item.name || item.role;
-      await startFlow(`定位「${title}」`, [
-        {
-          descriptor: descriptorOf(item),
-          expectedUserAction: actionForRole(item.role),
-          title,
-          detail: '（从元素表直接选中）',
-        },
-      ]);
+      const item = table?.items.find((i) => i.ref === ref);
+      if (item) await pointAt(descriptorOf(item), '（从元素表直接选中）');
     },
-    [table, startFlow],
+    [table, pointAt],
   );
 
   const cost = summarizeCost(costCalls);
@@ -530,16 +356,21 @@ export function App() {
         </p>
       </header>
 
+      {/*
+        唯一的入口（08b）。用户只说一句话：想做成什么，或者想问这一页什么——
+        不在这里分流，模型按行为决定（CONTEXT.md `Question`）。引导进行中再说
+        的话交给那一趟引导（宿主的 `START_GUIDE`）。
+      */}
       <section className="ask">
         <input
           value={goal}
-          placeholder="你想做什么？例如：克隆仓库"
+          placeholder="想做什么，或者想问这一页什么？例如：克隆仓库"
           onChange={(e) => setGoal(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && goal.trim() && void onAsk()}
         />
         <div className="row">
           <button className="primary" disabled={!goal.trim()} onClick={() => void onAsk()}>
-            引导我
+            发送
           </button>
           <button onClick={() => void doExtract()}>抽取本页元素</button>
           <button
@@ -547,7 +378,7 @@ export function App() {
               tabId !== null && void chrome.runtime.sendMessage({ type: 'END_GUIDE', tabId })
             }
           >
-            清除高亮
+            结束引导
           </button>
           <button
             className={inspecting ? 'primary' : ''}
@@ -567,26 +398,55 @@ export function App() {
       {/*
         "账单前置"——route 与三轴一到就展示，不是一个
         需要用户主动点开才看得到的东西，也不是一个要点确认才能继续的阻断式
-        弹窗。只在 S2 模型驱动的引导正在报告时出现；route 里的字符串原样展
-        示，不做任何二次加工（Gotchas）。三轴各自独立展示，互不覆盖。
+        弹窗。route 里的字符串原样展示，不做任何二次加工（Gotchas）。三轴各自
+        独立展示，互不覆盖。
       */}
       {/*
-        CL-1：模型问回来一个澄清问题。候选全部列出、也全部在页面上框出，一个
-        都不替用户选（K-6）。用户的回答方式就是把"引导我"那句话说得更具体再
-        问一次——这里不放选项按钮，因为点一下就等于替他做了决定。
+        模型问回来一句（ask）。要选一个时，候选全部列出、也全部在页面上框出，
+        一个都不替用户选（K-6）。用户在上面的输入框里回答：引导还在走就直接交给
+        它，问答那一趟已经收场就连同要做的事再说一次。这里不放选项按钮，因为
+        点一下就等于替他做了决定。
       */}
-      {guideClarify && (
-        <section className="clarify">
+      {guideAsk && (
+        <section className="ask-card">
           <h2>需要你先说清楚</h2>
-          <p>{guideClarify.question}</p>
-          {guideClarify.options.length > 0 && (
-            <ul className="qa-options">
-              {guideClarify.options.map((o) => (
+          <Prose text={guideAsk.question} />
+          {guideAsk.options.length > 0 && (
+            <ul className="options">
+              {guideAsk.options.map((o) => (
                 <li key={o.ref}>{o.label}</li>
               ))}
             </ul>
           )}
-          <p className="hint">把上面那句「引导我」说得更具体一点，再问一次。</p>
+          <p className="hint">
+            {guideAsk.runGoesOn
+              ? '直接在上面的输入框里回答它。'
+              : '把回答连同你要做的事一起，在上面的输入框里再说一次。'}
+            {guideAsk.wants === 'text' && '密码、验证码、卡号不要写进来——那些只在页面上自己填。'}
+          </p>
+        </section>
+      )}
+
+      {/*
+        explain：模型回答了关于这一页的问题。依据已经由宿主在页面上框出来；
+        关掉回答时，如果还有一趟引导在走，就把它那一步重新画回来。
+      */}
+      {guideExplain && (
+        <section className="answer-card">
+          <h2>回答</h2>
+          <Prose text={guideExplain} />
+          <button
+            onClick={async () => {
+              setGuideExplain(null);
+              if (tabId === null) return;
+              // A guide still going gets its step painted back; with none, the
+              // outline of what backed the answer comes down.
+              const resumed = await chrome.runtime.sendMessage({ type: 'PANEL_RESUME_GUIDE', tabId });
+              if (!resumed?.ok) await chrome.runtime.sendMessage({ type: 'END_GUIDE', tabId });
+            }}
+          >
+            关闭
+          </button>
         </section>
       )}
 
@@ -638,10 +498,10 @@ export function App() {
               各自的结果、到目前为止花了几次调用。这些数据本来就在线程里，
               只是以前只有模型读得到。 */}
           {guideAxes.why && (
-            <p className="why">
+            <div className="why">
               <b>为什么是这一步：</b>
-              {guideAxes.why}
-            </p>
+              <Prose text={guideAxes.why} />
+            </div>
           )}
           {guideAxes.walked && guideAxes.walked.length > 0 && (
             <>
@@ -650,8 +510,8 @@ export function App() {
                 {guideAxes.walked.map((w, i) => (
                   <li key={i}>
                     {w.title}
-                    <i>（{OUTCOME_LABEL[w.outcome] ?? w.outcome}）</i>
-                    {w.landedAt && <i> → {w.landedAt}</i>}
+                    <i>（{walkedLabel(w)}）</i>
+                    {w.effect?.kind === 'moved' && <i> → {w.effect.to}</i>}
                   </li>
                 ))}
               </ol>
@@ -661,98 +521,40 @@ export function App() {
             <span title="Evidence">依据：{describeEvidence(guideAxes.evidence)}</span>
             <span title="Check">核验：{describeCheck(guideAxes.check)}</span>
             <span title="Binding">定位：{describeBinding(guideAxes.binding)}</span>
-            {guideAxes.calls !== undefined && <span title="§5.10 上限 12 次">模型调用：{guideAxes.calls} / 12</span>}
+            {guideAxes.spentSteps !== undefined && <span title="一趟最多 12 步">步数：{guideAxes.spentSteps} / 12</span>}
+            {guideAxes.calls !== undefined && <span title="这一趟一共问了模型几次">模型调用：{guideAxes.calls}</span>}
           </div>
         </section>
       )}
 
-      {/*
-        独立的"问这个页面"入口 — 与上面的"引导我"分开摆
-        放，不靠猜测用户打的字属于引导还是问答。问答是无状态的一次性回合
-        （CONTEXT.md `Question`），不建 Thread、不动引导的游标。
-      */}
-      <section className="qa">
-        <h2>问这个页面</h2>
-        <input
-          value={question}
-          placeholder="例如：这个报错是什么意思？"
-          onChange={(e) => setQuestion(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && question.trim() && onAskQuestion()}
-        />
-        <div className="row">
-          <button className="primary" disabled={!question.trim() || qaView.kind === 'busy'} onClick={onAskQuestion}>
-            问
-          </button>
-          {qaView.kind === 'busy' && <button onClick={cancelQuestion}>取消</button>}
+      {costCalls.length > 0 && (
+        <div className="stats cost" title="内存态，不落盘——关闭面板或重开标签页会清零">
+          <span>
+            调用 <b>{cost.totalCalls}</b>
+            <i>
+              {' '}
+              (主 {cost.primaryCalls} / 修复 {cost.repairCalls})
+            </i>
+          </span>
+          <span>
+            prompt <b>{cost.prompt}</b>
+          </span>
+          <span>
+            completion <b>{cost.completion}</b>
+          </span>
+          <span>
+            total <b>{cost.total}</b>
+          </span>
+          <span className={cost.estimated ? 'warn' : ''}>{cost.estimated ? '含估算值' : '真实用量'}</span>
+          {cost.unknownCostCalls > 0 && (
+            <span className="warn">{cost.unknownCostCalls} 次调用未返回用量</span>
+          )}
         </div>
+      )}
 
-        {qaView.kind === 'busy' && <p className="status busy">{qaView.message}</p>}
-
-        {(qaView.kind === 'explain' || qaView.kind === 'need_text') && (
-          <div className="qa-answer">
-            <p>{qaView.message}</p>
-            {qaView.kind === 'explain' && qaView.highlightIssue && (
-              <p className="status error">未能高亮依据元素：{qaView.highlightIssue}</p>
-            )}
-            <button onClick={closeQaAnswer}>关闭</button>
-          </div>
-        )}
-
-        {qaView.kind === 'clarify' && (
-          <div className="qa-answer">
-            <p>{qaView.message}</p>
-            {/* 所有候选一起列出、一起高亮——不替用户选一个（06 的 K-6 推论）。 */}
-            <ul className="qa-options">
-              {qaView.options.map((o) => (
-                <li key={o.ref}>{o.label}</li>
-              ))}
-            </ul>
-            {qaView.highlightIssue && <p className="status error">未能高亮候选元素：{qaView.highlightIssue}</p>}
-            <button onClick={closeQaAnswer}>关闭</button>
-          </div>
-        )}
-
-        {qaView.kind === 'error' && (
-          <div className="qa-answer error">
-            <p>{qaView.message}</p>
-            {/* 契约违规 / 解析失败 / 网络错误统一落在这里；重试是用户按下
-                按钮之后发生的全新一轮 askPage()，不是内部自动重试。 */}
-            <div className="row">
-              <button className="primary" onClick={retryQuestion}>
-                重试
-              </button>
-              <button onClick={closeQaAnswer}>关闭</button>
-            </div>
-          </div>
-        )}
-
-        {costCalls.length > 0 && (
-          <div className="stats cost" title="内存态，不落盘——关闭面板或重开标签页会清零">
-            <span>
-              调用 <b>{cost.totalCalls}</b>
-              <i>
-                {' '}
-                (主 {cost.primaryCalls} / 修复 {cost.repairCalls})
-              </i>
-            </span>
-            <span>
-              prompt <b>{cost.prompt}</b>
-            </span>
-            <span>
-              completion <b>{cost.completion}</b>
-            </span>
-            <span>
-              total <b>{cost.total}</b>
-            </span>
-            <span className={cost.estimated ? 'warn' : ''}>{cost.estimated ? '含估算值' : '真实用量'}</span>
-            {cost.unknownCostCalls > 0 && (
-              <span className="warn">{cost.unknownCostCalls} 次调用未返回用量</span>
-            )}
-          </div>
-        )}
-      </section>
-
-      <p className={`status ${status.kind}`}>{status.text}</p>
+      <div className={`status ${status.kind}`}>
+        <Prose text={status.text} />
+      </div>
 
       {inspecting && <p className="status busy">把鼠标移到页面上的控件，点击即选中（点击不会传给页面）</p>}
 
@@ -764,6 +566,10 @@ export function App() {
               ? `唯一命中（${picked.rung}）`
               : `命中 ${picked.matches} 个 —— 这个元素现在无法被唯一定位，照它引导可能指错`}
           </p>
+          {/* 照选中时写出的 descriptor 指一步；命中不止一个时，候选全部框出、不替用户挑。 */}
+          <button className="primary" onClick={() => void pointAt(picked.descriptor, '（检视时选中）')}>
+            指给我
+          </button>
         </section>
       )}
 

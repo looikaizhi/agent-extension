@@ -68,14 +68,6 @@ export const ENTRANCE_LANDMARK_ROLES: ReadonlySet<string> = new Set([
   'search',
 ]);
 
-export const DIAGNOSTIC_ROLES: ReadonlySet<string> = new Set([
-  'alert',
-  'status',
-  'log',
-  'progressbar',
-  'alertdialog',
-]);
-
 /**
  * One CSS query rather than a per-node predicate. Measured at 1.4–6.2 ms on
  * real pages, so there is no reason to hand-optimise past this.

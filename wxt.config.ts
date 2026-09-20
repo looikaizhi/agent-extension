@@ -10,12 +10,10 @@ export default defineConfig({
     name: 'Page Guide',
     description: '在陌生的 Web 控制台上，一步步指出你该点哪里。只指路，不开车。',
     // Top Layer (popover) is a platform contract, not a progressive enhancement.
-    // See step1-implementation-plan.md K-3.
     minimum_chrome_version: '120',
     permissions: ['scripting', 'sidePanel', 'storage'],
     // Deliberate, and the heaviest install-time warning Chrome has: "read and
-    // change all your data on all websites". Decided 2026-08-07 — see §2.3 of
-    // step1-implementation-plan.md for the audit that led here.
+    // change all your data on all websites". Decided 2026-08-07.
     //
     // Declared explicitly rather than inherited. WXT silently appends every
     // `registration: 'runtime'` content script's match patterns to

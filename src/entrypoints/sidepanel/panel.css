@@ -57,13 +57,7 @@ h2 {
 }
 
 .ask,
-.qa {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.qa-answer {
+.answer-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -71,21 +65,33 @@ h2 {
   background: var(--card);
   border-radius: 7px;
 }
-.qa-answer p {
+/* 模型写的长文本（Prose.tsx）：段落、列表、加粗、行内代码。 */
+.prose :where(p, ul, ol) {
   margin: 0;
-  white-space: pre-wrap;
 }
-.qa-answer.error {
-  border: 1px solid var(--warn);
+.prose :where(ul, ol) {
+  padding-left: 18px;
 }
-.qa-answer.error p {
-  color: var(--warn);
+.prose > * + * {
+  margin-top: 6px;
 }
-.qa-options {
+.prose code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: rgba(127, 127, 127, 0.16);
+}
+/* 「为什么是这一步：」后面紧跟第一段，不另起一行。 */
+.why > .prose,
+.why > .prose > p:first-child {
+  display: inline;
+}
+.options {
   margin: 0;
   padding-left: 18px;
 }
-.qa-options li {
+.options li {
   margin: 2px 0;
 }
 input {
@@ -263,9 +269,9 @@ button.primary {
   white-space: nowrap;
 }
 
-/* CL-1：引导停在一个待澄清的问题上。与 .route 同一张卡片的观感，但不是路标
+/* 模型问回来一句（ask）。与 .route 同一张卡片的观感，但不是路标
    ——它是"现在轮到你说话了"，所以留在 route 上方、单独成块。 */
-.clarify {
+.ask-card {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -273,7 +279,7 @@ button.primary {
   background: var(--card);
   border-radius: 7px;
 }
-.clarify .hint {
+.ask-card .hint {
   margin: 0;
   font-size: 12px;
   opacity: 0.7;

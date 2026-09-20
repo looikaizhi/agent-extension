@@ -144,7 +144,7 @@ function tableOf(view: LocatorView, items: PromptItem[], omitted: number): Promp
     snapshotId: view.snapshotId,
     url: view.url,
     title: view.title,
-    pageHash: view.pageHash,
+    structureHash: view.structureHash,
     items,
     omitted,
     degraded: view.degraded,

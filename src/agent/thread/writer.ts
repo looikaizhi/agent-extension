@@ -1,5 +1,6 @@
-import { deadlineFor, judgeRecovery, type EffectRequest } from './effect';
-import { pageMoved, step, stepOnScreen } from './machine';
+import { deadlineFor, judgeClaim, judgeRecovery, type DispatchedEffect, type EffectRequest } from './effect';
+import { step, stepOnScreen } from './machine';
+import { presentationIdOf } from './transitions';
 import type { Ending, ExternalEnding, MachineEffect, MachineInput } from './thread';
 import { contributionsFor, enabledPlugins, pluginsNamed } from '@/agent/context/plugins';
 import type { FlagStore } from '@/agent/flags';
@@ -9,6 +10,7 @@ import { createSerialQueue } from '@/shared/serial';
 import { decodeThread, encodeThread, type ThreadState } from './thread';
 import type { ThreadId, ThreadStore } from './ports';
 import type { PromptTable } from '@/core/extractor/types';
+import type { Reading } from '@/agent/context/turn';
 
 /* ═══════════ guided-flow effect protocol ═══════════
  *
@@ -45,26 +47,22 @@ async function loadGuideThread(store: ThreadStore, id: ThreadId): Promise<Thread
 /**
  * Converts the one dispatchable `MachineEffect` a `step` call can produce
  * (`callModel`/`fetchDoc` — never both in the same call; the model-call gate
- * and need_docs's fetch gate both stop at the same `inflight` tombstone)
- * into the wire `EffectRequest` E-1 sends. `present`/`notify` never reach
- * this function — those are effects the host executes itself (design doc
- * §2.1), not ones it delegates to the panel.
+ * and read_doc's fetch gate both stop at the same `inflight` tombstone)
+ * into the wire `EffectRequest` E-1 sends. `present`/`notify` and the
+ * tools the host carries out itself never reach this function (design doc
+ * §2.1): only what is delegated to the panel does.
  *
- * `fetchDoc` always returns `null` for now. The effect does carry an address
- * the host has already approved (need_docs's link judgement), but the other
- * half of the loop is not built: nothing puts the request on the wire to the
- * panel, and nothing hands the document's text back to the model when it
- * returns. Producing no request is the honest answer until both exist;
- * `applyGuideInput` below clears the tombstone and tells the user so.
+ * A `fetchDoc` carries an address the host has already approved
+ * (`tools/read-doc.ts`); the panel only fetches it (§8.3).
  */
 export function toEffectRequest(
   threadId: ThreadId,
-  effect: MachineEffect,
+  effect: Extract<MachineEffect, { kind: 'callModel' | 'fetchDoc' }>,
   at: EffectRequest['at'],
   deadline: number,
   /** What the enabled Plugins add to a model call's Context (`agent/context/plugins.ts`). */
   contributions: readonly string[] = [],
-): EffectRequest | null {
+): EffectRequest {
   if (effect.kind === 'callModel') {
     return {
       effectId: effect.effectId,
@@ -76,22 +74,23 @@ export function toEffectRequest(
         history: effect.history,
         ...(contributions.length ? { contributions } : {}),
         ...(effect.freshRefs?.length ? { freshRefs: effect.freshRefs } : {}),
+        ...(effect.since ? { since: effect.since } : {}),
+        ...(effect.final ? { final: effect.final } : {}),
+        ...(effect.turn ? { turn: effect.turn } : {}),
       },
       at,
       deadline,
     };
   }
-  return null; // 'fetchDoc' — not put on the wire yet (see above) — and anything not dispatchable
+  return {
+    effectId: effect.effectId,
+    threadId,
+    kind: 'fetchDoc',
+    params: { viaRef: effect.viaRef, query: effect.query, url: effect.url },
+    at,
+    deadline,
+  };
 }
-
-/** Says what the extension cannot do, not what the model got wrong — the model
- *  asking to read a linked doc is a reasonable request against a capability
- *  that is not built yet. Deleted, not reworded, once doc fetches go out and
- *  their text reaches the model. */
-const DOC_FETCH_UNAVAILABLE: MachineEffect = {
-  kind: 'notify',
-  message: '模型想先读这个页面上的一份文档才能继续，但扩展还不能替你打开并读取它。换一个更具体的说法再问一次，或先自己打开那份文档。',
-};
 
 export interface GuideEffectDeps {
   store: ThreadStore;
@@ -117,14 +116,20 @@ export interface GuideEffectDeps {
 
 /**
  * What a caller actually hands `applyGuideInput`: `MachineInput` with
- * `effect_result`'s `nextEffectId` removed, because deciding whether a result
- * needs one requires parsing the payload — work that happens inside `step`,
- * after the caller is done. Derived from `MachineInput` rather than written
- * out again, so the two can never drift.
+ * `nextEffectId` removed, because deciding whether an input needs one requires
+ * work that happens inside `step`, after the caller is done. Derived from
+ * `MachineInput` rather than written out again, so the two can never drift.
+ *
+ * A reading is not among them: it reaches the reducer only through
+ * `applyReading`, which reads the page inside the write chain.
  */
+type MintedInput = Extract<MachineInput, { kind: 'effect_result' | 'tool_result' | 'reading' }>;
 export type GuideInput =
-  | Exclude<MachineInput, { kind: 'effect_result' }>
-  | Omit<Extract<MachineInput, { kind: 'effect_result' }>, 'nextEffectId'>;
+  | Exclude<MachineInput, MintedInput>
+  | WithoutNextId<Exclude<MintedInput, { kind: 'reading' }>>;
+
+/** `Omit` over each member of a union, not over the union as a whole. */
+type WithoutNextId<T> = T extends unknown ? Omit<T, 'nextEffectId'> : never;
 
 export interface GuideReduction {
   /** `null` only when an `effect_result` arrived for a thread that does not
@@ -143,9 +148,7 @@ export interface GuideReduction {
    *  in flight, and saying so if the summary could not be saved). */
   ending?: GuideEnding;
   /** The subset of `effects` that actually went out over the wire this call
-   *  (at most one — see `toEffectRequest`'s doc comment). Empty whenever
-   *  `effects` is, and also whenever the one dispatchable effect was a
-   *  `fetchDoc`, which is not put on the wire yet. */
+   *  (at most one — see `toEffectRequest`'s doc comment). */
   sent: EffectRequest[];
 }
 
@@ -157,14 +160,13 @@ export interface GuideReduction {
  * the write-back resurrects a thread that has already ended, and the ownership
  * routing then hands every later click in this tab to a run that is over.
  *
- * `createSerialQueue`, not the latest-wins variant `replan.ts` uses: an input
- * that arrives while another is being applied must still be applied, not
- * dropped. Superseding is right for re-plans (they describe consecutive states
- * of one transition) and wrong for state writes.
+ * An input that arrives while another is being applied is still applied, never
+ * dropped: every reading is a fact the model is owed.
  *
  * Keyed by thread, so guides in different tabs still run in parallel. Every
- * public entry point below wraps exactly once — `applyGuidePageChanged` and
- * `sweepExpiredGuideEffect` call the *inner* form, because re-entering the
+ * public entry point below wraps exactly once — the ones that decide something
+ * before applying (`applyReading`, `sweepExpiredGuideEffect`) call the
+ * *inner* form, because re-entering the
  * queue under the same key would wait on a tail that cannot drain until the
  * waiter returns.
  */
@@ -200,7 +202,7 @@ export function applyGuideInput(
 async function applyGuideInputInner(
   deps: GuideEffectDeps,
   threadId: ThreadId,
-  input: GuideInput,
+  input: GuideInput | WithoutNextId<Extract<MachineInput, { kind: 'reading' }>>,
 ): Promise<GuideReduction> {
   const starting = input.kind === 'start' || input.kind === 'start_fixed';
   const prior = starting ? null : await loadGuideThread(deps.store, threadId);
@@ -218,7 +220,9 @@ async function applyGuideInputInner(
 
   const result = step(
     prior,
-    input.kind === 'effect_result' ? { ...input, nextEffectId: deps.newEffectId() } : input,
+    input.kind === 'effect_result' || input.kind === 'tool_result' || input.kind === 'reading'
+      ? { ...input, nextEffectId: deps.newEffectId() }
+      : input,
   );
 
   const dispatched = result.state.inflight
@@ -241,19 +245,7 @@ async function applyGuideInputInner(
       ? toEffectRequest(threadId, dispatched, result.state.inflight.at, deadlineFor(dispatched.kind, deps.now()), contributions)
       : null;
 
-  // The reducer asked for an effect this host cannot put on the wire — today
-  // that is only `fetchDoc`: its address is already approved, but nothing puts
-  // the request on the wire or brings the document back to the model yet. The
-  // reducer's `inflight` tombstone
-  // would then sit there with nothing able to resolve it: nothing goes out, so
-  // no result ever comes back, and E-4's sweep only fires on an `effect:`
-  // record that was never written. Every later input would find `inflight`
-  // set and decline silently (`tryEmitCallModel`'s first gate) — a thread
-  // welded shut, which is what the live run's `need_docs` sample actually did
-  // for 91 seconds. Clear the tombstone and say so out loud instead.
-  const undeliverable = dispatched !== undefined && req === null;
-  const state = undeliverable ? { ...result.state, inflight: null } : result.state;
-  const effects = undeliverable ? [...result.effects, DOC_FETCH_UNAVAILABLE] : result.effects;
+  const { state, effects } = result;
 
   const items: Record<string, unknown> = { [guideKeyFor(threadId)]: encodeThread(state) };
   if (req) items[effectKeyFor(threadId)] = req;
@@ -282,12 +274,8 @@ async function applyGuideInputInner(
 }
 
 /**
- * Whether a guide owns this tab right now — the question every content event
- * asks before it costs anything (a re-plan extracts the page).
- *
- * Deliberately a separate query rather than `applyGuidePageChanged`'s `null`:
- * that answers both "no guide here" and "a guide, but the page did not move",
- * and a caller deciding whether to look at all has to tell those apart.
+ * Whether a guide owns this tab right now — asked before anything that costs:
+ * nothing is read from the page and nothing is written.
  */
 export async function guideThreadExists(store: ThreadStore, threadId: ThreadId): Promise<boolean> {
   return (await loadGuideThread(store, threadId)) !== null;
@@ -339,9 +327,65 @@ async function dropGuideThread(store: ThreadStore, threadId: ThreadId): Promise<
  * passive timeout sweep, E-4, before it decides whether to synthesize a
  * failure).
  */
-export async function peekGuideEffect(store: ThreadStore, threadId: ThreadId): Promise<EffectRequest | null> {
+export async function peekGuideEffect(store: ThreadStore, threadId: ThreadId): Promise<DispatchedEffect | null> {
   const k = effectKeyFor(threadId);
-  return ((await store.get(k))[k] as EffectRequest | undefined) ?? null;
+  return ((await store.get(k))[k] as DispatchedEffect | undefined) ?? null;
+}
+
+/** Whether the panel document with this id is still open — asked of the browser. */
+export type PanelOpen = (documentId: string) => Promise<boolean>;
+
+/**
+ * A panel asks to run the effect in flight (ticket 06c). Decided inside the
+ * write chain, and written down with the effect before the answer goes back,
+ * so the panel that is told yes is the one on record before it spends
+ * anything (`judgeClaim` says who wins).
+ */
+export function claimGuideEffect(
+  deps: GuideEffectDeps,
+  threadId: ThreadId,
+  effectId: string,
+  claimant: string,
+  isOpen: PanelOpen,
+): Promise<boolean> {
+  return writes(threadId, async () => {
+    const effect = await peekGuideEffect(deps.store, threadId);
+    const holder = effect?.claimedBy;
+    const holderOpen = holder !== undefined && holder !== claimant ? await isOpen(holder) : false;
+    if (!judgeClaim(effect, effectId, claimant, holderOpen)) return false;
+    await deps.store.set({ [effectKeyFor(threadId)]: { ...effect!, claimedBy: claimant } });
+    return true;
+  });
+}
+
+/**
+ * The effect in flight, handed back to be dispatched again when nobody is
+ * running it: no panel ever took it, or the one that did has closed (ticket
+ * 06c). Its deadline starts again — a deadline is a promise about a call
+ * someone is running — and its claim is cleared, so the next panel to ask
+ * takes it. `null` when there is nothing in flight, or its panel is still open.
+ *
+ * Handing back a call that a panel is about to claim is harmless: the claim
+ * is decided per effect, so a second dispatch of it is claimed once.
+ */
+export function unrunGuideEffect(deps: GuideEffectDeps, threadId: ThreadId, isOpen: PanelOpen): Promise<EffectRequest | null> {
+  return writes(threadId, async () => {
+    const effect = await peekGuideEffect(deps.store, threadId);
+    if (!effect) return null;
+    if (effect.claimedBy !== undefined && (await isOpen(effect.claimedBy))) return null;
+    const { claimedBy: _gone, ...request } = effect;
+    const again: EffectRequest = { ...request, deadline: deadlineFor(request.kind, deps.now()) };
+    await deps.store.set({ [effectKeyFor(threadId)]: again });
+    return again;
+  });
+}
+
+/** Every thread with an effect in flight, read off the whole store at once. */
+export function threadsWithEffects(everything: Record<string, unknown>): ThreadId[] {
+  const prefix = effectKeyFor('' as ThreadId);
+  return Object.keys(everything)
+    .filter((k) => k.startsWith(prefix))
+    .map((k) => k.slice(prefix.length) as ThreadId);
 }
 
 /**
@@ -388,41 +432,60 @@ async function sweepExpiredGuideEffectInner(
 
 
 /**
- * §5.3's re-planning trigger, host side. `entrypoints/background.ts` calls
- * this once per `PAGE_STRUCTURE_CHANGED` content-script event, after
- * re-extracting a fresh `PromptTable` — never with a stale one, since a fresh
- * extraction is the entire reason the event fired.
+ * A reading (CONTEXT.md `Reading`): one of the four observation sources saw
+ * something in this thread's tab. The host reads the page right after —
+ * `read`, `null` when it cannot — and the reducer writes both down.
  *
- * Two independent guards:
- * the content script (`core/extractor/fingerprint.ts`'s `pageStructureChanged`)
- * already refuses to report when *its own* last-known hash has not moved;
- * this function adds the host's own, independent check against the hash the
- * *guide* actually planned against (`ThreadState.table.pageHash`) — the two
- * can legitimately differ (a stale report in flight, more than one page
- * change between messages) so neither guard substitutes for the other.
+ * The read happens *inside* the write chain, as one unit with the reduction.
+ * Readings arrive in bursts — one click on a link can bring all four — and
+ * each is read separately; outside the chain, a slow read of the page being
+ * left could land after a quick read of the page arrived at, and put the old
+ * page back.
  *
- * Returning `null` rather than calling `applyGuideInput` at all when nothing
- * needs to change is deliberate, not merely an optimisation: `step` (machine.
- * ts) unconditionally bumps `rev` on every call (its own doc comment), so
- * calling through for a no-op `page_changed` would still churn `rev` and
- * write to storage for zero observable benefit — slice 8's own assertion.
- *
- * `null` is also the answer when no guide exists for this thread at all —
- * `step` has no defined behaviour for a `page_changed`
- * input against `state === null` (`dispatch` throws), so this must not reach
- * `applyGuideInput` in that case either.
+ * Nothing is read when there is nothing to write it into: no guide in this
+ * tab, or a reading about a step that is no longer the one on screen. Three
+ * readings are about the step itself — the user used it, it was not painted,
+ * it was looked for and not found — and each is matched against the
+ * presentation it came from (`presentationId`): a report that outlived its
+ * step, or one from a run already over, is dropped. `null` then.
  */
-export async function applyGuidePageChanged(
+/**
+ * The user said something while this tab had a guide going (08b): if a model
+ * guide is going, it hears it, as a reading — a question on the way gets its
+ * answer and the guide goes on; a change of what to do gets a step toward it.
+ * `null` when there is nothing here to hear it — no guide, or a fixed plan,
+ * which has no model — and nothing is read: the caller starts a new run.
+ *
+ * Decided inside the write chain, like every reading: a guide ending between
+ * the check and the write would otherwise take the sentence with it.
+ */
+export function applySaid(
   deps: GuideEffectDeps,
   threadId: ThreadId,
-  table: PromptTable,
-  effectId: string,
+  text: string,
+  read: () => Promise<PromptTable | null>,
+): Promise<GuideReduction | null> {
+  return writes(threadId, async () => {
+    const prior = await loadGuideThread(deps.store, threadId);
+    if (!prior || prior.planSource !== 'model' || prior.ending) return null;
+    return applyGuideInputInner(deps, threadId, { kind: 'reading', reading: { kind: 'said', text }, table: await read() });
+  });
+}
+
+const ABOUT_THE_STEP: ReadonlySet<Reading['kind']> = new Set(['used', 'not_shown', 'not_found', 'not_actionable']);
+
+export function applyReading(
+  deps: GuideEffectDeps,
+  threadId: ThreadId,
+  reading: Reading,
+  read: () => Promise<PromptTable | null>,
+  presentationId?: string,
 ): Promise<GuideReduction | null> {
   return writes(threadId, async () => {
     const prior = await loadGuideThread(deps.store, threadId);
     if (!prior) return null;
-    if (!pageMoved(prior.table, table)) return null;
-    return applyGuideInputInner(deps, threadId, { kind: 'page_changed', table, effectId });
+    if (ABOUT_THE_STEP.has(reading.kind) && presentationIdOf(threadId, prior) !== presentationId) return null;
+    return applyGuideInputInner(deps, threadId, { kind: 'reading', reading, table: await read() });
   });
 }
 
@@ -487,7 +550,10 @@ async function endGuideInner(deps: GuideEffectDeps, threadId: ThreadId, how: End
   // that cannot be recorded is a lost summary, a run that cannot be dropped
   // takes every later guide in this tab with it.
   let recordError: string | undefined;
-  try {
+  // A run that never pointed at a step was a question (CONTEXT.md `Question`),
+  // however it ended: it leaves no Run record. The record is the journey's —
+  // what S3 distills and what gets exported — and a question walked none.
+  if (thread.history.length > 0) try {
     const plugins = await loadRunPlugins(deps.store, threadId);
     const written = await writeRunRecord(
       deps.records,

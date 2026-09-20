@@ -1,3 +1,5 @@
+import type { OverlayMessage } from '@/shared/protocol';
+import { readProse, type ProseInline, type ProseLine } from '@/shared/prose';
 import type { Rect } from '@/shared/types';
 
 const PAD = 4;
@@ -6,7 +8,7 @@ const NS = 'http://www.w3.org/2000/svg';
 /**
  * Host properties the page must not be able to move. `display` is deliberately
  * absent: it is the one property that legitimately changes, so it is written
- * from `Overlay.visible` instead of from this table (see `apply`).
+ * from whether a step or a message is up instead of from this table (see `apply`).
  */
 const LOCK: readonly (readonly [string, string])[] = [
   ['position', 'fixed'],
@@ -40,8 +42,9 @@ export type OverlayStatus =
   | 'ambiguous';
 
 export interface StepView {
-  index: number;
-  total: number;
+  /** Which step of the run, and of how many; `total` is `null` when nobody
+   *  knows (the model's steps), and the whole of it absent on an outline. */
+  progress?: { index: number; total: number | null };
   title: string;
   detail?: string;
   /** For an `input` step: the text to type. Shown, never typed. */
@@ -50,11 +53,14 @@ export interface StepView {
    *  no object is unactionable, and the person most likely to be reading it is
    *  the one who wrote the descriptor. */
   looking?: string;
-  /** Extra holes with no pulse and no card anchor (explain / diagnose). */
+  /** Extra holes with no pulse and no card anchor: what backs an answer, an ask's candidates. */
   alsoRects?: Rect[];
   /** Offer 跳过 — both buttons, the step row's and the lost screen's. A button
    *  that does nothing when pressed is worse than no button. */
   skippable: boolean;
+  /** Only outline: what backs an answer, or an ask's candidates. No step card —
+   *  there is no step, and the words are on the message card. */
+  outline?: boolean;
 }
 
 export interface OverlayCallbacks {
@@ -62,6 +68,10 @@ export interface OverlayCallbacks {
   onSkip(): void;
   onExit(): void;
   onRetry(): void;
+  /** The message card was closed with 关闭. */
+  onCloseMessage(kind: OverlayMessage['kind']): void;
+  /** The cross-site card was answered: `true` for 继续, `false` for 先不去. */
+  onCrossSite(go: boolean): void;
 }
 
 /**
@@ -83,6 +93,11 @@ export class Overlay {
   private svg!: SVGSVGElement;
   private ring!: HTMLElement;
   private card!: HTMLElement;
+  private message!: HTMLElement;
+  /** What the message card says; `null` while it is down. */
+  private said: OverlayMessage | null = null;
+  /** The step on screen is only an outline: its card stays down. */
+  private outlineOnly = false;
   private holes: SVGRectElement[] = [];
   private status: OverlayStatus = 'idle';
   private lastRect: Rect | null = null;
@@ -105,6 +120,7 @@ export class Overlay {
     this.scrim = this.root.querySelector('.scrim')!;
     this.ring = this.root.querySelector('.ring')!;
     this.card = this.root.querySelector('.card')!;
+    this.message = this.root.querySelector('.message')!;
 
     // skip/exit appear in both the step row and the lost row — bind every match
     const bindAll = (sel: string, fn: () => void) =>
@@ -113,6 +129,9 @@ export class Overlay {
     bindAll('.btn-skip', () => this.cb.onSkip());
     bindAll('.btn-exit', () => this.cb.onExit());
     bindAll('.btn-retry', () => this.cb.onRetry());
+    bindAll('.btn-m-close', () => this.said && this.cb.onCloseMessage(this.said.kind));
+    bindAll('.btn-m-go', () => this.cb.onCrossSite(true));
+    bindAll('.btn-m-stay', () => this.cb.onCrossSite(false));
 
     this.harden();
   }
@@ -144,11 +163,14 @@ export class Overlay {
    * cannot disagree, whoever fires first.
    */
   private apply = (): void => {
+    // Up while a step is shown or a message is: either one is something the
+    // user has to be able to read.
+    const up = this.visible || this.said !== null;
     for (const [prop, value] of LOCK) this.host.style.setProperty(prop, value, 'important');
-    this.host.style.setProperty('display', this.visible ? 'block' : 'none', 'important');
-    if (this.visible !== this.host.matches(':popover-open')) {
+    this.host.style.setProperty('display', up ? 'block' : 'none', 'important');
+    if (up !== this.host.matches(':popover-open')) {
       try {
-        if (this.visible) this.host.showPopover();
+        if (up) this.host.showPopover();
         else this.host.hidePopover();
       } catch {
         /* detached, or the UA already moved it for us */
@@ -160,12 +182,14 @@ export class Overlay {
 
   setStep(step: StepView): void {
     this.canSkip = step.skippable;
+    this.outlineOnly = step.outline === true;
     this.root
       .querySelectorAll<HTMLElement>('.btn-skip')
       .forEach((b) => (b.style.display = step.skippable ? '' : 'none'));
-    this.root.querySelector('.step-n')!.textContent = `步骤 ${step.index + 1} / ${step.total}`;
+    const p = step.progress;
+    this.root.querySelector('.step-n')!.textContent = !p ? '' : p.total === null ? `第 ${p.index + 1} 步` : `步骤 ${p.index + 1} / ${p.total}`;
     this.root.querySelector('.title')!.textContent = step.title;
-    this.root.querySelector('.detail')!.textContent = step.detail ?? '';
+    writeProse(this.root.querySelector('.detail')!, step.detail ?? '');
     // The suggested text sits next to the box, in a field the user copies from
     // by reading it. Nothing here writes into the page.
     const val = this.root.querySelector('.value') as HTMLElement;
@@ -196,15 +220,15 @@ export class Overlay {
     this.ring.style.height = `${rect[3] + PAD * 2}px`;
   }
 
-  /** Multiple holes: `explain` / `diagnose` return a `refs` array, and this is
-   *  the reason a four-rect scrim was rejected — it cannot cut two holes. */
+  /** Multiple holes: an answer or an ask outlines several elements at once,
+   *  and this is the reason a four-rect scrim was rejected — it cannot cut two holes. */
   paint(rects: Rect[], status: OverlayStatus): void {
     this.status = status;
     this.visible = true;
     this.apply();
-    // `outline()` may have hidden these.
+    // `outline()` or `hide()` may have hidden these; an outline has no card.
     this.scrim.style.display = '';
-    this.card.style.display = '';
+    this.card.style.display = this.outlineOnly ? 'none' : '';
 
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -278,9 +302,32 @@ export class Overlay {
 
   hide(): void {
     this.visible = false;
+    // A message may keep the overlay up; nothing of the step is left on it.
+    this.scrim.style.display = 'none';
+    this.ring.style.display = 'none';
+    this.card.style.display = 'none';
     this.apply();
     this.status = 'idle';
     this.lastRect = null;
+  }
+
+  /**
+   * The card that says what is not a step (ticket 10c): a question, an answer,
+   * a cross-site confirmation, or why the guide stopped. The side panel says
+   * the same; this is for a user who is looking at the page, or has the panel
+   * shut. Standing on its own: it stays up with or without a step, until the
+   * user closes it or the host takes it down (`null`).
+   */
+  say(message: OverlayMessage | null): void {
+    this.said = message;
+    this.message.hidden = message === null;
+    if (message) {
+      this.message.querySelector('.m-title')!.textContent = message.title;
+      writeProse(this.message.querySelector('.m-text')!, message.text);
+      (this.message.querySelector('.m-close') as HTMLElement).hidden = message.kind === 'cross_site';
+      (this.message.querySelector('.m-choose') as HTMLElement).hidden = message.kind !== 'cross_site';
+    }
+    this.apply();
   }
 
   destroy(): void {
@@ -297,6 +344,16 @@ export class Overlay {
     this.host.remove();
   }
 
+  /**
+   * The guide needs a model call and no open side panel can run it (ticket
+   * 06c): one line on the card saying how to let it go on. Kept apart from the
+   * status notice — it is about the guide, not about this step's target, and
+   * stays through whatever the step shows until the host takes it down.
+   */
+  setWaiting(on: boolean): void {
+    this.root.querySelector('.waiting')!.textContent = on ? WAITING_FOR_PANEL_TEXT : '';
+  }
+
   /** Readback for the side panel and for E2E — a closed root has no other way in. */
   getState() {
     return {
@@ -305,6 +362,20 @@ export class Overlay {
       rect: this.lastRect,
       status: this.status,
       canSkip: this.canSkip,
+      waiting: this.root.querySelector('.waiting')!.textContent !== '',
+      message: this.said
+        ? {
+            ...this.said,
+            /** What the card shows for `text`, as markup — our own elements, read back. */
+            rendered: this.message.querySelector('.m-text')!.innerHTML,
+            buttons: [...this.message.querySelectorAll<HTMLElement>('button')]
+              .filter((b) => b.offsetParent !== null)
+              .map((b) => {
+                const r = b.getBoundingClientRect();
+                return { label: b.textContent ?? '', rect: [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)] as Rect };
+              }),
+          }
+        : null,
     };
   }
 
@@ -328,6 +399,40 @@ const NOTICE: Partial<Record<OverlayStatus, string>> = {
   settling: '这一步完成了，正在看新页面…',
   ambiguous: '这一步的目标是下列几个之一，请按说明判断。',
 };
+
+/**
+ * Fills `el` with what the model wrote, its few Markdown marks shown as what
+ * they mean (`shared/prose.ts`). Built from elements and text nodes, never
+ * from an HTML string: the words often quote the page this overlay sits on.
+ */
+function writeProse(el: Element, text: string): void {
+  const doc = el.ownerDocument;
+  const inline = (x: ProseInline): Node => {
+    if (x.kind === 'text') return doc.createTextNode(x.text);
+    const n = doc.createElement(x.kind);
+    if (x.kind === 'code') n.textContent = x.text;
+    else n.append(...x.parts.map(inline));
+    return n;
+  };
+  const lines = (into: Element, ls: ProseLine[]): Element => {
+    ls.forEach((line, i) => {
+      if (i > 0) into.append(doc.createElement('br'));
+      into.append(...line.map(inline));
+    });
+    return into;
+  };
+  el.replaceChildren(
+    ...readProse(text).map((block) => {
+      if (block.kind === 'para') return lines(doc.createElement('p'), block.lines);
+      const list = doc.createElement(block.ordered ? 'ol' : 'ul');
+      if (block.ordered && block.start !== 1) list.setAttribute('start', String(block.start));
+      list.append(...block.items.map((item) => lines(doc.createElement('li'), item)));
+      return list;
+    }),
+  );
+}
+
+const WAITING_FOR_PANEL_TEXT = '引导在等侧栏：模型要在侧栏里调用。点浏览器工具栏上的「页面引导」图标打开侧栏，引导就会接着走。';
 
 const TEMPLATE = `
 <style>
@@ -356,13 +461,32 @@ const TEMPLATE = `
     padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.14);
     box-shadow: 0 10px 34px rgba(0,0,0,.5);
   }
+  [hidden] { display: none !important; }
+  .message {
+    position: fixed; right: 16px; bottom: 16px; width: min(360px, calc(100vw - 32px));
+    pointer-events: auto; background: #10151f; color: #e8eefc;
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    padding: 12px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,.14);
+    box-shadow: 0 10px 34px rgba(0,0,0,.5);
+  }
+  .m-title { font-weight: 600; margin-bottom: 4px; }
+  .m-text { font-size: 13px; white-space: pre-wrap; max-height: 40vh; overflow: auto; }
+  :where(.m-text, .detail) :where(p, ul, ol) { margin: 0; }
+  :where(.m-text, .detail) :where(ul, ol) { padding-left: 18px; }
+  .m-text > * + *, .detail > * + * { margin-top: 6px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em;
+         padding: 0 3px; border-radius: 3px; background: rgba(255,255,255,.1); }
   .step-n { font-size: 11px; letter-spacing: .09em; opacity: .55; margin-bottom: 4px; }
+  .step-n:empty { display: none; }
   .title { font-weight: 600; margin-bottom: 4px; }
   .detail { font-size: 13px; opacity: .82; }
   .value { font-size: 13px; margin-top: 4px; padding: 3px 6px; border-radius: 4px;
            background: rgba(255,255,255,.12); font-family: ui-monospace, monospace; }
   .notice { font-size: 12px; color: #ffca6b; margin-top: 6px; }
   .notice:empty { display: none; }
+  .waiting { font-size: 12px; color: #9fc3ff; margin-top: 6px; }
+  .waiting:empty { display: none; }
   .looking { font-size: 11.5px; opacity: .6; margin-top: 4px; font-family: ui-monospace, monospace; }
   .looking:empty { display: none; }
   .row { display: flex; gap: 8px; margin-top: 10px; }
@@ -389,6 +513,7 @@ const TEMPLATE = `
   <div class="detail"></div>
   <div class="value"></div>
   <div class="notice"></div>
+  <div class="waiting"></div>
   <div class="looking"></div>
   <div class="row step-actions">
     <button class="btn-next primary" title="把焦点移到目标上，之后按回车或空格即可触发——扩展不代你操作">跳到目标</button>
@@ -399,5 +524,16 @@ const TEMPLATE = `
     <button class="btn-retry primary">重试定位</button>
     <button class="btn-skip">跳过此步</button>
     <button class="btn-exit">结束引导</button>
+  </div>
+</div>
+<div class="message" hidden>
+  <div class="m-title"></div>
+  <div class="m-text"></div>
+  <div class="row m-close">
+    <button class="btn-m-close">关闭</button>
+  </div>
+  <div class="row m-choose">
+    <button class="btn-m-go primary">继续，带我去</button>
+    <button class="btn-m-stay">先不去</button>
   </div>
 </div>`;

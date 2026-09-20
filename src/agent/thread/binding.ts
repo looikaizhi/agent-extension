@@ -1,22 +1,24 @@
 import type { HighlightAck } from '@/shared/protocol';
-import type { Binding } from './thread';
 
 /**
- * The missing piece between renderer and reducer: `HighlightAck` → `Binding`.
+ * CONTEXT.md's renderer-stamped axis: "此刻能不能把它指出来". Distinct from
+ * `core/descriptor/bind.ts`'s `BindResult` — that is a table-only match
+ * attempt; this is what a real paint attempt against the page on screen came
+ * back with.
  *
- * `machine.ts`'s `handleBindResult` (03) already knows what to *do* with a
- * `Binding` value — the CL-2 escalation, the "未能定位" fallback — but until
- * this file existed, nothing ever produced one from a real paint attempt. The
- * retired host flattened every non-success `HighlightAck` into a single coarse
- * `'unresolved'` signal, which loses
- * exactly the distinction CL-2 exists to use: "several elements matched, ask
- * the user to pick" reads nothing like "nothing matched at all". This
- * function is the missing translation, kept pure and separate from
- * `machine.ts` itself (whose own doc comment reserves that file for `step`
- * and nothing else) so it can be unit-tested without a live DOM.
- *
- * The three-way split mirrors `content.ts`'s own `render()`, which is the
- * only producer of a real `HighlightAck`:
+ * Shown to the side panel beside the step, and nothing more. It is never fed
+ * back into the Thread: by the time a paint answers, the step it names may no
+ * longer be the one on screen — a paint cut short by the next command, or by a
+ * CLEAR, answers `ref_not_found` too, and the old reducer wrote that down
+ * against whatever step held the tab by then. What a paint says about the step
+ * itself arrives as a reading instead (CONTEXT.md `Reading`), matched to the
+ * presentation it was about.
+ */
+export type Binding = 'bound' | 'ambiguous' | 'unbound';
+
+/**
+ * `HighlightAck` → `Binding`, in the three ways `content.ts`'s `render()`
+ * can answer:
  *  - `resolved !== null` — exactly one element was painted. `bound`.
  *  - `resolved === null` but `candidates` is a non-empty list — several
  *    elements were painted with none singled out (K-6: bind never breaks a

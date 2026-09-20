@@ -167,17 +167,3 @@ function moved(a: Rect, b: Rect | null): boolean {
     Math.abs(a[3] - b[3]) > MIN_DELTA
   );
 }
-
-/** scrollIntoView handles nested scroll containers and shadow DOM natively;
- *  `block: 'center'` also sidesteps sticky headers. */
-export async function scrollToTarget(el: Element): Promise<boolean> {
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: reduced ? 'auto' : 'smooth' });
-  if (reduced) return true;
-  return await Promise.race([
-    new Promise<boolean>((r) =>
-      document.addEventListener('scrollend', () => r(true), { once: true, capture: true }),
-    ),
-    new Promise<boolean>((r) => setTimeout(() => r(false), 800)),
-  ]);
-}

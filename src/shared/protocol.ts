@@ -1,6 +1,6 @@
-import type { EffectRecovery, EffectRequest, EffectResult } from '@/agent/thread/effect';
+import type { EffectRequest, EffectResult } from '@/agent/thread/effect';
 import type { ExtractProfile, ProjectBudget, PromptItem, PromptTable } from '@/core/extractor/types';
-import type { GuideRouteHop, Rect, Ref, Trace } from './types';
+import type { AskOption, AskWants, GuideRouteHop, Rect, Ref, Trace, WaitUntil } from './types';
 
 /**
  * Mirrors `agent/thread/machine.ts`'s `Binding` and `agent/thread/thread.ts`'s
@@ -12,7 +12,7 @@ import type { GuideRouteHop, Rect, Ref, Trace } from './types';
  * are cheap to keep in sync by hand; a cycle is not.
  */
 export type WireBinding = 'bound' | 'ambiguous' | 'unbound';
-export type WireEvidence = 'walked' | 'handpicked' | 'documented' | 'model';
+export type WireEvidence = 'handpicked' | 'documented' | 'model';
 export type WireCheck = 'pass' | 'unknown' | 'skipped';
 
 /* ═══════════ identity ═══════════ */
@@ -114,8 +114,9 @@ export interface GuideStep {
   /** Identity that outlives the snapshot. Never dropped after a successful bind —
    *  `relocate` has nothing else to work from once the snapshot is stale (K-5). */
   descriptor: ElementDescriptor;
-  /** Secondary highlights: `explain` / `diagnose` refs, or every candidate when
-   *  a descriptor binds to more than one element. Holes only, no pulse. */
+  /** Secondary highlights: what backs an answer, an ask's candidates, or every
+   *  candidate when a descriptor binds to more than one element. Holes only,
+   *  no pulse. */
   alsoRefs?: readonly Ref[];
   expectedUserAction: UserAction;
   title: string;
@@ -125,7 +126,13 @@ export interface GuideStep {
   value?: string;
 }
 
-export type HighlightMode = 'guide' | 'locate' | 'explain' | 'diagnose';
+/**
+ * `guide` is a step the user is meant to operate — the model's, or a fixed
+ * plan's. `explain` only outlines: what backs an answer, or the candidates of
+ * an ask. Nothing in it is to be clicked, so it is never rebound, never looked
+ * for again and never judged for actionability.
+ */
+export type HighlightMode = 'guide' | 'explain';
 
 /**
  * One command renders exactly one step.
@@ -134,15 +141,34 @@ export type HighlightMode = 'guide' | 'locate' | 'explain' | 'diagnose';
  * side panel today, the LangGraph checkpoint in step 2 — and never to the
  * content script, which does not survive a navigation and has no recovery
  * mechanism. `progress` is display data, not state: the renderer reads it to
- * draw "步骤 2 / 5" and has no way to advance it.
+ * draw 「步骤 2 / 5」 — or 「第 3 步」 when there is no total — and has no way
+ * to advance it.
  */
 export interface HighlightCommand {
   sessionId: SessionId;
-  /** Must equal the content script's current snapshot or the render is refused. */
+  /** CONTEXT.md's `Presentation`, issued by the host and never made up by the
+   *  content script. The same id again is the same presentation painted again —
+   *  a reload, a fixed plan redrawn on a changed page — and keeps what it has
+   *  running; a different id that reaches the screen ends everything the
+   *  previous presentation left behind. */
+  presentationId: string;
+  /** The snapshot the step's refs were drawn from. Answers only whether a
+   *  handle is still fresh — a ref from an older snapshot is rebound from the
+   *  step's descriptor — never which page this is. */
   snapshotId: string;
+  /** The page the step was drawn from (CONTEXT.md `View`): the address of the
+   *  table it came out of. The step is painted only while the tab is still
+   *  there. A same-document navigation leaves the snapshot current and the
+   *  element connected, so nothing else can tell a step from the page just
+   *  left from one for this page — and painting it would be a confident
+   *  pointer at the wrong page (symptom 2). */
+  view: string;
   mode: HighlightMode;
   step: GuideStep;
-  progress: { index: number; total: number };
+  /** Which step of the run this is, and of how many — `total` is `null` for
+   *  the model's steps, which come one at a time. Absent on an outline: what
+   *  backs an answer is not a step of anything. */
+  progress?: { index: number; total: number | null };
   autoScroll: boolean;
   /** Whether 跳过 does anything for this step. Only a fixed plan can move past
    *  a step the user declined — a model-driven guide would re-plan and hand
@@ -152,11 +178,12 @@ export interface HighlightCommand {
 }
 
 export type HighlightFailure =
+  /** The tab is no longer at the command's `view`: nothing painted, and the
+   *  step is not looked for on the page it is at now. */
+  | 'view_moved'
   | 'snapshot_stale'
   | 'ref_not_found'
-  | 'sensitive_blocked'
-  | 'not_visible'
-  | 'frame_unreachable';
+  | 'sensitive_blocked';
 
 /**
  * The single channel for "what happened on screen".
@@ -172,7 +199,6 @@ export interface HighlightAck {
   resolved: Ref | null;
   /** Top-frame viewport coordinates, already composed across frames. */
   rect: Rect | null;
-  scrolled: boolean;
   /** Every element the step matched, when it matched more than one. All are
    *  outlined and none is chosen — bind never breaks a tie (K-6). */
   candidates?: readonly Ref[];
@@ -200,6 +226,21 @@ export const RPC_TYPES = [
   // it reports what the user pointed at and never acts on it.
   'INSPECT',
   'DEBUG_GET_OVERLAY_STATE',
+  // Added deliberately for `wait_for` (07c), with the diff the whitelist exists
+  // to force: it watches the page's visible text until a piece of it appears or
+  // goes, then answers. It reads and waits; it never touches anything.
+  'WAIT_FOR',
+  // Added deliberately for a model call no panel can run (06c), with the diff
+  // the whitelist exists to force: it puts one line on the overlay's card
+  // telling the user to open the side panel, or takes it down. It writes to
+  // our own overlay and nothing of the page's.
+  'WAITING_FOR_PANEL',
+  // Added deliberately so the overlay can say what the side panel says (10c),
+  // with the diff the whitelist exists to force: it shows one card of our own
+  // with a question, an answer, a cross-site confirmation or why the guide
+  // stopped, or takes it down. It writes nothing of the page's, and its
+  // buttons only report back to the host.
+  'SAY',
 ] as const;
 
 export type RpcType = (typeof RPC_TYPES)[number];
@@ -211,12 +252,33 @@ export interface ContentRpcMap {
   CLEAR: { req: Record<never, never>; res: null };
   /** Element picking for writing a fixed plan's steps. `on: false` leaves the mode. */
   INSPECT: { req: { on: boolean }; res: null };
-  /** Overlay state readback. Not a test-only affordance — the side panel needs
-   *  exactly this, and closed shadow roots make it the only way in. */
+  /** Overlay state readback. Nothing in the product sends it: it is how the
+   *  e2e suite sees what is on screen, since a closed shadow root has no other
+   *  way in. It reads and changes nothing. */
   DEBUG_GET_OVERLAY_STATE: {
     req: Record<never, never>;
-    res: { mounted: boolean; visible: boolean; rect: Rect | null; status: string; canSkip: boolean } | null;
+    res: {
+      mounted: boolean;
+      visible: boolean;
+      rect: Rect | null;
+      status: string;
+      canSkip: boolean;
+      waiting: boolean;
+      /** The card shown when it is not a step, and where its buttons are. */
+      message: (OverlayMessage & { buttons: { label: string; rect: Rect }[] }) | null;
+      /** Whether a missing target is being looked for, and how many looks it has taken. */
+      watch: { watching: boolean; looks: number };
+    } | null;
   };
+  /** Wait until `text` appears in (or goes from) the page's visible text, or
+   *  `timeoutMs` passes — whichever is first. `met` says which. */
+  WAIT_FOR: { req: { until: WaitUntil; text: string; timeoutMs: number }; res: { met: boolean; waitedMs: number } };
+  /** The guide on this tab needs a model call that no open side panel can
+   *  run: say so on the overlay (`waiting: true`), or stop saying it. */
+  WAITING_FOR_PANEL: { req: { waiting: boolean }; res: null };
+  /** Show a card on the overlay with something the user has to read (or
+   *  answer), or take it down (`null`). */
+  SAY: { req: { message: OverlayMessage | null }; res: null };
 }
 
 /** Compile-time proof that the runtime whitelist and the type map cannot drift. */
@@ -233,11 +295,7 @@ export type ContentRequest = {
 }[RpcType];
 
 /** Transport only. Everything the renderer decided lives in `HighlightAck`. */
-export type TransportError =
-  | 'no_content_script'
-  | 'frame_unreachable'
-  | 'extract_failed'
-  | 'aborted';
+export type TransportError = 'no_content_script' | 'extract_failed';
 
 export type ContentResponse<K extends RpcType = RpcType> =
   | { ok: true; data: ContentRpcMap[K]['res'] }
@@ -254,15 +312,15 @@ export type ContentResponse<K extends RpcType = RpcType> =
  * The `PANEL_*` verbs are a different kind and are not part of that swap.
  * They own no flow — they relay one panel gesture each to the content script,
  * and exist only so the content script answers to a single commander.
- * `PANEL_SHOW_QA_RESULT` and `PANEL_RESUME_GUIDE` (task 6) are the same kind
- * again: a question never owns a Thread (CONTEXT.md `Question`), so neither one starts,
- * resumes or aborts one — `PANEL_SHOW_QA_RESULT` only asks whether a guide owns
- * the tab, and `PANEL_RESUME_GUIDE` only repaints the step it is already on.
+ * `PANEL_RESUME_GUIDE` is the same kind again: it starts, resumes or aborts
+ * nothing, and only repaints the step the tab's guide is already on.
  */
 export type HostRequest =
-  /** `goal` is always said — a run is recorded against it. `steps` is a plan
-   *  handed over whole (the element inspector's row), which runs as given and
-   *  never reaches the model; without it, the model plans. */
+  /** What the user said in the panel's one entry (`goal`), or a plan handed
+   *  over whole (`steps`, the element inspector's row), which runs as given
+   *  and never reaches the model. Said while a model guide is going, `goal` is
+   *  said *to* that guide — it hears it as a reading — and starts nothing;
+   *  otherwise it starts a run, and a run is recorded against it. */
   | { type: 'START_GUIDE'; tabId: number; goal: string; steps?: readonly GuideStep[] }
   /** Ends whatever flow currently owns the tab, agent- or inspector-driven alike. */
   | { type: 'END_GUIDE'; tabId: number }
@@ -275,43 +333,18 @@ export type HostRequest =
   | { type: 'PANEL_EXTRACT'; tabId: number }
   /** The panel's inspect-mode toggle. Relayed for the same reason as `PANEL_EXTRACT`. */
   | { type: 'PANEL_INSPECT'; tabId: number; on: boolean }
-  /**
-   * A QA answer's highlight (CONTEXT.md `Question`). Unlike every other verb
-   * here, this one only *asks* whether a guide owns the tab — a question never
-   * builds, resumes or aborts a Thread.
-   */
-  | {
-      type: 'PANEL_SHOW_QA_RESULT';
-      tabId: number;
-      /** The snapshot `items` were read from. Becomes `HighlightCommand.snapshotId`
-       *  unchanged — the host must never substitute a freshly re-extracted one,
-       *  or `render()`'s `mode: 'explain'` branch could never detect staleness */
-      snapshotId: string;
-      /** The page's URL when the question was asked, compared against the tab's
-       *  *current* URL before anything is forwarded — the one check only the
-       *  host can make (`chrome.tabs.get`). */
-      url: string;
-      /** Already-resolved items, not bare refs: the panel already has them from
-       *  its own `PANEL_EXTRACT` table (same pattern as `App.tsx`'s
-       *  `onRowClick`), which is what lets the host build a descriptor via
-       *  `descriptorOf` (`src/core/descriptor/bind.ts`) without a second extraction —
-       *  a second extraction would commit a new snapshot generation and make
-       *  the `snapshotId` above unresolvable on arrival. */
-      items: readonly PromptItem[];
-      mode: 'explain';
-      title: string;
-      detail?: string;
-    }
   /** Redraws whatever step the tab's guide Thread is currently parked on,
-   *  without advancing its cursor. The panel calls this once a QA highlight's
-   *  overlay closes, to hand the screen back to an in-progress guide — reading
-   *  the parked step is enough; nothing here moves the guide. */
+   *  without advancing its cursor. The panel calls this once an answer's
+   *  outline is closed, to hand the screen back to an in-progress guide —
+   *  reading the parked step is enough; nothing here moves the guide. */
   | { type: 'PANEL_RESUME_GUIDE'; tabId: number }
   /** E-6: the panel asks this once on mount, before
-   *  it does anything else — never to issue a new `EffectRequest`, only to
-   *  learn whether one is already outstanding for this tab's thread, so a
+   *  it does anything else — never to issue a new `EffectRequest` itself, only
+   *  to learn whether one is already outstanding for this tab's thread, so a
    *  reopened panel can say "上一次调用超时" / "仍在进行" honestly instead of
-   *  either staying silent or (worse) sending a second, paid-for request. */
+   *  either staying silent or (worse) sending a second, paid-for request.
+   *  Hearing it, the host knows a panel is open, and hands out again every
+   *  call on any tab that no panel is running (06c). */
   | { type: 'PANEL_GUIDE_INFLIGHT'; tabId: number }
   /**
    * Closes a gap the effect protocol first left open: `EFFECT_
@@ -322,10 +355,11 @@ export type HostRequest =
    * `startEffectListener` instance sends this *before* touching
    * `complete()`/`fetch()`; the host answers with `EffectClaimResponse`, and
    * only the first asker for a given `effectId` gets `granted: true`
-   * (`agent/thread/effect.ts`'s `claimEffect`). A losing instance does not
-   * retry, error, or render anything — it silently yields, because another
-   * instance of the very same panel is already running this call. */
-  | { type: 'EFFECT_CLAIM'; effectId: string };
+   * (`agent/thread/effect.ts`'s `judgeClaim`), written down with the effect
+   * of `threadId`. A losing instance does not retry, error, or render
+   * anything — it silently yields, because another open panel is already
+   * running this call. */
+  | { type: 'EFFECT_CLAIM'; threadId: string; effectId: string };
 
 /**
  * `PANEL_RESUME_GUIDE`'s answer. Not `ContentResponse<'HIGHLIGHT'>` verbatim
@@ -339,16 +373,18 @@ export type ResumeGuideResponse = ContentResponse<'HIGHLIGHT'> | { ok: false; co
 
 /** `PANEL_GUIDE_INFLIGHT`'s answer (E-6). `effect` is `null` exactly when
  *  `recovery === 'none'` — there is nothing to recover, either because the
- *  thread never had anything in flight or because it never existed. */
+ *  thread never had anything in flight or because it never existed.
+ *
+ *  Never `expired`: the host sweeps before it answers, and the sweep's own
+ *  verdict has already gone out to every open panel by then. */
 export interface GuideInflightResponse {
-  recovery: EffectRecovery;
+  recovery: 'none' | 'in_progress';
   effect: EffectRequest | null;
 }
 
-/** `EFFECT_CLAIM`'s answer. `granted` is `false` for every asker after the
- *  first for a given `effectId` — see `HostRequest`'s `EFFECT_CLAIM` variant
- *  and `agent/thread/effect.ts`'s `claimEffect` for why one `Set` on the host
- *  is enough and needs no persistence. */
+/** `EFFECT_CLAIM`'s answer. `granted` is `false` for every asker while the
+ *  panel that took the effect is still open — see `HostRequest`'s
+ *  `EFFECT_CLAIM` variant and `agent/thread/effect.ts`'s `judgeClaim`. */
 export interface EffectClaimResponse {
   granted: boolean;
 }
@@ -398,20 +434,38 @@ export interface EffectAbortMessage {
  * than appending to or de-duplicating against whatever it showed before.
  */
 /**
- * CL-1: the guided flow is parked on a question the model asked, rather than
- * on a step. Its own broadcast rather than a field on `GuideState`, because
- * the two describe different situations — `GuideState` always answers "which
- * step is on screen", and here there is no step at all.
+ * CL-1: the guided flow is parked on a question the model asked (`ask`),
+ * rather than on a step. Its own broadcast rather than a field on
+ * `GuideState`, because the two describe different situations — `GuideState`
+ * always answers "which step is on screen", and here there is no step at all.
  *
- * `options` carries every candidate the model listed, in its order. The panel
- * lists them all and picks none (K-6).
+ * `wants` says what the user is asked for: one of `options`, or words only
+ * they have. `options` carries every candidate the model listed, in its
+ * order. The panel lists them all and picks none (K-6).
  */
-export interface GuideClarify {
-  type: 'GUIDE_CLARIFY';
+export interface GuideAsk {
+  type: 'GUIDE_ASK';
   tabId: number;
   sessionId: SessionId;
   question: string;
-  options: readonly { ref: Ref; label: string }[];
+  wants: AskWants;
+  options: readonly AskOption[];
+  /** Whether the run is still going: then the user answers by just saying
+   *  it, and the run hears it. `false` when the ask was the whole run — a
+   *  question that pointed at nothing (CONTEXT.md `Question`) — and the
+   *  answer has to be said together with what it was for. */
+  runGoesOn: boolean;
+}
+
+/**
+ * The model answered a question about the page (`explain`). What backs the
+ * answer up is outlined on the page by the host; the panel shows the words.
+ */
+export interface GuideExplain {
+  type: 'GUIDE_EXPLAIN';
+  tabId: number;
+  sessionId: SessionId;
+  answer: string;
 }
 
 /**
@@ -432,14 +486,15 @@ export interface GuideState {
   type: 'GUIDE_STATE';
   tabId: number;
   sessionId: SessionId;
+  /** The step on screen, as `HighlightCommand.progress` says it. */
   index: number;
-  total: number;
+  total: number | null;
   /** Absent while a step is on screen. */
   failure?: HighlightFailure;
   candidates?: number;
-  /** The model's latest coarse waypoint sequence (§5.4) — present only on an
-   *  S2 model-driven guide broadcast. Displayed exactly as returned: no
-   *  keyword extraction, no breadcrumb assembly (05's Gotchas). */
+  /** The model's latest coarse waypoint sequence (§5.4); empty on a fixed
+   *  plan, which has none. Displayed exactly as returned: no keyword
+   *  extraction, no breadcrumb assembly (05's Gotchas). */
   route?: readonly GuideRouteHop[];
   /** §5.7's three orthogonal axes, mirrored here from `ThreadState.evidence`/
    *  `ThreadState.check` and this paint attempt's own `Binding` verdict —
@@ -456,33 +511,70 @@ export interface GuideState {
   /** Where the guide has already been, oldest first, with how each step
    *  turned out. This is the thing that was invisible: the run had a memory
    *  from 07 onward, but only the model could read it. */
-  walked?: readonly { title: string; url: string; outcome: string; landedAt?: string }[];
-  /** Model calls spent so far, against §5.10's cap of 12. Shown because a
-   *  guide that is looping is visible as a number climbing long before it is
-   *  visible as repeated advice. */
+  walked?: readonly {
+    title: string;
+    url: string;
+    action?: 'taken' | 'skipped' | 'unavailable';
+    effect?: { kind: 'moved'; to: string } | { kind: 'changed_in_place' } | { kind: 'none' } | { kind: 'unknown' };
+  }[];
+  /** Model calls spent so far — what the run cost, not a limit. Shown because
+   *  a guide that is looping is visible as a number climbing long before it
+   *  is visible as repeated advice. */
   calls?: number;
+  /** Steps this run has taken, against its budget of twelve (ticket 09). */
+  spentSteps?: number;
 }
 
 /* ═══════════ events: content script → everyone ═══════════ */
 
 export const EVENT_TYPES = [
-  'STEP_CONFIRMED',
+  /** The user used the target of the step on screen — one of the four
+   *  observation sources (CONTEXT.md `Reading`). */
+  'STEP_USED',
   'STEP_SKIPPED',
   'TARGET_LOST',
   /** Its counterpart. Without it the host's view of the session diverges from
    *  what is actually on screen the moment a lost step recovers. */
   'TARGET_FOUND',
+  /** The step's target is not on the page — said once per presentation, the
+   *  moment it is painted as 「找不到」 (CONTEXT.md `Reading`). */
+  'TARGET_NOT_FOUND',
+  /** The step's target is on the page but cannot be operated right now
+   *  (CONTEXT.md `Actionability`) — said once per presentation. */
+  'STEP_NOT_ACTIONABLE',
+  /** The user closed a question or an answer on the overlay's card: the screen
+   *  goes back to the step, the way the panel's 关闭 does. */
+  'MESSAGE_CLOSED',
+  /** The user answered the overlay's cross-site card — the same decision the
+   *  panel's buttons send as `CROSS_SITE_DECISION`. */
+  'CROSS_SITE_DECIDED',
   'SESSION_ENDED',
   'ELEMENT_PICKED',
   /** A *second*, independent subscription on
    *  the same DOM-observation machinery `attachTracker`'s `TargetTracker`
    *  already uses — that one watches a single highlighted target; this one
-   *  watches whatever landmark/heading nodes feed `pageFingerprint`. Reported
+   *  watches whatever landmark/heading nodes feed `structureFingerprint`. Reported
    *  only when the content script's own comparison (`pageStructureChanged`,
-   *  `core/extractor/fingerprint.ts`) says the hash actually moved — not on
-   *  every DOM mutation the observer wakes up for. */
+   *  `core/extractor/fingerprint.ts`) says the hash actually moved, or the
+   *  address has become a different `View` (the hash no longer carries the
+   *  address) — not on every DOM mutation the observer wakes up for. */
   'PAGE_STRUCTURE_CHANGED',
 ] as const;
+
+/**
+ * What the overlay's own card says, when it is not a step (10c): the side panel
+ * says the same, but the user is looking at the page, and the panel may be shut.
+ *
+ * `ask` — the model asked the user something; `answer` — it answered a question
+ * about the page. Closing either hands the screen back the way the panel's
+ * 关闭 does. `cross_site` — the next step leaves the site, with 继续 and 先不去.
+ * `note` — anything else to read: why the guide stopped, or what went wrong.
+ */
+export interface OverlayMessage {
+  kind: 'ask' | 'answer' | 'cross_site' | 'note';
+  title: string;
+  text: string;
+}
 
 /**
  * `'completed'` is emitted by the **flow owner**, never by the content script:
@@ -491,8 +583,19 @@ export const EVENT_TYPES = [
  */
 export type SessionEndReason = 'user_closed' | 'navigated' | 'aborted' | 'completed';
 
+/** Why a target on the page cannot be operated right now (CONTEXT.md
+ *  `Actionability`). Not being visible is not among them: that is the target
+ *  gone, and `TARGET_LOST` says it. */
+export type NotActionableWhy = 'disabled' | 'covered' | 'moving';
+
 export type ContentEvent =
-  | { type: 'STEP_CONFIRMED'; sessionId: SessionId; stepIndex: number }
+  /**
+   * The user used the target of the step on screen: clicked it, or typed into
+   * it and was done (`change`). Says which presentation it was on screen for,
+   * so a report that outlives its step is not written down against the next
+   * one — this is the one reading that records something about the step.
+   */
+  | { type: 'STEP_USED'; sessionId: SessionId; presentationId: string; how: 'clicked' | 'typed' }
   | { type: 'STEP_SKIPPED'; sessionId: SessionId; stepIndex: number }
   | {
       type: 'TARGET_LOST';
@@ -501,16 +604,16 @@ export type ContentEvent =
       reason: 'removed' | 'hidden' | 'zero_area';
     }
   | { type: 'TARGET_FOUND'; sessionId: SessionId; ref: Ref }
+  | { type: 'TARGET_NOT_FOUND'; sessionId: SessionId; presentationId: string }
+  | { type: 'STEP_NOT_ACTIONABLE'; sessionId: SessionId; presentationId: string; why: NotActionableWhy }
+  | { type: 'MESSAGE_CLOSED' }
+  | { type: 'CROSS_SITE_DECIDED'; confirmed: boolean }
   | { type: 'SESSION_ENDED'; sessionId: SessionId; reason: SessionEndReason }
-  /** §5.3's re-planning trigger, carried at its cheapest: the content script
-   *  computes the new hash itself (it already has the live DOM), and leaves
-   *  deciding whether it actually differs from what the *guide* was planned
-   *  against to the host (`ThreadState.table.pageHash`,
-   *  `agent/thread/writer.ts`'s `applyGuidePageChanged`) — the content script only ever compares against
-   *  its own last-*reported* hash, a cheaper, independent check that exists
-   *  purely so it does not spam this event on every mutation (05's Gotchas,
-   *  "两层核对独立存在"). */
-  | { type: 'PAGE_STRUCTURE_CHANGED'; sessionId: SessionId; pageHash: string }
+  /** The page's structure changed by itself — one of the four observation
+   *  sources (CONTEXT.md `Reading`). The content script compares against its
+   *  own last-*reported* hash so it does not report every mutation; what the
+   *  change means is the model's to read. */
+  | { type: 'PAGE_STRUCTURE_CHANGED'; sessionId: SessionId; structureHash: string }
   /**
    * The inspector's output. `matches !== 1 || !correct` means the descriptor is
    * not safe to guide by — L-0 is a constraint, not a statistic (§7.5).

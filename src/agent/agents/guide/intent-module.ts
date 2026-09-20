@@ -1,3 +1,4 @@
+import type { ToolCall } from '@/agent/context/turn';
 import type { EnvelopeShape } from '@/agent/envelope/contract';
 import type { ToolDef } from '@/agent/provider/provider';
 import type { ThreadState } from '@/agent/thread/thread';
@@ -28,6 +29,13 @@ import type { GuideContext } from './agent';
  */
 export interface GuideIntentModule<E extends { intent: string }> extends EnvelopeShape<E> {
   readonly intent: E['intent'];
+  /** CONTEXT.md's two kinds of intent. A `tool`'s result goes back to the
+   *  model and the step's conversation goes on; an `output` ends it. */
+  readonly kind: 'tool' | 'output';
+  /** An `output` that leaves the step on screen as it is — `explain`: it
+   *  answers a question on the way and moves nothing, so the step it was
+   *  asked beside is not settled. Every other answer settles it. */
+  readonly leavesStepOnScreen?: true;
   /** What the model is offered: this intent as a function it can call. */
   tool(ctx: GuideContext): ToolDef;
   /** Its line in the system message's tool-choice policy — the bar for reaching for it. */
@@ -40,6 +48,7 @@ export interface GuideIntentModule<E extends { intent: string }> extends Envelop
   /** Its free-text reasons, for the trace. */
   rationales(envelope: E): readonly string[];
   /** What the reducer does with it. Pure, like the reducer: N-2 covers every
-   *  file the reducer can load. */
-  consequence(state: ThreadState, envelope: E, ids: { nextEffectId: string; nextRev: number }): StepOut;
+   *  file the reducer can load. `call` is the call as the model made it, for
+   *  a tool that has to replay it to the model with its result. */
+  consequence(state: ThreadState, envelope: E, ids: { nextEffectId: string; nextRev: number; call: ToolCall }): StepOut;
 }

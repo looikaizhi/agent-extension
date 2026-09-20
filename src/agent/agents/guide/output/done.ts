@@ -18,10 +18,9 @@ export type DoneEvidence = (typeof DONE_EVIDENCE)[number];
 /**
  * The journey is over: nothing left on this page for the user to do.
  *
- * Its own intent rather than "a `guide` with an empty `steps`", because R-b
- * (`guide.ts`'s own rule) requires `steps` to be non-empty — expressing
- * completion that way would ask one shape to be both a violation and valid. No `ref` and no control name: there is nothing to point at, which is
- * the whole content of the message.
+ * Its own intent rather than a `point` at nothing: a step always names a
+ * control, and completion names none. No `ref` and no control name: there is
+ * nothing to point at, which is the whole content of the message.
  */
 export interface DoneEnvelope {
   intent: 'done';
@@ -37,8 +36,9 @@ export interface DoneEnvelope {
  */
 export const done: GuideIntentModule<DoneEnvelope> = {
   intent: 'done',
+  kind: 'output',
   tool: () =>
-    fn('done', '只在用户要做的事已经做完时用。走不下去不是做完——那是 clarify。', ['evidence', 'why'], {
+    fn('done', '只在用户要做的事已经做完时用。走不下去不是做完——那是 ask。', ['evidence', 'why'], {
       // Named before `why` is written, so the claim has to be classified
       // rather than narrated. Live runs produced `done` on goals that had
       // never started, and a free sentence could not tell that apart from a
@@ -53,15 +53,27 @@ export const done: GuideIntentModule<DoneEnvelope> = {
     }),
   // `done` is keyed on the goal being *reached*, not on the page having run
   // out of controls. The earlier wording — "这一页上确实再没有任何能推进目标的
-  // 可操作控件" — was the same trigger `clarify` already has ("连一个能让用户更
+  // 可操作控件" — was the same trigger asking already has ("连一个能让用户更
   // 接近目标的入口都没有"), so two tools competed for one condition and the
   // model had nothing to separate them by. It showed: journeys ended in `done`
   // on goals that were never started (the corpus caught it twice), and 7 of 14
   // live rounds finished that way. The two are opposites and now say so.
-  policy: `- **done**：**用户要做的事已经做完了。** **说了 done，引导就结束了**——用户不会再收到下一步，屏幕上的高亮也会撤掉。所以这不是一句可以顺口说的话：不确定就继续给 guide，走到真的到了再说。**"走不下去"和"已经做完"是相反的两件事：走不下去给 clarify，做完了才给 done。** 先分清用户要的是哪一种：
-  - **他要看到某个东西**（看 issue 列表、看有哪些版本、读某份文件、确认用的是什么许可证）——**东西显示在这一页上，就是做完了**，没有下一步动作要做。这时给 done，evidence 用 content_on_page 或 page_address。不要因为"还能再点点别的"就继续给 guide。
+  //
+  // Two kinds of what the user wants were not enough, and the gap made the
+  // guide walk off pages it had arrived on. A question about *how* something
+  // is done ("怎么改成按量付费？", "怎么把它释放掉？") fell into "complete an
+  // action", so on the very document that answers it the model led on to a
+  // console to do it for real. And the summary rule, read without its
+  // converse, sent it from a directory of files into one of them. Measured on
+  // the pages the owner's own criteria call the end (t11 and t09): the model
+  // said `done` on 75 of 111; on the 31 it walked on from (`evals/decision/
+  // on-target.ndjson`, gitee-org aside) a replay said `done` 26.9% of the time.
+  policy: `- **done**：**用户要做的事已经做完了。** **说了 done，引导就结束了**——用户不会再收到下一步，屏幕上的高亮也会撤掉。所以这不是一句可以顺口说的话：不确定就继续给 point，走到真的到了再说。**"走不下去"和"已经做完"是相反的两件事：走不下去给 ask，做完了才给 done。** 先分清用户要的是哪一种：
+  - **他要看到某个东西**（看 issue 列表、看有哪些版本、读某份文件、确认用的是什么许可证）——**东西显示在这一页上，就是做完了**，没有下一步动作要做。这时给 done，evidence 用 content_on_page 或 page_address。不要因为"还能再点点别的"就继续给 point。
     但**"这一页提到了它"不等于"这一页就是它"**：概览页、首页、详情页常常会顺带显示一个数字、一个名字、一条最新记录，那是摘要，不是用户要看的那一页。要看清单就得到清单上，要读某一份内容就得把那一份打开。分不清时问自己：**用户要的东西，是这一页的主体内容，还是这一页顺带提了一句？**
-  - **他要完成某个动作**（把地址拿到手、把某项改掉、把东西提交出去）——**看见不算做完，必须有一步已经生效**。地址显示出来了、而表里还有一个复制按钮，那就指那个复制按钮，给 guide 不给 done。`,
+    反过来，**这一页的主体本身就是那份清单或那组条目时**（一个目录下的全部文件、一份完整的列表），这一页就是用户要看的东西，不必替他再点进其中某一项。
+  - **他问的是怎么做、有什么规定**（怎么改成另一种方式、怎么把某样东西删掉、怎么收费、有哪些限制）——**讲清楚这件事的那一页（说明、文档的正文）就是终点**：东西显示在这一页上，给 done，evidence 用 content_on_page。**不要替他去执行**：他问的是方法，读完做不做、什么时候做由他自己决定；把他带去控制台、购买页、设置页真的操作一遍，是做了他没要的事。用户的话是在问「怎么……？」「……是怎么规定的？」，就是这一种。
+  - **他要你带他完成某个动作**（「带我把……做了」「我想把地址拿到手」「帮我把这一项打开」）——**看见不算做完，必须有一步已经生效**。地址显示出来了、而表里还有一个复制按钮，那就指那个复制按钮，给 point 不给 done。`,
   recognize: (args) => {
     if (typeof args.why !== 'string') return null;
     // Carried when recognisable, dropped otherwise — same discipline as

@@ -6,7 +6,6 @@ import { complete, describeProviderError, ProviderError } from '@/agent/provider
 import type { EffectFailureKind, EffectUsage } from '@/agent/thread/effect';
 import { guideAgent, type GuideContext } from './agent';
 import type { GuideAgentEnvelope } from './registry';
-import { toPromptText } from '@/core/extractor/project';
 import type { NonceCache } from '@/agent/context/nonce';
 
 /**
@@ -16,9 +15,8 @@ import type { NonceCache } from '@/agent/context/nonce';
  * request to happen in the side panel while every decision about it belongs
  * to the pure reducer in the service worker.
  *
- * This file and the question agent's loop (`question/runner.ts`) are the only
- * places in `src/agent` that touch the network, and both do so through
- * `complete()` alone. `tests/unit/architecture.spec.ts`
+ * This file is the only place in `src/agent` that touches the network, and
+ * it does so through `complete()` alone. `tests/unit/architecture.spec.ts`
  * forbids anything under `agent/host/` from reaching it — the host decides,
  * the runner executes, and nothing about that split changes just because the
  * two now sit under one directory.
@@ -67,6 +65,9 @@ export interface RunResult {
   /** The function the model called. The host needs it to re-derive the
    *  envelope: `raw` is the arguments text and carries no intent. */
   tool?: string;
+  /** The endpoint's id for that call, when it gave one — what a tool round is
+   *  paired by when it is replayed to the model with its result. */
+  callId?: string;
 }
 
 /**
@@ -216,7 +217,6 @@ export async function* runGuide(
       return { result: { kind: 'error', message: '端点既没有返回工具调用，也没有返回任何文字' }, raw: '' };
     const asText = guideAgent.parseTextOutput(said.content);
     if (asText.kind === 'ok') return { result: asText, tool: asText.envelope.intent, raw: said.content };
-    if (asText.kind === 'foreign') return { result: asText, tool: asText.intent, raw: said.content };
     return {
       result: { kind: 'error', message: `端点没有返回工具调用，其文字回答也不是合法信封：${asText.message}` },
       raw: said.content,
@@ -224,7 +224,7 @@ export async function* runGuide(
   };
 
   const tools = guideAgent.outputSchema(ctx);
-  const messages = guideAgent.buildMessages(ctx, nonceFor?.(ctx.table.snapshotId, toPromptText(ctx.table)));
+  const messages = guideAgent.buildMessages(ctx, nonceFor);
   yield requestEvent('request', messages, tools);
 
   const first = await send(messages, tools);
@@ -237,19 +237,6 @@ export async function* runGuide(
   let raw = read.raw;
   let toolName = read.tool;
   yield { kind: 'raw', text: raw };
-
-  /**
-   * The question agent's answer shape on a guide call. Not malformed, and
-   * not this run's to repair or check: handed to the host as it came, which
-   * says so and leaves the thread where it was (`machine.ts`).
-   */
-  const handedOn = (r: { raw: string; tool?: string }): RunResult => ({
-    raw: r.raw,
-    providerCalls: calls,
-    ...(r.tool ? { tool: r.tool } : {}),
-    ...(usage ? { usage } : {}),
-  });
-  if (read.result.kind === 'foreign') return handedOn(read);
 
   /**
    * What was wrong with this draw, or `undefined` if nothing was.
@@ -265,7 +252,7 @@ export async function* runGuide(
    * a draw is rejected, and that plan had already been shown not to work.
    */
   const verdictOf = (
-    r: Exclude<ParseResult<GuideAgentEnvelope>, { kind: 'foreign' }>,
+    r: ParseResult<GuideAgentEnvelope>,
   ): { reason: string; envelope?: never } | { reason?: never; envelope: GuideAgentEnvelope } => {
     if (r.kind === 'error') return { reason: explain(r.message, said.finishReason) };
     const v = guideAgent.validate(r.envelope, ctx.table);
@@ -319,7 +306,6 @@ export async function* runGuide(
     said = second;
     read = parseSaid(second);
     yield { kind: 'raw', text: read.raw };
-    if (read.result.kind === 'foreign') return handedOn(read);
 
     verdict = verdictOf(read.result);
     if (verdict.reason !== undefined) {
@@ -340,7 +326,15 @@ export async function* runGuide(
 
   const validated = { envelope: verdict.envelope };
   yield { kind: 'settled', envelope: validated.envelope };
-  return { raw, providerCalls: calls, ...(toolName ? { tool: toolName } : {}), ...(usage ? { usage } : {}) };
+  // The id of the draw that was accepted — after a repair, the second one's.
+  const callId = said.id;
+  return {
+    raw,
+    providerCalls: calls,
+    ...(toolName ? { tool: toolName } : {}),
+    ...(callId ? { callId } : {}),
+    ...(usage ? { usage } : {}),
+  };
 }
 
 /** Drives `runGuide` to completion, discarding the events. The one-line form

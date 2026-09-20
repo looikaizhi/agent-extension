@@ -18,7 +18,9 @@
  */
 
 export interface ProviderConfig {
-  /** Preset id, or 'custom'. Presets only prefill; every one takes the same path. */
+  /** Preset id, or 'custom'. A preset prefills the form and may add the
+   *  request fields its endpoint needs (`Preset.request`); past that, every one
+   *  takes the same path. */
   preset: string;
   baseURL: string;
   model: string;
@@ -40,6 +42,9 @@ export interface Preset {
   models: readonly string[];
   /** Shown verbatim in the form — a preset that silently fails is worse than none. */
   note?: string;
+  /** Fields this endpoint needs in every chat request beyond the OpenAI shape
+   *  (`provider.ts` adds them). */
+  request?: Readonly<Record<string, unknown>>;
 }
 
 /**
@@ -58,7 +63,13 @@ export const PRESETS: readonly Preset[] = [
     id: 'deepseek',
     label: 'DeepSeek',
     baseURL: 'https://api.deepseek.com/v1',
-    models: ['deepseek-chat'],
+    models: ['deepseek-flash', 'deepseek-v4-pro'],
+    // Both models think by default, and thinking refuses the product's
+    // `tool_choice: 'required'` outright — measured 2026-09-14: HTTP 400
+    // "Thinking mode does not support this tool_choice"; with thinking
+    // disabled, 200 and the tool call. Unlike the fields `provider.ts` warns
+    // are silently dropped, this one is visibly honoured.
+    request: { thinking: { type: 'disabled' } },
   },
   {
     id: 'moonshot',
@@ -146,6 +157,3 @@ export async function loadConfig(): Promise<ProviderConfig> {
 export const saveConfig = (c: ProviderConfig): Promise<void> =>
   chrome.storage.local.set({ [KEY]: c });
 
-/** Never render or log the key itself — not in the panel, not in an event log. */
-export const maskKey = (k: string): string =>
-  k.length <= 8 ? (k ? '••••' : '') : `${k.slice(0, 4)}••••${k.slice(-4)}`;

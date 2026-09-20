@@ -1,7 +1,6 @@
-import type { BindResult } from '@/core/descriptor/bind';
 import type { PromptTable } from '@/core/extractor/types';
 import type { GuideExpectAfter } from '@/shared/types';
-import type { Check, ClarifyTrigger } from './thread';
+import type { Check } from './thread';
 
 /**
  * What the reducer judges about a page it landed on, rather than about what
@@ -10,11 +9,6 @@ import type { Check, ClarifyTrigger } from './thread';
  * breakpoint can answer that, and the guide module already imports the
  * Thread's helpers, so living there would close a cycle through
  * `transitions.ts`.
- *
- * `judgeFirstStepBind` is CL-2's judgement over a table-only bind. Nothing in
- * the product calls it — the reducer's `bind_result` handler reads the
- * renderer's live report instead (see its comment in `machine.ts`). It came
- * here with the move; deleting it is a change of its own.
  */
 
 /**
@@ -57,22 +51,3 @@ export function judgeArrival(expect: GuideExpectAfter, table: PromptTable): Chec
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
-
-/**
- * CL-2: "the first step's bind comes back `ambiguous`". The bind attempt
- * itself is out of this file's scope — it needs a live DOM extraction
- * against the tab's *current* page — but the
- * judgment ("given that result, do we escalate to `clarify`") does not need
- * one. It is checked here, on a `BindResult`, rather than by looking the
- * model's `ref` up in `table` directly, because a direct lookup structurally
- * cannot produce it: a model-supplied `ref` is a snapshot-unique key, so
- * looking it up can only ever be "found" or "not found" (R-a's job, in `envelope/validate.ts`).
- * `ambiguous` only exists one layer down, at `bindStep`'s descriptor-based
- * re-match (`bindStep(descriptorOf(item), table)`) — what a cross-snapshot
- * rebind actually runs. See validate.spec.ts's hand-built table where two
- * elements share one descriptor for a worked example of that re-match
- * genuinely coming back tied.
- */
-export function judgeFirstStepBind(bind: BindResult): Extract<ClarifyTrigger, 'CL-2'> | null {
-  return bind.kind === 'ambiguous' ? 'CL-2' : null;
-}

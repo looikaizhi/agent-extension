@@ -1,8 +1,8 @@
-import type { ProviderConfig } from '@/shared/settings';
+import { PRESETS, type ProviderConfig } from '@/shared/settings';
 
-/** Said the same way wherever the product meets a missing model: a question
- *  throws it from `complete` below, and a guide says it before extracting a
- *  page it would have nothing to plan with. */
+/** Said the same way wherever the product meets a missing model: `complete`
+ *  below throws it, and the host says it before a run starts rather than
+ *  reading a page it would have nothing to plan with. */
 export const MODEL_NOT_CONFIGURED =
   '还没有配置模型：请先在下方「模型配置（BYOK）」里填写端点和 API Key，并点「测试连接并保存」。';
 
@@ -368,8 +368,7 @@ export async function* complete(
   // Same rule `testConnection` enforces at save time (settings.ts: "the key
   // only ever goes to the endpoint the user configured") — but that check
   // alone does not stop an *unconfigured* panel from calling this function at
-  // all. `messages` carries the page's element table (`buildQuestionUserMessage`,
-  // `buildGuideUserMessage`), which
+  // all. `messages` carries the page's element table (`buildGuideUserMessage`), which
   // is exactly the kind of thing BYOK promises never leaves the machine
   // toward a destination the user never chose. `DEFAULT_CONFIG.baseURL`
   // prefills a real public endpoint (settings.ts), so "no key yet" must be
@@ -431,6 +430,7 @@ export async function* complete(
           // and spend a second call to do it. 1 is also what every measurement
           // in `tests/spike` was taken at, so the corpus and the product agree.
           temperature: 1,
+          ...PRESETS.find((p) => p.id === cfg.preset)?.request,
           ...(options?.tools?.length
             ? {
                 tools: options.tools,

@@ -11,55 +11,13 @@ import { scanProvenance } from './scanner';
  *
  * This file is the part both agents share: the reading machinery —
  * extraction, provenance, and what the model is told when an answer names no
- * intent, or one nobody knows — and the one shape both answer with, `clarify`
- * (CONTEXT.md `Intent`). Every other shape belongs to the agent that answers
+ * intent, or one nobody knows. Every shape belongs to the agent that answers
  * with it, in that agent's modules; which shapes an answer is read *as* is the
  * `EnvelopeReader` each agent passes in. `locate` (S6) is still not
  * recognised: an envelope with that `intent`, or any `intent` nobody knows, is
  * `error`, not a silent pass-through.
  */
 
-export interface ClarifyOption {
-  ref: Ref;
-  label: string;
-}
-
-export interface ClarifyEnvelope {
-  intent: 'clarify';
-  question: string;
-  options: ClarifyOption[];
-}
-
-/** What the model is told when a clarify's arguments do not read as one — the
- *  same words for both agents, since it is one shape. */
-const CLARIFY_SHAPE_HINT = 'question（字符串）+ options（{ref,label} 数组）';
-
-
-/** One recognizer for both agents: clarify is one shape (CONTEXT.md `Intent`). */
-function recognizeClarify(obj: Record<string, unknown>): ClarifyEnvelope | null {
-  if (typeof obj.question !== 'string') return null;
-  if (!Array.isArray(obj.options)) return null;
-  const options: ClarifyOption[] = [];
-  for (const raw of obj.options) {
-    if (typeof raw !== 'object' || raw === null) return null;
-    const o = raw as Record<string, unknown>;
-    if (typeof o.ref !== 'string' || typeof o.label !== 'string') return null;
-    options.push({ ref: o.ref as Ref, label: o.label });
-  }
-  return { intent: 'clarify', question: obj.question, options };
-}
-
-/**
- * clarify's shape, as both agents read it: one recognizer, one sentence for the
- * model when an answer does not read as one, and the refs it claims — every
- * one of its options. Each agent's clarify module spreads this in and adds
- * what that agent does with the answer.
- */
-export const clarifyShape = {
-  recognize: recognizeClarify,
-  explain: () => shapeMismatch('clarify', CLARIFY_SHAPE_HINT),
-  claimedRefs: (envelope: ClarifyEnvelope): readonly Ref[] => envelope.options.map((o) => o.ref),
-};
 
 /** One of an agent's shapes: how it is recognised, and what the model is told
  *  when it is not. */
@@ -73,26 +31,17 @@ export interface EnvelopeShape<E> {
   explain(obj: Record<string, unknown>): string;
 }
 
-/** How one agent reads an answer: by its own shapes, looked up by intent,
- *  against every intent the product knows (`agent/intents.ts`). */
+/** How the agent reads an answer: by its shapes, looked up by intent, against
+ *  every intent the product knows (`agent/intents.ts`). */
 export interface EnvelopeReader<E> {
-  /** The shape for one of this agent's intents; `undefined` for any other. */
+  /** The shape for one of the agent's intents; `undefined` for any other. */
   shapeFor(intent: string): EnvelopeShape<E> | undefined;
   /** Every intent the product knows — listed back to a model that named one
    *  nobody does. */
   known: readonly string[];
 }
 
-export type ParseResult<E> =
-  | { kind: 'ok'; envelope: E }
-  | { kind: 'error'; message: string }
-  /**
-   * A well-formed answer naming an intent the product knows but this agent
-   * does not answer with — the other agent's. Not a malformed answer:
-   * repairing it would only ask the model to rewrite what it meant into
-   * something it did not, so each agent says what came back, in its own words.
-   */
-  | { kind: 'foreign'; intent: string };
+export type ParseResult<E> = { kind: 'ok'; envelope: E } | { kind: 'error'; message: string };
 
 const err = (message: string) => ({ kind: 'error', message }) as const;
 
@@ -178,7 +127,7 @@ function read<E>(parsed: unknown, reader: EnvelopeReader<E>): ParseResult<E> {
   const obj = parsed as Record<string, unknown>;
   const intent = obj.intent as string;
   const shape = reader.shapeFor(intent);
-  if (!shape) return { kind: 'foreign', intent };
+  if (!shape) return err(`不认得的 intent「${intent}」。认得的有：${reader.known.join(' / ')}`);
   const envelope = shape.recognize(obj);
   return envelope ? { kind: 'ok', envelope } : err(shape.explain(obj));
 }

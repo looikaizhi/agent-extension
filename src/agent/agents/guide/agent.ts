@@ -3,10 +3,13 @@ import type { Ref } from '@/shared/types';
 import type { PromptTable } from '@/core/extractor/types';
 import type { ParseResult } from '@/agent/envelope/contract';
 import type { GuideHistory } from '@/agent/context/user-message';
+import type { NonceCache } from '@/agent/context/nonce';
+import { tableOf, type Since, type TurnOnWire } from '@/agent/context/turn';
+import { toPromptText } from '@/core/extractor/project';
 import { INTENTS } from '@/agent/intents';
 import { refsViolation, type ValidateResult } from '@/agent/envelope/validate';
 import { CHOICE_GUIDE, LANGUAGE_GUIDE, MARK_GUIDE, TOOL_CHOICE_CLOSING, toolChoiceOpening } from '@/agent/prompts/system';
-import { buildGuideUserMessage } from '@/agent/context/user-message';
+import { buildGuideUserMessage, buildToolResultText, FINAL_CALL_TEXT } from '@/agent/context/user-message';
 import { parseContract, parseToolContract, type EnvelopeReader } from '@/agent/envelope/contract';
 import { GUIDE_INTENT_MODULES, isRegistered, moduleFor, moduleOf, type GuideAgentEnvelope } from './registry';
 
@@ -26,7 +29,7 @@ import { GUIDE_INTENT_MODULES, isRegistered, moduleFor, moduleOf, type GuideAgen
  * This file names it. `guideAgent` is the façade, and it assembles rather
  * than implements: the intents registered for it (`registry.ts`) bring their
  * own tools, policy lines, recognition and consequences; what both agents
- * share — the reading machinery, clarify's shape, R-a/R-e — stays in
+ * share — the reading machinery, R-a/R-e — stays in
  * `envelope/contract.ts` / `envelope/validate.ts`; the prompt text stays in
  * `prompts/system.ts`. What it adds is the order — tools and policy lines in
  * registry order — and how an answer is read: by its own modules, with every
@@ -64,6 +67,14 @@ export interface GuideContext {
   /** Refs that appeared since the last call, when the page did not navigate.
    *  Absent on the first call and after every navigation. */
   freshRefs?: readonly Ref[];
+  /** What woke the model, when a reading did. Absent otherwise. */
+  since?: Since;
+  /** The step's last call (ticket 09): only answers are on offer. */
+  final?: true;
+  /** The step's conversation so far (CONTEXT.md `Turn`), once it has a round.
+   *  `table` is then the page read last — the one the schema's refs and the
+   *  answer's check come from — and the opening message shows the turn's own. */
+  turn?: TurnOnWire;
 }
 
 /**
@@ -94,11 +105,11 @@ export interface UnknownIntentEnvelope {
 }
 
 /** §5.8: an intent an agent does not answer with is a contract violation, not
- *  a question for the user — it goes to `violation`, never `clarify`. */
+ *  a question for the user — it goes to `violation`, never `ask`. */
 const unknownIntent = (intent: string) => `intent「${intent}」不在已知范围内`;
 
-/** Recognition as this agent does it: its own answers by their modules, and
- *  every other intent the product knows as the question agent's. */
+/** Recognition as this agent does it: each answer by its module, and the
+ *  list an unrecognised answer is told is the same registry, read off once. */
 const GUIDE_READER: EnvelopeReader<GuideAgentEnvelope> = { shapeFor: moduleFor, known: INTENTS };
 
 export const guideAgent = {
@@ -119,18 +130,58 @@ export const guideAgent = {
    *
    * The descriptions carry the *bar* for reaching a tool, not just a label —
    * the measurement behind that sits with the tool it was about
-   * (`output/clarify.ts`).
-
+   * (`output/ask.ts`).
+   *
+   * On a step's last call only the answers are offered: a step that has
+   * looked three times has to say what it has, not look again.
    */
-  outputSchema: (ctx: GuideContext): ToolDef[] => GUIDE_INTENT_MODULES.map((m) => m.tool(ctx)),
+  outputSchema: (ctx: GuideContext): ToolDef[] =>
+    GUIDE_INTENT_MODULES.filter((m) => !ctx.final || m.kind === 'output').map((m) => m.tool(ctx)),
 
   /** The system message, verbatim — the same string `buildMessages` sends. */
   instructions: GUIDE_SYSTEM,
 
-  buildMessages: (ctx: GuideContext, nonce?: string): ChatMessage[] => [
-    { role: 'system', content: GUIDE_SYSTEM },
-    { role: 'user', content: buildGuideUserMessage(ctx.goal, ctx.table, ctx.history, ctx.contributions, ctx.freshRefs, nonce) },
-  ],
+  /**
+   * The system message, the user message, then one call-and-result pair per
+   * tool round — in the order they happened, the call replayed as the model
+   * made it and its result paired by the call's id.
+   *
+   * The user message is the page the step opened on, rebuilt byte for byte on
+   * every round so the endpoint's prefix cache holds; what the model read
+   * since is in the rounds. `nonces` keeps one nonce per snapshot for the
+   * same reason (`context/nonce.ts`); without it each page gets a fresh one.
+   *
+   * On a step's last call one more message comes after everything, ours:
+   * answer now (`FINAL_CALL_TEXT`). Last, so nothing before it changes.
+   */
+  buildMessages: (ctx: GuideContext, nonces?: NonceCache): ChatMessage[] => {
+    const nonceOf = (t: PromptTable) => nonces?.(t.snapshotId, toPromptText(t));
+    const opening = ctx.turn?.table ?? ctx.table;
+    const fresh = ctx.turn ? ctx.turn.freshRefs : ctx.freshRefs;
+    const since = ctx.turn ? ctx.turn.since : ctx.since;
+    return [
+      { role: 'system', content: GUIDE_SYSTEM },
+      {
+        role: 'user',
+        content: buildGuideUserMessage(ctx.goal, opening, ctx.history, ctx.contributions, fresh, nonceOf(opening), since),
+      },
+      ...(ctx.turn?.rounds ?? []).flatMap((r): ChatMessage[] => {
+        const read = tableOf(r.result);
+        // One nonce per snapshot for a page; per call for a document, which is
+        // the same text on every later round of the step.
+        const nonce = read ? nonceOf(read) : r.result.kind === 'doc' ? nonces?.(r.call.id, r.result.text) : undefined;
+        return [
+          {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{ id: r.call.id, type: 'function', function: { name: r.call.name, arguments: r.call.args } }],
+          },
+          { role: 'tool', tool_call_id: r.call.id, content: buildToolResultText(r.result, nonce) },
+        ];
+      }),
+      ...(ctx.final ? [{ role: 'user' as const, content: FINAL_CALL_TEXT }] : []),
+    ];
+  },
 
   /**
    * The endpoint reports which function the model called; that name is the
@@ -152,8 +203,8 @@ export const guideAgent = {
    * without this the whole guide dies with 「端点没有返回任何工具调用」.
    *
    * Producing free-text envelopes was deleted; *reading* one never was, and
-   * `contract.ts` still does it for the QA path. So the cost of this is one
-   * function call on a path that is already failing.
+   * `contract.ts` still knows how. So the cost of this is one function call on
+   * a path that is already failing.
    */
   parseTextOutput: (raw: string): ParseResult<GuideAgentEnvelope> => parseContract(raw, GUIDE_READER),
 

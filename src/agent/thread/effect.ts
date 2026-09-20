@@ -1,4 +1,5 @@
 import type { GuideHistory } from '@/agent/context/user-message';
+import type { Since, TurnOnWire } from '@/agent/context/turn';
 import type { PromptTable } from '@/core/extractor/types';
 import type { Ref } from '@/shared/types';
 
@@ -53,10 +54,23 @@ export interface CallModelParams {
    * in the table they travel with.
    */
   freshRefs?: readonly Ref[];
+  /** What woke the model, when a reading did (CONTEXT.md `Reading`): every
+   *  reading since its last answer, and how the page compares with the one
+   *  that answer was given on. Absent otherwise. */
+  since?: Since;
+  /** The step's last call (ticket 09): only answers are offered, and the
+   *  model is told to give one. Absent on every other call. */
+  final?: true;
+  /** The step's conversation so far (CONTEXT.md `Turn`), once it has a
+   *  round: the page the step opened on, then every tool call and what came
+   *  back. `table` above is then the page read last — what the answer is
+   *  checked against. Absent on a call with no rounds, which is what keeps
+   *  that call byte for byte what it was before the loop existed. */
+  turn?: TurnOnWire;
 }
 
-/** `url` is the address need_docs's link judgement has already approved
- *  (`tools/need-docs.ts`) — the panel fetches, it never decides (design doc
+/** `url` is the address read_doc's link judgement has already approved
+ *  (`tools/read-doc.ts`) — the panel fetches, it never decides (design doc
  *  §8.3). The panel's executor is written against this shape; the host does
  *  not put this request on the wire yet — see `toEffectRequest` in
  *  `agent/thread/writer.ts`. */
@@ -71,7 +85,7 @@ export interface FetchDocParams {
 export interface EffectAt {
   threadRev: number;
   snapshotId: string;
-  pageHash: string;
+  structureHash: string;
   url: string;
 }
 
@@ -126,6 +140,10 @@ export type EffectOutcome =
        * answer reads as "信封缺少 intent 字段". Absent on the text path.
        */
       tool?: string;
+      /** The endpoint's id for that call. A tool round is replayed to the model
+       *  as a call and its result paired by this id; the host makes one from
+       *  the effect id when the endpoint gave none. */
+      callId?: string;
     }
   | {
       ok: false;
@@ -170,54 +188,55 @@ export function deadlineFor(kind: EffectRequest['kind'], now: number): number {
 }
 
 /**
+ * A dispatched effect as the host keeps it: the request that went out, and
+ * the panel that took it (`claimedBy`, the panel document's id). Absent until
+ * a panel claims it, and cleared when the host hands it out again because
+ * nobody is running it (ticket 06c).
+ */
+export type DispatchedEffect = EffectRequest & { claimedBy?: string };
+
+/**
  * E-4/E-6's shared verdict: given whatever the host currently has persisted
  * as "the inflight effect" (or nothing), and the current time, what should a
  * caller (the host's own timeout sweep, or the panel asking on reopen)
  * conclude? Pure — `now` is always supplied, never read from `Date.now()`
  * internally, so both call sites can be driven deterministically in a test.
+ *
+ * A deadline is a promise about a call someone is running. An effect no panel
+ * has claimed has not started, so nothing about it can be late: it waits for
+ * a panel, and the host says so to the user (06c).
  */
 export type EffectRecovery = 'none' | 'expired' | 'in_progress';
 
-export function judgeRecovery(effect: Pick<EffectRequest, 'deadline'> | null, now: number): EffectRecovery {
+export function judgeRecovery(effect: Pick<DispatchedEffect, 'deadline' | 'claimedBy'> | null, now: number): EffectRecovery {
   if (!effect) return 'none';
+  if (!effect.claimedBy) return 'in_progress';
   return now >= effect.deadline ? 'expired' : 'in_progress';
 }
 
 /**
- * Closes a gap first recorded as "已知的、未在
- * 本文件解决": the host's dispatched-effect message is a broadcast, so two
- * `sidepanel.html` instances bound to the *same* tab both receive it.
- * `threadId`/`tabId` matching (`startEffectListener`'s `getTabId` check)
- * only rules out *other* tabs' panels — it cannot tell two instances of
- * *this* tab's panel apart, so without this both would really call
- * `complete()`/`fetch()` and the user would be billed twice for one model
- * call. E-2's `inflight` check does not help either: it protects the host's
- * own bookkeeping from a stale/duplicate *result*, not a network call that
- * has already gone out twice.
+ * Which panel runs a dispatched effect. The host's dispatch is a broadcast,
+ * and every open `sidepanel.html` answers it whichever tab it is showing
+ * (`startEffectListener`), so without this each of them would really call
+ * `complete()`/`fetch()` and the user would be billed once per open panel
+ * for one model call.
  *
- * The fix is first-come-first-served over a `Set` the host owns: whichever
- * `onMessage` handler observes this `effectId` first wins, and every
- * subsequent claim for the same id — from any instance, including a retry
- * from the same one — loses. `claimed` is passed in rather than module-level
- * state here so this stays a pure, synchronous judgement a test can drive
- * with a bare `Set` and no `chrome.*`; owning *the* `Set` (module lifetime,
- * when to create it) is `background.ts`'s job, the one place allowed to
- * touch `chrome.runtime.onMessage`.
- *
- * No persistence, and none is needed: the arbitration only has to be atomic
- * at the instant the broadcast fans out, and JS's single-threaded event loop
- * already guarantees that — every `onMessage` listener's "check `Set`, then
- * add" runs to completion before the next one starts, so there is no window
- * for two instances to both observe an empty slot. If the service worker is
- * evicted and a later wake-up starts with a fresh, empty `Set`, that costs
- * nothing: E-1's own invariant is at most one `inflight` effect per thread
- * at a time, so a rebuilt `Set` never has to arbitrate a *second* claim for
- * an id it already granted before eviction — the only claims it will ever
- * see are first claims for whatever is inflight now. Treat "empty `Set`
- * after eviction" as expected behaviour, not a bug to fix by persisting it.
+ * The first panel to ask for the effect in flight gets it. A panel that asks
+ * again for the same one — itself included — is refused while the one that
+ * has it is still open; once that one has closed, the next asker takes over.
+ * The claim is kept with the effect, not in the host's memory: the service
+ * worker is evicted while panels run their calls, and a claim that died with
+ * it would let a second panel run the same call (06c). `holderOpen` is asked
+ * of the browser by the caller; this stays a pure judgement.
  */
-export function claimEffect(claimed: Set<string>, effectId: string): boolean {
-  if (claimed.has(effectId)) return false;
-  claimed.add(effectId);
-  return true;
+export function judgeClaim(
+  effect: DispatchedEffect | null,
+  effectId: string,
+  claimant: string,
+  holderOpen: boolean,
+): boolean {
+  if (!effect || effect.effectId !== effectId) return false;
+  if (!effect.claimedBy) return true;
+  if (effect.claimedBy === claimant) return false;
+  return !holderOpen;
 }

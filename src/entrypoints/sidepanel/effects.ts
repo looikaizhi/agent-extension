@@ -10,8 +10,8 @@ import { createNonceCache } from '@/agent/context/nonce';
 const nonces = createNonceCache();
 import { TRACE_ENABLED_KEY, isFlagOn } from '@/agent/flags';
 import type { CallModelParams, EffectOutcome, EffectRequest, EffectResult, EffectUsage, FetchDocParams } from '@/agent/thread/effect';
-import { sessionIdForTab } from '@/shared/protocol';
 import type {
+  EffectAbortMessage,
   EffectClaimResponse,
   EffectRequestMessage,
   EffectResultMessage,
@@ -23,7 +23,7 @@ import type { ProviderConfig } from '@/shared/settings';
  * The panel's half of the effect protocol (design doc §2.6) — the executor for `EFFECT_
  * REQUEST`s the host broadcasts, plus the E-6 recovery pull on mount.
  *
- * Kept separate from `App.tsx` on purpose, the same way `qa.ts` is: every
+ * Kept separate from `App.tsx` on purpose, the same way `view-model.ts` is: every
  * judgement here is ordinary data-in/data-out logic, so it takes its
  * `complete`/`fetch` dependency as a parameter (defaulting to the real one)
  * and can be driven in a plain node test with a canned async generator or a
@@ -74,7 +74,14 @@ export async function runCallModelEffect(
         // the figure here is what made a rejected envelope look free.
         ...(r.usage ? { usage: r.usage } : {}),
       }
-    : { ok: true, value: r.raw, providerCalls: r.providerCalls, ...(r.tool ? { tool: r.tool } : {}), ...(r.usage ? { usage: r.usage } : {}) };
+    : {
+        ok: true,
+        value: r.raw,
+        providerCalls: r.providerCalls,
+        ...(r.tool ? { tool: r.tool } : {}),
+        ...(r.callId ? { callId: r.callId } : {}),
+        ...(r.usage ? { usage: r.usage } : {}),
+      };
   // The trace comes back beside the result, never folded into it: the outcome
   // is what the host decides on, and nothing about a debugging artefact may
   // change it. `startEffectListener` decides whether it goes any further.
@@ -86,12 +93,19 @@ export async function runCallModelEffect(
 /**
  * No re-authorization: `params.url` arrived already approved by the host
  * (design doc §6.2/§8.3, "判定权在 SW，不在侧栏——侧栏只能请求，不能自己批
- * 准") — this function's only job is to fetch it. `credentials:'omit'` /
- * `redirect:'manual'` are §8.3's own floor for an anonymous, non-redirect-
- * following grab; the full redirect-reauthorization loop (V-8) and the
- * response-size cap (V-9) are 06's job, once something upstream of this file
- * actually produces a resolved `url` to drive them (see `toEffectRequest` in
- * `agent/thread/writer.ts`).
+ * 准") — this function's only job is to fetch it and hand back what it says.
+ * `credentials:'omit'` / `redirect:'manual'` are §8.3's own floor for an
+ * anonymous grab.
+ *
+ * A redirect is not followed. The address it leads to was never judged, and a
+ * `manual` fetch cannot even see where it points — so it comes back as a
+ * reason, and the model decides what to do (usually: point the user at the
+ * link instead). The length is cut on the host, which does not take the
+ * panel's word for it (`tools/read-doc.ts`).
+ *
+ * What goes back is text: a web page through `htmlToText`, a text document
+ * as it is. Anything else — a PDF, an image — is refused by its type rather
+ * than handed to a model as bytes.
  *
  * `providerCalls: 0` on every branch, and it is not a formality: a document
  * fetch spends no model quota, and the host's accounting has to be able to
@@ -101,14 +115,22 @@ export async function runFetchDocEffect(
   req: EffectRequest & { kind: 'fetchDoc' },
   signal: AbortSignal,
   fetchFn: typeof fetch = fetch,
+  toText: (html: string) => string = htmlToText,
 ): Promise<EffectResult> {
   const params = req.params as FetchDocParams;
+  const failed = (error: string) => ({
+    effectId: req.effectId,
+    at: req.at,
+    outcome: { ok: false as const, error, retryable: true, failureKind: 'transport' as const, providerCalls: 0 },
+  });
   try {
     const res = await fetchFn(params.url, { credentials: 'omit', redirect: 'manual', signal });
-    if (!res.ok) {
-      return { effectId: req.effectId, at: req.at, outcome: { ok: false, error: `文档抓取失败：HTTP ${res.status}`, retryable: true, failureKind: 'transport', providerCalls: 0 } };
-    }
-    const text = await res.text();
+    if (res.type === 'opaqueredirect') return failed('这条链接会跳到别的地址；跳过去的地址没有经过核对，所以没有跟着去抓');
+    if (!res.ok) return failed(`文档抓取失败：HTTP ${res.status}`);
+    const type = (res.headers.get('content-type') ?? '').toLowerCase();
+    const body = await res.text();
+    const text = /html/.test(type) ? toText(body) : !type || /^text\/|json|markdown/.test(type) ? body : null;
+    if (text === null) return failed(`这不是网页，也不是文字（${type}），读不了`);
     return { effectId: req.effectId, at: req.at, outcome: { ok: true, value: text, providerCalls: 0 } };
   } catch (err) {
     if (signal.aborted) return { effectId: req.effectId, at: req.at, outcome: { ok: false, error: '已取消', retryable: false, failureKind: 'transport', providerCalls: 0 } };
@@ -118,6 +140,19 @@ export async function runFetchDocEffect(
       outcome: { ok: false, error: `文档抓取失败：${String((err as Error)?.message ?? err)}`, retryable: true, failureKind: 'transport', providerCalls: 0 },
     };
   }
+}
+
+/**
+ * A fetched web page as the text a reader would read: scripts and styles out,
+ * the page's own main content when it marks one, whitespace folded. Parsed by
+ * the panel's own `DOMParser` — a document is never rendered, and nothing in
+ * it runs.
+ */
+export function htmlToText(html: string): string {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  for (const el of doc.querySelectorAll('script, style, noscript, template')) el.remove();
+  const root = doc.querySelector('main, article, [role="main"]') ?? doc.body;
+  return (root?.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
 
 /* ═══════════ E-6: recovery on mount (slice 12/13) ═══════════ */
@@ -152,12 +187,14 @@ export async function recoverInflightOnMount(
  * call sites architecture.spec.ts counts; the
  * other is the `EFFECT_CLAIM` round trip below.
  *
- * `getTabId` rules out *other* tabs' panels: an instance only ever considers
- * a request addressed to the tab it is currently tracking (`App.tsx`'s own
- * `tabIdRef` pattern), dropping anything else silently. It cannot tell two
- * instances of *this same tab's* panel apart — a gap once accepted as known — so the `EFFECT_CLAIM` claim immediately
- * below is what actually closes it: the host arbitrates before either
- * instance is allowed to spend money on `complete()`/`fetch()`.
+ * Every open panel answers every thread's request, whichever tab it is
+ * showing. A panel follows the active tab and the host broadcasts a request
+ * once, so an instance that only answered its own tab dropped every call made
+ * while the guide's tab was in the background — a link that opens a new tab
+ * is enough — and nothing ever sent that call again: the thread kept it in
+ * flight until the user gave up. Which instance spends the money is the
+ * `EFFECT_CLAIM` claim's job immediately below: the host grants exactly one
+ * before anyone calls `complete()`/`fetch()`.
  */
 /**
  * What one `callModel` effect actually spent, reported to whoever mounted the
@@ -179,7 +216,6 @@ export interface ModelSpend {
 }
 
 export function startEffectListener(
-  getTabId: () => number | null,
   loadCfg: () => Promise<ProviderConfig>,
   onModelSpend?: (spend: ModelSpend) => void,
 ): () => void {
@@ -190,19 +226,16 @@ export function startEffectListener(
     if (m?.type !== 'EFFECT_REQUEST') return;
     const req = msg as EffectRequestMessage;
 
-    const tabId = getTabId();
-    if (tabId === null || req.threadId !== sessionIdForTab(tabId)) return; // not this instance's tab to answer
-
     void (async () => {
-      // Same-tab arbitration, *before* anything that spends money. A second
-      // `sidepanel.html` instance bound to this same tab sees the identical
-      // broadcast `EFFECT_REQUEST` and races this same claim; the host grants
+      // Arbitration, *before* anything that spends money. Every other open
+      // `sidepanel.html` instance sees the identical broadcast
+      // `EFFECT_REQUEST` and races this same claim; the host grants
       // exactly one (`claimEffect`, `agent/thread/effect.ts`). Losing here is
       // not a failure — it means the other instance already owns this call —
       // so this returns silently: no controller registered, no error, no
       // `EFFECT_RESULT`, nothing rendered.
       const claim = (await chrome.runtime
-        .sendMessage({ type: 'EFFECT_CLAIM', effectId: req.effectId })
+        .sendMessage({ type: 'EFFECT_CLAIM', threadId: req.threadId, effectId: req.effectId })
         .catch(() => ({ granted: false }))) as EffectClaimResponse | undefined;
       if (!claim?.granted) return;
 
@@ -242,7 +275,7 @@ export function startEffectListener(
   // this file's `RecoveryOutcome` doc comment on why both message
   // orders are safe.
   const onAbort = (msg: unknown) => {
-    const m = msg as { type?: string; effectId?: string } | undefined;
+    const m = msg as Partial<EffectAbortMessage> | undefined;
     if (m?.type === 'EFFECT_ABORT' && m.effectId) controllers.get(m.effectId)?.abort();
   };
 

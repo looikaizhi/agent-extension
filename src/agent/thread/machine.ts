@@ -1,27 +1,31 @@
 import { guideAgent } from '@/agent/agents/guide/agent';
 import { moduleOf } from '@/agent/agents/guide/registry';
-import type { PromptItem, PromptTable } from '@/core/extractor/types';
-import type { GuideStep } from '@/shared/protocol';
-import type { Ref } from '@/shared/types';
 import type { EffectFailureKind } from './effect';
 import type { MachineEffect, MachineInput, ThreadState } from './thread';
+import { docResultOf } from '@/agent/tools/read-doc';
 import {
+  STEP_CALLS,
+  askAgain,
+  closeTurn,
+  continueTurn,
   notify,
+  openingOf,
   present,
-  stamp,
-  stepForward,
-  recordMove,
+  settleAnswer,
+  stampAction,
+  stepSpent,
   tryEmitCallModel,
   type StepOut,
 } from './transitions';
-import { samePlace } from './place';
+import { sameView } from '@/shared/view';
+import { tableOf } from '@/agent/context/turn';
 import { fixedPlan } from './fixed-plan';
 
 /**
  * The pure reducer at the center of the guided flow (design doc §3; its
  * concurrency rules are §10's). `step` is the one entry point; the only other
- * exports are two pure queries over a thread — `pageMoved` and `stepOnScreen`
- * — that decide something without changing anything. The inputs it reads and
+ * export is a pure query over a thread — `stepOnScreen` — that decides
+ * something without changing anything. The inputs it reads and
  * the effects it returns are typed in `thread.ts`, beside the state itself.
  *
  * N-2 (design doc §2.7): no `await`, no `fetch(`, no `chrome.`, here or in
@@ -45,41 +49,6 @@ import { fixedPlan } from './fixed-plan';
  * it*, which only a cross-file guard can catch.
  */
 
-const UNRESOLVED_MESSAGE = '找不到这一步的目标，页面可能已经变化。';
-
-/** Every control the model was shown last time, in the order it was shown
- *  them. `ref` is deliberately absent: refs are minted per snapshot
- *  (CONTEXT.md, "跨快照无意义"), so including them would make every
- *  re-extraction look like a change. */
-const controlsOf = (t: PromptTable) => t.items.map((i) => `${i.path.join('>')}|${i.role}|${i.name}`).join('\n');
-
-/**
- * D4's "页面确实变了", as one predicate both the reducer and
- * `agent/thread/writer.ts`'s pre-`step` guard read — the two used to compare `pageHash` each on their own
- * line, and a rule written twice is a rule that drifts.
- *
- * Two signals, either one sufficient:
- *
- * - **`pageHash`** — route plus landmark/heading structure
- *   (`core/extractor/fingerprint.ts`). Catches real navigations, which is what
- *   carries a multi-page journey forward.
- * - **The control list** — catches what `pageHash` is deliberately blind to. A
- *   menu, dropdown or dialog opening adds no landmark and no heading, so the
- *   fingerprint does not move, yet the page now offers a completely different
- *   set of things to do and the step on screen has already been done. That
- *   blindness is correct for the *watcher* (a hash reacting to every
- *   async-loaded button would invalidate the guide constantly) and wrong for
- *   *this* judgement, which is only ever reached after something already
- *   claimed the page moved.
- *
- * Both readings of "changed" are structural — no timers, no heuristics about
- * how much changed. A page that swapped one control for another moved; a page
- * that repainted the same controls did not.
- */
-export function pageMoved(prev: PromptTable, next: PromptTable): boolean {
-  return next.pageHash !== prev.pageHash || controlsOf(next) !== controlsOf(prev);
-}
-
 /**
  * The step the screen should show for this thread right now, or `null` when
  * nothing on file is safe to paint.
@@ -96,83 +65,7 @@ export function pageMoved(prev: PromptTable, next: PromptTable): boolean {
 export function stepOnScreen(state: ThreadState): Extract<MachineEffect, { kind: 'present' }> | null {
   if (state.ending || !state.steps[state.cursor]) return null;
   if (state.planSource === 'model' && state.inflight) return null;
-  return present(state, state.cursor);
-}
-
-/**
- * `step_settle_timeout` — the user activated the step and the page did not
- * move (`replan.ts` looked several times before saying so).
- *
- * "Did not move" is not "did not work". Clicking a search button opens a
- * dialog; opening a menu expands it; both leave `pageMoved` false because the
- * route is unchanged and — for a dialog — extraction scopes into it, so the
- * control list is compared against a table describing somewhere else. The
- * user did exactly what was asked. What is missing is the rest of the plan.
- *
- * So the first question is whether this plan has a rest. The model writes
- * `e6 click` then `e6 input value:"n8n"` — click the search open, then type
- * into it — reusing the same ref because the dialog's textbox is not in the
- * table yet (`CHOICE_GUIDE` now asks for exactly this shape). Before this
- * branch existed `cursor` never advanced anywhere in the codebase, so that
- * second step was planned and then discarded, and four of seven live journeys
- * ended right here reading 「这一步看起来没有反应」 while the thing to do next
- * sat unused in `steps[1]`.
- *
- * Advancing costs no quota — the step is already planned and already
- * validated against the table it was drawn from. Only when the plan really is
- * exhausted does the old message stand: then there is nothing left to offer,
- * and a control that did not respond is a step to retry or skip, not a reason
- * to stop guiding.
- *
- * `stamp` keeps its first-come-wins rule, so a step whose fate is already
- * recorded is never rewritten — the page moving and the window closing can
- * both arrive for the same step, and the one that arrived first is the one
- * that actually happened.
- */
-function handleStepSettleTimeout(state: ThreadState, effectId: string, nextRev: number): StepOut {
-  const last = state.history[state.history.length - 1];
-  // Also the gate that keeps the replan below from ever looping: it stamps
-  // `failed`, and a step whose fate is recorded never reaches here twice.
-  if (!last || last.outcome !== 'unknown') return { state, effects: [] };
-
-  // A fixed plan decides this for itself (`fixed-plan.ts`), and before
-  // anything below: the replan further down is for a guide that has a model
-  // to ask, and a fixed plan has none.
-  if (state.planSource === 'fixed') return fixedPlan.onSettleTimeout(state);
-
-  if (state.cursor + 1 < state.steps.length) {
-    // `confirmed` is not ours to write — `handlePageChanged`'s doc comment
-    // reserves it for the one place that has proven the page moved, and
-    // nothing here has proven that. What is known is narrower and is what
-    // gets recorded: the user acted on this step, and the guide moved on.
-    return stepForward(state);
-  }
-
-  // The plan is spent and the control did not respond. Before settling for
-  // "try again or skip it", spend the one thing that can still help: another
-  // look at this page.
-  //
-  // Without this, a thread in exactly this position can never call the model
-  // again. The only three dispatch sites are `start`, E-3, and
-  // `page_changed` — and `page_changed` requires the page to move, which is
-  // precisely what just failed to happen. Two of 21 live journeys died in that
-  // closed loop, both because the model answered a `combobox` with a lone
-  // `click`: clicking a text field cannot move a page, so nothing ever woke
-  // the thread again. The step's own `why` said 「在搜索框输入 n8n-io/n8n」 in
-  // both — the plan it described was fine, the plan it emitted was one step
-  // short.
-  const stalled: ThreadState = { ...state, history: stamp(state.history, 'failed') };
-  const out = tryEmitCallModel(stalled, effectId, nextRev);
-  // The screen still shows the same page and the same highlight, so without
-  // this the user has no way to tell a slow page from a dead control. Which
-  // sentence they get is decided by what actually went out, never by what we
-  // hoped would: a tombstone or an exhausted quota means nothing is coming,
-  // and promising a fresh look would be a lie the next silence exposes.
-  const looking = out.effects.some((e) => e.kind === 'callModel');
-  const said = looking
-    ? `「${last.title}」这一步看起来没有反应，我再看看这一页。`
-    : `「${last.title}」这一步看起来没有反应，可以再试一次，或者跳过它。`;
-  return { state: out.state, effects: [notify(said), ...out.effects] };
+  return present(state);
 }
 
 /**
@@ -201,28 +94,7 @@ function handleCrossSiteDecision(
       state: cleared,
       effects: [notify(`好，没有带你去 ${to}。这条路的下一步就在那边，所以到这里先停下——换个目标再说一次，我重新看这一页。`)],
     };
-  return { state: { ...cleared, crossedTo: to }, effects: [present(cleared, 0)] };
-}
-
-/**
- * Which refs were not on this page a moment ago.
- *
- * Same `Place` only. After a navigation every control is new and marking all
- * of them says nothing; the mark is for the other case — a click that opened a
- * menu or expanded a panel, where the reader gets the same few hundred rows
- * back with no clue which dozen just appeared. Measured live, one journey
- * clicked the same button five times while the control it wanted sat inside
- * the panel that button had opened.
- *
- * Compared by identity, not by `ref`: a `Ref` is meaningless across snapshots
- * (`CONTEXT.md`). What comes out is refs from the *new* table, which is the
- * one they will travel with.
- */
-function freshRefsBetween(prev: PromptTable, next: PromptTable): readonly Ref[] {
-  if (!samePlace(prev.url, next.url)) return [];
-  const key = (i: PromptItem) => `${i.path.join('›')}|${i.role}|${i.name}`;
-  const before = new Set(prev.items.map(key));
-  return next.items.filter((i) => !before.has(key(i))).map((i) => i.ref);
+  return { state: { ...cleared, crossedTo: to }, effects: [present(cleared)] };
 }
 
 function handleStart(input: Extract<MachineInput, { kind: 'start' }>, nextRev: number): StepOut {
@@ -233,15 +105,18 @@ function handleStart(input: Extract<MachineInput, { kind: 'start' }>, nextRev: n
     route: [],
     steps: [],
     cursor: 0,
-    outcomes: [],
     history: [],
+    // Nothing has been pointed at yet: the model's first answer is given on
+    // the page the run starts on.
+    pointedOn: input.table,
     planSource: 'model',
     // §5.7: where a model-planned run starts on both axes (thread.ts's doc
     // comments on these two fields say what the other values mean).
     evidence: 'model',
     check: 'unknown',
     callCount: 0,
-    docFetchCount: 0,
+    stepCalls: 0,
+    spentSteps: 0,
     // Seeded with the screen this run starts on, so the opening call is the
     // only one spent on it.
     inflight: null,
@@ -263,9 +138,11 @@ const FAILURE_TEXT: Record<EffectFailureKind, (detail: string) => string> = {
 
 /**
  * `effect_result` — the one branch that has to interpret a raw model or
- * fetch response. E-2 (idempotent discard) and E-3 (world-mismatch discard +
- * auto-replan) run *before* anything in the payload is trusted; only a
- * result that survives both is handed to `guideAgent.parseOutput`/`.validate`.
+ * fetch response. E-2 (idempotent discard) and E-3 (a reading landed while
+ * the call was out: discard and ask again) run *before* anything in the
+ * payload is trusted; only a result that survives both is handed to
+ * `guideAgent.parseOutput`/`.validate`. E-3 lets one kind through a changed
+ * world: a `done` on an unchanged address (below).
  */
 function handleEffectResult(
   state: ThreadState,
@@ -278,31 +155,37 @@ function handleEffectResult(
     return { state, effects: [] };
   }
 
-  // §5.9 says a repair call counts against the same 12-call cap as the call
-  // it repairs. It never did: `tryEmitCallModel` charges exactly 1 when it
-  // dispatches, while the repair round happens *inside* the effect, where the
-  // host cannot see it — so 12 dispatched effects could spend up to 24 real
-  // requests and `callCount` would still read 12. The panel now reports what
-  // it actually spent, and this adds whatever exceeded the one already
-  // charged. Applied before E-3, not after: a result discarded for arriving
-  // in the wrong world was still paid for.
+  // What the run cost counts every request, repair rounds included: the
+  // repair happens *inside* the effect, where the host cannot see it, so the
+  // panel reports what it actually spent, and this adds whatever exceeded the
+  // one already counted at dispatch. Applied before E-3, not after: a result
+  // discarded for arriving in the wrong world was still paid for.
+  const inflight = state.inflight;
+  // A document the model asked to read, not an answer from the model.
+  if (inflight.kind === 'fetchDoc') return handleDocFetched(state, input, nextRev);
+
   const unbilled = Math.max(0, input.outcome.providerCalls - 1);
   const cleared: ThreadState = { ...state, inflight: null, callCount: state.callCount + unbilled };
+  // Every way this result can end the step's conversation without an answer —
+  // refused, unreadable, someone else's answer — ends it here, and on the
+  // step's last call ends the step too (`closeTurn`). Only a tool call carries
+  // it on, and only a wake opens a new one.
+  const closed: ThreadState = closeTurn(cleared);
 
-  const worldMatches =
-    input.at.threadRev === state.inflight.at.threadRev &&
-    input.at.snapshotId === state.table.snapshotId &&
-    input.at.pageHash === state.table.pageHash &&
-    input.at.url === state.table.url;
+  // The one answer a changed world cannot have invalidated: a `done` names no
+  // control, so a page that re-rendered under it — same address, new snapshot
+  // — has taken back nothing it said. Discarding it anyway was the commonest
+  // way a guide walked off a page it had arrived on: over two live runs this
+  // check threw away 22–23% of all model calls, 26 of them a `done` on an
+  // unchanged address, and asking again turned six journeys back into
+  // `guide`. Only a different view can make a `done` wrong.
+  const stillHere = input.outcome.ok && input.outcome.tool === 'done' && sameView(input.at.url, state.table.url);
 
-  if (!worldMatches) {
-    // E-3: discard the result outright and replan unconditionally — the
-    // Gotchas are explicit that this does not wait for a new user input.
-    // `state.table` already reflects whatever changed (only `page_changed`
-    // moves it, and that input carries the fresh table with it), so the
-    // replan needs nothing from this stale result beyond triggering it.
-    return tryEmitCallModel(cleared, input.nextEffectId, nextRev);
-  }
+  // E-3: a reading landed while this call was out, so whatever it says —
+  // an answer, a tool call, a failure — was computed for a world that has
+  // since changed. Dropped unread, and the model asked again with what
+  // happened; this does not wait for anything else to arrive.
+  if (state.readings?.length && !stillHere) return askAgain(cleared, input.nextEffectId, nextRev);
 
   if (!input.outcome.ok) {
     // Three different things, three different sentences. The panel runs the
@@ -312,7 +195,7 @@ function handleEffectResult(
     // word, but only over text it actually receives). Saying 「调用失败」 to
     // a user whose plan was refused for naming a password field was wrong
     // twice over: the call succeeded, and the reason was worth telling.
-    return { state: cleared, effects: [notify(FAILURE_TEXT[input.outcome.failureKind](input.outcome.error))] };
+    return { state: closed, effects: [notify(FAILURE_TEXT[input.outcome.failureKind](input.outcome.error))] };
   }
 
   // Re-derived here, not trusted from the panel (§8.3, "判定权在 Host"). The
@@ -323,124 +206,149 @@ function handleEffectResult(
   // The wire leaves `value` as `unknown`. The panel sends the model's raw
   // text; anything else is a result nobody can parse, and is reported as one.
   if (typeof input.outcome.value !== 'string') {
-    return { state: cleared, effects: [notify(FAILURE_TEXT.parse('结果不是文字'))] };
+    return { state: closed, effects: [notify(FAILURE_TEXT.parse('结果不是文字'))] };
   }
   const value = input.outcome.value;
   const parsed = input.outcome.tool
     ? guideAgent.parseOutput(input.outcome.tool, value)
     : ({ kind: 'error', message: '结果里没有工具名，无法判断这是哪一种信封' } as const);
   if (parsed.kind === 'error') {
-    return { state: cleared, effects: [notify(FAILURE_TEXT.parse(parsed.message))] };
-  }
-  if (parsed.kind === 'foreign') {
-    // explain/need_text: those are the question agent's answers (CONTEXT.md
-    // `Question`), which never go through a Thread. Not malformed, and not
-    // this reducer's to act on — reported as what came back, and the run
-    // stays recoverable — it does not end.
-    return { state: cleared, effects: [notify(`模型返回了非引导类信封（intent: ${parsed.intent}）`)] };
+    return { state: closed, effects: [notify(FAILURE_TEXT.parse(parsed.message))] };
   }
   const validated = guideAgent.validate(parsed.envelope, state.table);
   if (validated.kind === 'violation') {
-    return { state: cleared, effects: [notify(FAILURE_TEXT.violation(validated.reason))] };
+    return { state: closed, effects: [notify(FAILURE_TEXT.violation(validated.reason))] };
   }
 
 
   // What an answer does to the thread belongs to the intent that answered —
   // its module's `consequence`. The reducer only routes it there.
   const envelope = validated.envelope;
-  return moduleOf(envelope).consequence(cleared, envelope, { nextEffectId: input.nextEffectId, nextRev });
+  const m = moduleOf(envelope);
+  // The call as the model made it, for a tool that replays it with its result.
+  // An endpoint that gave no id still gets a round the model can pair: the
+  // effect id is unique, and made here rather than in the panel it is the same
+  // on every replay of this input.
+  const call = { id: input.outcome.callId ?? `call_${input.effectId}`, name: envelope.intent, args: value };
+  const ids = { nextEffectId: input.nextEffectId, nextRev, call };
+  if (m.kind === 'tool') {
+    // The step's last call offered only answers. An endpoint that answered
+    // with a tool anyway does not get it run: the step is out of calls.
+    if (cleared.stepCalls >= STEP_CALLS) return stepSpent(cleared);
+    return m.consequence(cleared, envelope, ids);
+  }
+  // An answer. It settles the step it comes after (`settleAnswer`) first, so
+  // what the answer does next — the loop backstop reads it — sees it settled;
+  // unless it is one that moves nothing (`explain`), which leaves the step on
+  // screen as it is — the user has not acted on it — and only ends the
+  // thinking: the step's calls start over, and one more step is taken from
+  // the run, so a model that keeps explaining still runs out.
+  const answered = m.leavesStepOnScreen
+    ? { state: { ...cleared, turn: undefined, stepCalls: 0, spentSteps: cleared.spentSteps + 1 } }
+    : settleAnswer({ ...cleared, turn: undefined });
+  if ('stop' in answered && answered.stop) return answered.stop;
+  // §5.7's first axis, for what this answer puts on screen: read off the
+  // conversation it came out of, which is gone once the answer lands. A
+  // document the model read in it is what the answer stands on; a fetch that
+  // brought nothing back, or a conversation voided by a reading, is not.
+  const readADoc = cleared.turn?.rounds.some((r) => r.result.kind === 'doc') ?? false;
+  const based: ThreadState = { ...answered.state, evidence: readADoc ? 'documented' : 'model' };
+  const out = m.consequence(based, envelope, ids);
+  // CONTEXT.md `Question`: a run that has pointed at nothing when an answer
+  // lands was a question, whatever was typed — decided by what it did, never
+  // at the door. It is over, and leaves nothing behind (`writer.ts`).
+  const question = out.state.history.length === 0 && out.state.ending === undefined;
+  return { ...out, state: { ...out.state, turn: undefined, ...(question ? { ending: 'answered' as const } : {}) } };
 }
 
 /**
- * `bind_result` — CL-2's other half (`judgeFirstStepBind` in
- * `agent/thread/judge.ts` is the pure judgement over a *table-only*
- * `BindResult`; this is the live-DOM report the renderer produces when it
- * actually tries to paint `steps[cursor]`, which is the only place an
- * `ambiguous` *Binding* can come from — see `thread.ts`'s doc comment on
- * `Binding`). Deliberately not routed through `judgeFirstStepBind`: that
- * function's input type carries `ref`/`item`/`refs`/`items` fields a
- * `Binding` value has no data for, so bridging the two would mean
- * fabricating fields nobody has rather than reusing real logic — the
- * `'ambiguous'` check both would run is one line long on either side of that
- * bridge.
+ * A document the model asked to read (`read_doc`) came back from the panel —
+ * or failed, or was swept as expired. Either way it goes back to the model as
+ * the result of its call (`docResultOf` says what it becomes), and the turn
+ * goes on.
+ *
+ * Unless a reading landed while it was fetched: then the conversation it
+ * belongs to was about a page that has since changed — its refs may name other
+ * controls now — and the model is asked afresh (`askAgain`), the same as a
+ * model answer that arrives in a changed world.
  */
-function handleBindResult(state: ThreadState, input: Extract<MachineInput, { kind: 'bind_result' }>): StepOut {
-  if (input.binding === 'bound') return { state, effects: [] };
+function handleDocFetched(state: ThreadState, input: Extract<MachineInput, { kind: 'effect_result' }>, nextRev: number): StepOut {
+  const cleared: ThreadState = { ...state, inflight: null };
+  if (state.readings?.length) return askAgain(cleared, input.nextEffectId, nextRev);
+  const turn = cleared.turn;
+  if (!turn?.pending || turn.pending.effectId !== input.effectId) return { state: cleared, effects: [] };
+  const round = { call: turn.pending.call, result: docResultOf(input.outcome) };
+  return continueTurn({ ...cleared, turn: openingOf(turn, [...turn.rounds, round]) }, input.nextEffectId, nextRev);
+}
 
-  if (state.cursor === 0 && input.binding === 'ambiguous') {
-    // CL-2: escalate, do not advance, do not spend another callModel.
-    return { state: { ...state, clarify: 'CL-2' }, effects: [] };
-  }
+/**
+ * `tool_result` — the host carried out a tool the model called (`observe`,
+ * `wait_for`). The result goes back to the model as the result of its call,
+ * and the turn goes on.
+ *
+ * Matched to the call by id, and only while that call is still pending: a
+ * result that belongs to a turn no longer open must not be spliced into a
+ * conversation that never asked for it. And not taken at all when a reading
+ * landed while the tool ran: the turn is void, and the model is asked afresh
+ * (`askAgain`).
+ *
+ * The page a result brings is the page last read, and the one the answer is
+ * then checked against. Nothing about the result is written down: a wait that
+ * ran out is what the model hears, not a fact about the step on screen
+ * (CONTEXT.md `Reading`), and what the step did is settled when the model
+ * answers (`settleAnswer`).
+ */
+function handleToolResult(state: ThreadState, input: Extract<MachineInput, { kind: 'tool_result' }>, nextRev: number): StepOut {
+  const turn = state.turn;
+  if (!turn?.pending || turn.pending.effectId !== input.effectId) return { state, effects: [] };
+  if (state.readings?.length) return askAgain(state, input.nextEffectId, nextRev);
+  const table = tableOf(input.result);
+  const round = { call: turn.pending.call, result: input.result };
+  const next = { ...state, ...(table ? { table } : {}), turn: openingOf(turn, [...turn.rounds, round]) };
+  return continueTurn(next, input.nextEffectId, nextRev);
+}
 
-  // `unbound`, and `ambiguous` anywhere but the fresh first step: S1's
-  // existing "未能定位" path (not CL-2 — Gotchas are explicit that CL-2 is
-  // scoped to the first step of a freshly-produced `steps` array only).
-  const outcomes = state.outcomes.slice();
-  outcomes[state.cursor] = 'invalidated';
-  return {
-    state: { ...state, outcomes, history: stamp(state.history, 'invalidated') },
-    effects: [notify(UNRESOLVED_MESSAGE)],
+/**
+ * `reading` — an observation source saw something (CONTEXT.md `Reading`),
+ * and the host read the page right after.
+ *
+ * Written down and nothing more: the page read becomes the page last read,
+ * and a `used` records that the user did the step on screen — the one fact a
+ * reading proves by itself. What the step *did* is not decided here; the page
+ * a click has just started to change is the page it is leaving, and settling
+ * it now is how a page finishing its own load came to be written down as the
+ * click's doing (symptom 1). The model settles that when it answers next.
+ *
+ * Then the model hears it. If nothing is being asked, it is woken now, with
+ * the page as just read — no window, no second look: whether the page has
+ * finished arriving is the model's to judge, with `wait_for` and `observe`.
+ * If it is being asked — a call out, a tool running — this is held until the
+ * answer is back, and that answer is then dropped (`askAgain`): one call at a
+ * time, however many readings arrive.
+ *
+ * Except what the user says. A change on the page may leave the answer on its
+ * way standing (a `done` on the same view is kept); the user's own words never
+ * do — that answer was for a goal they have since added to. So nothing waits
+ * for it: what is out is called off, and the model is asked again now.
+ *
+ * A fixed plan has no model to wake; it consumes the reading itself
+ * (`fixed-plan.ts`).
+ */
+function handleReading(state: ThreadState, input: Extract<MachineInput, { kind: 'reading' }>, nextRev: number): StepOut {
+  if (state.planSource === 'fixed') return fixedPlan.onReading(state, input.reading, input.table);
+  const read: ThreadState = {
+    ...state,
+    ...(input.table ? { table: input.table } : {}),
+    ...(input.reading.kind === 'used' ? { history: stampAction(state.history, 'taken') } : {}),
+    readings: [...(state.readings ?? []), input.reading],
   };
-}
-
-/**
- * `page_changed` — §5.3's re-planning trigger. The caller (`background.ts`)
- * always hands over a freshly extracted table; this function's entire job is
- * deciding whether that table's `pageHash` actually differs from what the
- * current `steps` were planned against (slice 10 guards the "no, nothing
- * really changed" case at this layer rather than trusting the caller never
- * to over-report).
- */
-function handlePageChanged(state: ThreadState, input: Extract<MachineInput, { kind: 'page_changed' }>, nextRev: number): StepOut {
-  if (!pageMoved(state.table, input.table)) return { state, effects: [] };
-
-  // P-3: the user just agreed to leave their site, and the page they landed on
-  // wants credentials. Stop, and say only what we actually observed.
-  //
-  // Scoped to the hop right after a *confirmed* cross-site jump, and spent
-  // after one check: "this page asks for your password" is unremarkable on a
-  // site the user chose, and worth stopping for on one they were just taken
-  // to. Checking everywhere would train them to dismiss it.
-  if (state.crossedTo && input.table.items.some((i) => i.sensitive)) {
-    return {
-      state: {
-        ...state,
-        table: input.table,
-        crossedTo: undefined,
-        history: stamp(state.history, 'invalidated'),
-        ending: 'credentials_stop',
-      },
-      // Deliberately not "this site is unsafe" — we are not a security product
-      // and cannot substantiate that (§8.4's closing note on our limits). We
-      // describe what we saw and what we did about it.
-      effects: [
-        notify(
-          `这一步把你带到了 ${state.crossedTo}，而那一页要求输入账号信息。为安全起见，引导已经停下。`,
-        ),
-      ],
-    };
+  if (input.reading.kind === 'said' && (state.inflight || state.turn?.pending)) {
+    const again = askAgain({ ...read, inflight: null }, input.nextEffectId, nextRev);
+    const out = state.inflight ? [{ kind: 'cancel' as const, effectId: state.inflight.effectId }] : [];
+    return { ...again, effects: [...out, ...again.effects] };
   }
-  // A fixed plan does not re-plan: it advances or repaints (`fixed-plan.ts`).
-  if (state.planSource === 'fixed') return fixedPlan.onPageMoved(state, input.table);
-  // Reaching here *is* the evidence that the step being left moved the page.
-  const moved = recordMove(state, input.table);
-
-  // A call is already out against the page the user has just left. Record the
-  // move and spend nothing: E-3 discards that result when it lands, because
-  // the world no longer matches, and replans against this table instead.
-  //
-  // Recording it is the whole point, and this branch used to return `state`
-  // untouched. E-3's world check compares the dispatched `at` against
-  // `state.table` — so a table that never moved made a result computed for the
-  // *previous* page look perfectly current. E-3 stayed silent, the stale
-  // envelope was accepted, and a step belonging to a page the user had already
-  // left was painted on screen: L-4, this product's only hard zero. Measured
-  // on github.com over 15 live journeys, 13 of them stalled on exactly this —
-  // the guide re-proposed the search box on the search *results* page, could
-  // not bind it, and stopped.
-  if (state.inflight) return { state: moved, effects: [] };
-
-  return tryEmitCallModel(moved, input.effectId, nextRev, freshRefsBetween(state.table, input.table));
+  if (state.inflight || state.turn?.pending) return { state: read, effects: [] };
+  return tryEmitCallModel(read, input.nextEffectId, nextRev);
 }
 
 /**
@@ -454,18 +362,6 @@ function handlePageChanged(state: ThreadState, input: Extract<MachineInput, { ki
  */
 function handleStepSkipped(state: ThreadState): StepOut {
   if (state.planSource === 'fixed') return fixedPlan.onSkipped(state);
-  return { state, effects: [] };
-}
-
-/**
- * `step_used` — the user activated the target of the step on screen. A fixed
- * plan records it and waits for the page to answer (`fixed-plan.ts`).
- *
- * A model-driven guide ignores it: its breakpoints re-plan whatever caused
- * them, so knowing who caused one changes nothing.
- */
-function handleStepUsed(state: ThreadState, at: string): StepOut {
-  if (state.planSource === 'fixed') return fixedPlan.onUsed(state, at);
   return { state, effects: [] };
 }
 
@@ -487,18 +383,14 @@ function dispatch(state: ThreadState | null, input: MachineInput, nextRev: numbe
   switch (input.kind) {
     case 'effect_result':
       return handleEffectResult(state, input, nextRev);
-    case 'step_settle_timeout':
-      return handleStepSettleTimeout(state, input.effectId, nextRev);
     case 'step_skipped':
       return handleStepSkipped(state);
-    case 'step_used':
-      return handleStepUsed(state, input.at);
+    case 'reading':
+      return handleReading(state, input, nextRev);
     case 'cross_site_decision':
       return handleCrossSiteDecision(state, input);
-    case 'bind_result':
-      return handleBindResult(state, input);
-    case 'page_changed':
-      return handlePageChanged(state, input, nextRev);
+    case 'tool_result':
+      return handleToolResult(state, input, nextRev);
   }
 }
 

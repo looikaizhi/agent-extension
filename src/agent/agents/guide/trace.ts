@@ -51,12 +51,14 @@ export const TRACE_MAX_ENTRIES = 24;
 export function createTrace(now: () => number = Date.now) {
   const entries: TraceEntry[] = [];
   let system = '';
+  let tools = '';
 
   return {
     record(e: RunEvent): void {
       switch (e.kind) {
         case 'request':
           system = e.system;
+          tools = e.tools ?? '';
           entries.push({ at: now(), kind: 'request', user: e.user });
           return;
         case 'repair':
@@ -85,12 +87,10 @@ export function createTrace(now: () => number = Date.now) {
     /** `null` when the run produced nothing worth sending, so the caller has
      *  one thing to test rather than a length check of its own. */
     snapshot(): Trace | null {
-      return entries.length ? { system, entries: [...entries] } : null;
+      return entries.length ? { system, tools, entries: [...entries] } : null;
     },
   };
 }
-
-export type TraceRecorder = ReturnType<typeof createTrace>;
 
 /**
  * Every free-text rationale an envelope carries.
@@ -107,7 +107,7 @@ function rationales(envelope: GuideAgentEnvelope): readonly string[] {
 /**
  * Does the model say, in its own words, that what it needs is not in the table?
  *
- * There is no field for this and deliberately no new one: giving `guide` an
+ * There is no field for this and deliberately no new one: giving `point` an
  * "it isn't listed" exit would be dead code the moment the table stops
  * dropping things, and this exists precisely to find out whether it has. So it
  * reads the rationale the model already writes.
@@ -148,5 +148,5 @@ const isTrace = (v: unknown): v is Trace =>
  */
 export function mergeTrace(existing: unknown, incoming: Trace, max: number = TRACE_MAX_ENTRIES): Trace {
   const prior = isTrace(existing) ? existing.entries : [];
-  return { system: incoming.system, entries: [...prior, ...incoming.entries].slice(-max) };
+  return { system: incoming.system, tools: incoming.tools, entries: [...prior, ...incoming.entries].slice(-max) };
 }

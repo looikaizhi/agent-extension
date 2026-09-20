@@ -18,7 +18,7 @@ export function resolveRole(el: Element): string {
 
   // HTML-AAM gives password/hidden-ish inputs *no* ARIA role, which is correct
   // for assistive tech but wrong for us: an element we never extract is one we
-  // can never refuse to highlight (S-03) and never diagnose. Map them
+  // can never refuse to highlight (S-03). Map them
   // explicitly rather than letting them fall through to 'generic'.
   if (el.localName === 'input') {
     const type = (el as HTMLInputElement).type?.toLowerCase();

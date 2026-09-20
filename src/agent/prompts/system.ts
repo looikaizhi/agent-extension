@@ -10,18 +10,7 @@
 const count = (n: number) => (n >= 0 && n <= 10 ? '零一两三四五六七八九十'[n]! : String(n));
 
 /**
- * The opening of the question agent's answer-shape guide. Each answer's own
- * paragraph — its field list and an example — comes from its module
- * (`question/output/`), numbered in registry order: "return valid JSON" is
- * not enough for a model to hit these exact field names, and the parser
- * rejects anything else. The count is the registry's, handed in by the agent,
- * so adding an answer does not mean coming back to edit this sentence.
- */
-export const answerShapeOpening = (kinds: number) =>
-  `你的回答必须是且只能是以下${count(kinds)}种信封（envelope）之一的 JSON 对象，不要输出信封之外的任何文字、解释或代码块标记。`;
-
-/**
- * How to pick a control, and how far to plan once picked.
+ * How to pick a control, and what the step it names leads to.
  *
  * Stated as rules about *kinds* of controls and *kinds* of state change —
  * never as the particular controls one site happens to have. An earlier
@@ -45,10 +34,12 @@ export const answerShapeOpening = (kinds: number) =>
  * nothing planned for it.
  *
  * So the second half is framed by what an action *does to the page* — leaves
- * it, changes it in place, or enters data — because that is what decides
- * whether a plan is finished, on any site. Only leaving the page ends what
- * can be planned; the other two leave the user standing where they are, and a
- * plan that stops there has surfaced a means without using it.
+ * it, changes it in place, or enters data. It once used that framing to say
+ * how far to plan: only leaving the page ended a plan, so a step that opened a
+ * dialog had to be followed, in the same plan, by the step inside it. The model
+ * now points at one step at a time (CONTEXT.md `Agent`), and the same framing
+ * says what happens next instead: whatever the step does, a new table arrives,
+ * and a control it revealed is marked `+new` on it.
  *
  * The assistant rule is the third attempt at one control, and the first two
  * failed for a reason worth writing down. A site's own chat box was picked as
@@ -87,17 +78,11 @@ export const answerShapeOpening = (kinds: number) =>
  * panel really does change the page, so a "did this step work" check answers
  * yes, and the journey continues inside a conversation that goes nowhere.
  *
- * The same-ref-twice mechanic is the one implementation fact that has to be
- * said outright: a control that does not exist yet has no ref, and reusing
- * the ref of whatever reveals it is the only way to express "make it appear,
- * then act on it". It is already legal — `refsViolation` checks that each
- * ref exists, not that refs are distinct.
- *
  * Placed before `MARK_GUIDE`, not after: `!secret` sits near the end of the
  * system message and the distance from it to the end must not grow — see
  * golden-guide-envelopes.ts's header for what happens when it does.
  */
-export const CHOICE_GUIDE = `挑控件、以及挑定之后要规划到哪里，按下面两组判断。
+export const CHOICE_GUIDE = `挑控件、以及这一步之后会发生什么，按下面两组判断。
 
 **一、按控件做什么来挑，不按它长什么样来挑：**
 - 名字说明这个控件做什么，role 只说明它长什么样。"需要输入"不等于"要找一个 role 是 textbox 的控件"——把输入框唤出来的那个控件常常是按钮、链接或菜单项，判断依据是它的名字，不是它的 role。
@@ -105,12 +90,11 @@ export const CHOICE_GUIDE = `挑控件、以及挑定之后要规划到哪里，
 - 同一分组里的其它控件说明这一片是什么区域，一个控件的用途不会超出它所在区域的用途。名字含糊时，看它的邻居在做什么，比硬猜这个名字更可靠。
 - **助手的输入框，看它的分组认，不看它自己的名字认。** 这类输入框的名字往往就写着"问我任何问题""Ask anything"，和搜索框的提示语一模一样，光读名字分不出来——上一条说的"用邻居判断这一片是什么区域"，在这里是唯一可靠的办法。**看同一个分组里还有什么**：出现选模型、发送、上传附件、新建对话、用量统计这类控件，那一片就是一个对话面板，那个输入框是它的输入口。往里面填字只会换来一段回答，用户还站在原地——但页面确实变了，很容易被当成"这一步生效了"，接着一路在对话里绕。**同一页上另有站内搜索时，搜索才是入口**；只有用户的目标本身就是"问这个助手"，才选它。
 
-**二、一次规划到"用户离开这一页"为止：**
+**二、一次只指一步，指完就等下一张元素表：**
 - 先判断这一步会造成哪一类变化：**跳到另一个页面** / **让这一页显示出新的东西**（展开、弹出、切换、显示更多）/ **填入内容**。
-- 只有第一类是你能规划的终点。用户去了你没见过的页面，那里的事等你收到新的元素表再说。
-- 后两类，用户仍然站在这一页。那一步之后要做什么，属于**这一次**规划，必须写进同一份 steps，不要留给下一次。
-- 新出现的控件还不在元素表里时，就重复引用**把它显示出来的那个 ref**，用 action 区分先后。这是合法的，也是表达"先让它出现，再对它操作"的唯一写法。
-- 收尾自检：走完你写的最后一步，用户是**更接近目标了**，还是只是**现在可以去做了**？如果是后者，这份计划还没写完。`;
+- 无论哪一类，你都只指这一步。用户做完之后你会收到新的元素表：跳了页，就在新页面上接着指；这一页显示出了新东西，新出现的控件会带 +new 标记，下一步多半就是它。
+- 要往一个输入框里填内容，就直接指那个输入框，action 写 input 并在 value 里给出要填的文字；只点一下输入框不会有任何反应。输入框还没显示出来时，先指把它显示出来的那个控件。
+- 自检：用户做完这一步，是**更接近目标了**，还是停在原地、什么都不会发生？如果是后者，换一个控件。`;
 
 /**
  * What `toPromptText` (`project.ts`) actually emits. This text has to track
@@ -129,7 +113,7 @@ export const CHOICE_GUIDE = `挑控件、以及挑定之后要规划到哪里，
  * page by design, and is a legitimate half of a plan. Both were in the same
  * system message, and the last live run repeated a step on 16 of 47 hops.
  *
- * The verdict itself has since moved out of here entirely: the `guide` tool
+ * The verdict itself has since moved out of here entirely: the `point` tool
  * requires a `previous_step` field, so the model states what the last step
  * accomplished before it plans the next one, instead of being told in prose
  * how to infer it. This line is back to describing what `page` *is*, which is
@@ -160,7 +144,7 @@ export const MARK_GUIDE = `元素表开头两行说明你现在在哪一页：
 这一页要先登录才能继续时（表里有 !secret 的账号密码框，旁边有一个提交按钮），不要就此停下来问用户：**指向那个提交按钮**（登录 / Sign in / 继续），在 why 里说明请他先自己把账号密码填好再点。填什么只有他自己知道——你不引用那两个框，也不替他写内容，你做的是把"填完之后按哪里"指出来。`;
 
 /**
- * No `locale` parameter reaches `buildQuestionUserMessage` (product decision, §0.3 of
+ * No `locale` parameter reaches the user message (product decision, §0.3 of
  * the design doc): the only signal for what language to answer in is the
  * literal language of `goal` itself, and this instruction is therefore a
  * fixed string, never templated per call. Separately, §0.3's own finding is
@@ -186,7 +170,7 @@ export const LANGUAGE_GUIDE = `请使用用户这次提问所使用的语言作�
  * `TOOL_CHOICE_CLOSING` follows them (`guide/agent.ts` assembles the whole).
  * How many tools there are is the registry's count, handed in by the agent.
  *
- * Nothing in the policy names a site. The entrances `clarify`'s line lists
+ * Nothing in the policy names a site. The entrances `ask`'s line lists
  * ("搜索框、导航项、菜单、筛选器、任何一列可点的条目") are shapes any page can have; an earlier draft
  * said 「仓库列表」 and an earlier `value` example talked about finding a
  * project under an organisation, both of which are one forge's vocabulary
@@ -199,7 +183,7 @@ export const LANGUAGE_GUIDE = `请使用用户这次提问所使用的语言作�
  * the goal restated. Short labels there, judgement in the policy lines.
  */
 export const toolChoiceOpening = (tools: number) =>
-  `${count(tools)}个工具对应${count(tools)}种回答，按下面挑。**默认是 guide**，另外${count(tools - 1)}个都要有明确理由才用：`;
+  `${count(tools)}个工具对应${count(tools)}种回答，按下面挑。**默认是 point**，另外${count(tools - 1)}个都要有明确理由才用：`;
 
 /**
  * Where the tool-choice policy resumes after the lines each registered intent
@@ -208,7 +192,7 @@ export const toolChoiceOpening = (tools: number) =>
  * `route` is spelled out as the one field in this whole prompt the model is
  * *allowed* to invent (design doc §1.3): it carries no `ref` and no control
  * name, so nothing it says there can point the renderer at anything on the
- * page. `steps` is the opposite: every step must name a `ref` that exists on
+ * page. `point` is the opposite: its step must name a `ref` that exists on
  * the element table below, because that table — not this instruction — is
  * the only thing standing between "the model is confident" and "the model is
  * confident and wrong" (§1.3's probe: an honest opt-out in the prompt did
