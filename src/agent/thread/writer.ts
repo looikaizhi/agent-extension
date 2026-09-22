@@ -30,6 +30,8 @@ import type { Reading } from '@/agent/context/turn';
 
 const guideKeyFor = (id: ThreadId) => `guide:${id}`;
 const effectKeyFor = (id: ThreadId) => `effect:${id}`;
+/** When the tool the *host* is carrying out stops being worth waiting for. */
+const toolKeyFor = (id: ThreadId) => `tool:${id}`;
 const pluginsKeyFor = (id: ThreadId) => `plugins:${id}`;
 
 /** The names of the Plugins a run started with — `[]` when none were on. */
@@ -250,8 +252,18 @@ async function applyGuideInputInner(
   const items: Record<string, unknown> = { [guideKeyFor(threadId)]: encodeThread(state) };
   if (req) items[effectKeyFor(threadId)] = req;
   if (startedWith) items[pluginsKeyFor(threadId)] = startedWith;
+  // A tool the host runs itself (`observe`, `wait_for`) has no wire request to
+  // carry a deadline, and the reducer has no clock. Its deadline is written
+  // here, so a worker evicted mid-read — or a read that threw — cannot leave
+  // the turn pending for good, deaf to every reading after it.
+  //
+  // Only those: `read_doc` goes out as a `fetchDoc` effect, which carries its
+  // own deadline and whose expiry says 「没读到」 rather than 「读不到这一页」.
+  const pending = state.turn?.pending && !state.inflight ? state.turn.pending : undefined;
+  if (pending) items[toolKeyFor(threadId)] = { effectId: pending.effectId, deadline: deps.now() + HOST_TOOL_TIMEOUT_MS };
   await deps.store.set(items); // E-1: persistence first —
   if (!state.inflight) await deps.store.remove(effectKeyFor(threadId));
+  if (!pending) await deps.store.remove(toolKeyFor(threadId));
 
   // The one judgement that decides whether this run is over: did *this*
   // reduction give it an ending. Asking it here rather than at
@@ -317,6 +329,39 @@ async function dropGuideThread(store: ThreadStore, threadId: ThreadId): Promise<
   await store.remove(guideKeyFor(threadId));
   await store.remove(effectKeyFor(threadId));
   await store.remove(pluginsKeyFor(threadId));
+  await store.remove(toolKeyFor(threadId));
+}
+
+/**
+ * The same run, one tab further on.
+ *
+ * A click that opens a new tab is not a new journey — the user did the step
+ * they were shown, and the page it led to happens to have opened beside the
+ * old one instead of inside it. Everything about a run is keyed by tab, so
+ * without this the run stays parked on the tab the user left, pointing at a
+ * control they already used, while the tab they are actually looking at has
+ * nothing at all.
+ *
+ * The call in flight does not come along: it asked about the page the user
+ * has left, and its answer would be a step for a page nobody is on. The
+ * caller cancels it (`cancelledEffectId`) and the new page is read instead —
+ * which is exactly what a navigation inside one tab already does, so the
+ * reducer never has to know a new tab was involved.
+ */
+export function carryGuideThread(
+  deps: GuideEffectDeps,
+  from: ThreadId,
+  to: ThreadId,
+): Promise<{ carried: boolean; cancelledEffectId: string | null }> {
+  return writes(from, async () => {
+    const thread = await loadGuideThread(deps.store, from);
+    if (!thread) return { carried: false, cancelledEffectId: null };
+    const cancelledEffectId = thread.inflight?.effectId ?? null;
+    // The Plugins a run started with are part of that run, not of the tab.
+    await deps.store.set({ [guideKeyFor(to)]: { ...thread, inflight: null }, [pluginsKeyFor(to)]: await loadRunPlugins(deps.store, from) });
+    await dropGuideThread(deps.store, from);
+    return { carried: true, cancelledEffectId };
+  });
 }
 
 /**
@@ -410,10 +455,60 @@ export function sweepExpiredGuideEffect(
   return writes(threadId, () => sweepExpiredGuideEffectInner(deps, threadId));
 }
 
+/**
+ * The longest a tool the host runs itself may take before the thread stops
+ * waiting for it. Above `wait_for`'s own cap and the read that follows it,
+ * because a wait that is still running is not a wait that was lost.
+ */
+export const HOST_TOOL_TIMEOUT_MS = 45_000;
+
+/**
+ * The other half of E-4: the tool the *host* took on. Nothing on the wire
+ * carries it, so nothing else can notice it never finished — and a turn left
+ * pending ignores every reading after it, which reads as a guide that died
+ * mid-step.
+ *
+ * What goes back is what actually happened: the page was not read
+ * (`unreadable`), or the wait never finished (`met: null`) — never a result
+ * that claims the tool ran and found nothing.
+ */
+async function sweepExpiredToolCall(deps: GuideEffectDeps, threadId: ThreadId): Promise<GuideReduction | null> {
+  const key = toolKeyFor(threadId);
+  const mark = (await deps.store.get(key))[key] as { effectId: string; deadline: number } | undefined;
+  if (!mark || deps.now() < mark.deadline) return null;
+  const thread = await loadGuideThread(deps.store, threadId);
+  // A call on the wire is the effect sweep's, not this one's.
+  const pending = thread?.inflight ? undefined : thread?.turn?.pending;
+  if (!pending || pending.effectId !== mark.effectId) {
+    await deps.store.remove(key);
+    return null;
+  }
+  let args: Record<string, unknown> = {};
+  try {
+    args = JSON.parse(pending.call.args) as Record<string, unknown>;
+  } catch {
+    /* the model's own text; an unreadable one changes nothing below */
+  }
+  const result =
+    pending.call.name === 'wait_for'
+      ? ({
+          kind: 'waited' as const,
+          until: args.until === 'gone' ? ('gone' as const) : ('appears' as const),
+          text: typeof args.text === 'string' ? args.text : '',
+          seconds: typeof args.seconds === 'number' ? args.seconds : 0,
+          met: null,
+          table: null,
+        })
+      : ({ kind: 'unreadable' as const });
+  return applyGuideInputInner(deps, threadId, { kind: 'tool_result', effectId: pending.effectId, result });
+}
+
 async function sweepExpiredGuideEffectInner(
   deps: GuideEffectDeps,
   threadId: ThreadId,
 ): Promise<GuideReduction | null> {
+  const tool = await sweepExpiredToolCall(deps, threadId);
+  if (tool) return tool;
   const inflight = await peekGuideEffect(deps.store, threadId);
   if (judgeRecovery(inflight, deps.now()) !== 'expired') return null;
   return applyGuideInputInner(deps, threadId, {
