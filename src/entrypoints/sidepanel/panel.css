@@ -30,11 +30,25 @@ body {
   font: 13px/1.55 -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', sans-serif;
 }
+/* 一段对话的布局：头、钉住的这一步、滚动的对话、贴底的输入框。
+   对话是唯一会滚的那块，输入框永远在手边。 */
+html,
+body,
+#root {
+  height: 100%;
+}
 .panel {
+  height: 100%;
   padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  overflow: hidden;
+}
+.conversation {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
 h1 {
   font-size: 15px;
@@ -56,15 +70,6 @@ h2 {
   white-space: nowrap;
 }
 
-.ask,
-.answer-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 9px 11px;
-  background: var(--card);
-  border-radius: 7px;
-}
 /* 模型写的长文本（Prose.tsx）：段落、列表、加粗、行内代码。 */
 .prose :where(p, ul, ol) {
   margin: 0;
@@ -134,20 +139,6 @@ button.primary {
   border-color: var(--accent);
   color: #fff;
 }
-.status {
-  margin: 0;
-  font-size: 12px;
-  padding: 6px 9px;
-  border-radius: 6px;
-  background: var(--card);
-}
-.status.error {
-  color: var(--warn);
-}
-.status.ok {
-  color: var(--accent);
-}
-
 .stats {
   display: flex;
   flex-wrap: wrap;
@@ -233,23 +224,18 @@ button.primary {
   font-size: 12px;
 }
 
-.route {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 9px 11px;
-  background: var(--card);
-  border-radius: 7px;
-}
-.route-hops {
-  margin: 0;
+/* 路标与三轴，跟在它们所属的那一步下面。 */
+.entry .route {
+  margin: 6px 0 0;
   padding-left: 18px;
   font-size: 12px;
+  color: var(--muted);
 }
-.route-hops li {
+.entry .route li {
   margin: 2px 0;
 }
 .axes {
+  margin-top: 6px;
   display: flex;
   flex-wrap: wrap;
   gap: 4px 12px;
@@ -257,50 +243,150 @@ button.primary {
   color: var(--muted);
 }
 
-.log {
-  font-size: 11px;
-  color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-}
-.log div {
-  padding: 1px 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* 模型问回来一句（ask）。与 .route 同一张卡片的观感，但不是路标
    ——它是"现在轮到你说话了"，所以留在 route 上方、单独成块。 */
-.ask-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 9px 11px;
-  background: var(--card);
-  border-radius: 7px;
-}
-.ask-card .hint {
-  margin: 0;
-  font-size: 12px;
-  opacity: 0.7;
-}
+/* ═══════════ 对话（01 · 侧栏变成一段对话） ═══════════
+   主界面只有三块：顶部钉住的这一步、对话、输入框。其余收进工具区。 */
 
-/* 让 agent 的判断过程可见：为什么挑这个控件、走过哪几步。 */
-.route .why {
-  margin: 0;
-  font-size: 12px;
+.pinned {
+  flex: none;
+  padding: 10px 11px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--card);
 }
-.route h3 {
+.pinned .step-title {
+  font-weight: 600;
+  margin-top: 2px;
+}
+.pinned .why {
   margin: 4px 0 0;
   font-size: 12px;
-  opacity: 0.75;
+  color: var(--muted);
 }
-.route .walked {
-  margin: 0;
+.pinned .row {
+  margin-top: 8px;
+}
+
+.conversation > * {
+  margin-bottom: 10px;
+}
+.conversation {
+  display: flex;
+  flex-direction: column;
+}
+.entry {
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: var(--card);
+  font-size: 13px;
+}
+/* 用户说的话靠右，像一条消息；其余靠左，是 agent 或宿主在说。 */
+.entry.said {
+  align-self: flex-end;
+  max-width: 85%;
+  background: var(--accent);
+  color: #fff;
+  white-space: pre-wrap;
+}
+.entry.note {
+  border-left: 3px solid var(--warn);
+}
+.entry.working {
+  border: 1px dashed var(--line);
+  background: transparent;
+}
+.entry .step-n {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.entry .step-title {
+  font-weight: 600;
+  margin: 2px 0 4px;
+}
+.entry .outcome {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.entry .options {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+.dots {
+  color: var(--muted);
+}
+
+/* 思考过程：默认收起，点开是这一轮一轮做了什么。 */
+.thinking {
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+.thinking > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--muted);
+}
+.thinking ol {
+  margin: 6px 0 0;
   padding-left: 18px;
   font-size: 12px;
+  color: var(--muted);
 }
-.route .walked i {
-  opacity: 0.6;
-  font-style: normal;
+.thinking li {
+  margin-bottom: 4px;
+}
+.thinking li > span {
+  display: block;
+}
+.thinking .why {
+  font-style: italic;
+}
+.thinking .usage {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.composer {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  padding-top: 6px;
+  background: var(--bg);
+}
+.composer input {
+  flex: 1;
+}
+.cross-site {
+  justify-content: flex-start;
+}
+
+.tools {
+  flex: none;
+}
+.tools > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+}
+.tools[open] {
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+.tools .note {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+.tools .note.error {
+  color: var(--warn);
+}
+.tools .note.ok {
+  color: var(--accent);
+}
+.tools h3 {
+  margin: 8px 0 4px;
+  font-size: 13px;
 }

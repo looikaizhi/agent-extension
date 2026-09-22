@@ -1,5 +1,5 @@
 import { ProviderError, type Usage } from '@/agent/provider/provider';
-import type { WireBinding, WireCheck, WireEvidence } from '@/shared/protocol';
+import type { WireBinding, WireCheck, WireEvidence } from '@/shared/types';
 
 /**
  * Pure view-model logic behind `App.tsx`: the cost line, and how the three

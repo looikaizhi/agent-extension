@@ -17,6 +17,7 @@ import type {
   EffectResultMessage,
   GuideInflightResponse,
 } from '@/shared/protocol';
+import { PANEL_PORT } from '@/shared/protocol';
 import type { ProviderConfig } from '@/shared/settings';
 
 /**
@@ -218,8 +219,35 @@ export interface ModelSpend {
 export function startEffectListener(
   loadCfg: () => Promise<ProviderConfig>,
   onModelSpend?: (spend: ModelSpend) => void,
+  /** The model's arguments as they stream in, for the panel to show what is
+   *  being written. A draft: what lands is what the host writes down. */
+  onDraft?: (args: string) => void,
 ): () => void {
   const controllers = new Map<string, AbortController>();
+
+  // This panel's name for itself, and the port that says when it is gone.
+  // Minted per listener rather than per module so a panel that remounts is a
+  // new panel, which is exactly what it is to the host: whatever it had
+  // claimed, it is no longer running.
+  const panelId = crypto.randomUUID();
+  let stopped = false;
+  const hold = (): void => {
+    if (stopped) return;
+    const since = Date.now();
+    const port = chrome.runtime.connect({ name: `${PANEL_PORT}:${panelId}` });
+    // The worker is recycled on its own schedule; the panel outlives it and
+    // says so again. Straight away, because the host counts a panel it cannot
+    // hear from as gone and would hand its call to someone else — but not
+    // faster than once every two seconds if the connection does not hold at
+    // all, because a reconnect loop with no brake is the very spin this
+    // ticket is about.
+    port.onDisconnect.addListener(() => {
+      void chrome.runtime.lastError;
+      if (Date.now() - since < 1_000) setTimeout(hold, 2_000);
+      else hold();
+    });
+  };
+  hold();
 
   const onRequest = (msg: unknown) => {
     const m = msg as { type?: string } | undefined;
@@ -235,18 +263,32 @@ export function startEffectListener(
       // so this returns silently: no controller registered, no error, no
       // `EFFECT_RESULT`, nothing rendered.
       const claim = (await chrome.runtime
-        .sendMessage({ type: 'EFFECT_CLAIM', threadId: req.threadId, effectId: req.effectId })
+        .sendMessage({ type: 'EFFECT_CLAIM', threadId: req.threadId, effectId: req.effectId, panelId })
         .catch(() => ({ granted: false }))) as EffectClaimResponse | undefined;
       if (!claim?.granted) return;
 
       const controller = new AbortController();
       controllers.set(req.effectId, controller);
+      let result: EffectResult;
+      let trace: Trace | null = null;
       try {
         const cfg = await loadCfg();
-        let trace: Trace | null = null;
-        let result: EffectResult;
         if (req.kind === 'callModel') {
-          const ran = await runCallModelEffect(req as EffectRequest & { kind: 'callModel' }, cfg, controller.signal, complete);
+          // The stream is teed on its way past: the panel can show what is
+          // being written without the run loop knowing a panel exists.
+          const streaming: typeof complete = onDraft
+            ? async function* (c, messages, signal, options) {
+                let args = '';
+                for await (const d of complete(c, messages, signal, options)) {
+                  if (d.tool?.arguments) {
+                    args += d.tool.arguments;
+                    onDraft(args);
+                  }
+                  yield d;
+                }
+              }
+            : complete;
+          const ran = await runCallModelEffect(req as EffectRequest & { kind: 'callModel' }, cfg, controller.signal, streaming);
           result = ran.result;
           // Reported whatever the outcome: a refused envelope was still paid
           // for, and a panel that only counts successes understates the bill
@@ -263,6 +305,24 @@ export function startEffectListener(
         } else {
           result = await runFetchDocEffect(req as EffectRequest & { kind: 'fetchDoc' }, controller.signal);
         }
+      } catch (err) {
+        // Whatever went wrong in here, the host is owed an answer: it holds
+        // this call in flight until one arrives, and nobody else will send
+        // one. Without this the guide sat on 「正在想…」 for good — the money
+        // spent, the answer lost, and no reading able to recover it.
+        result = {
+          effectId: req.effectId,
+          at: req.at,
+          outcome: {
+            ok: false,
+            error: `侧栏没能跑完这次调用：${err instanceof Error ? err.message : String(err)}`,
+            retryable: true,
+            failureKind: 'transport',
+            providerCalls: req.kind === 'callModel' ? 1 : 0,
+          },
+        };
+      }
+      try {
         const out: EffectResultMessage = { type: 'EFFECT_RESULT', threadId: req.threadId, ...result, ...(trace ? { trace } : {}) };
         chrome.runtime.sendMessage(out).catch(() => {});
       } finally {
@@ -282,6 +342,7 @@ export function startEffectListener(
   chrome.runtime.onMessage.addListener(onRequest);
   chrome.runtime.onMessage.addListener(onAbort);
   return () => {
+    stopped = true;
     chrome.runtime.onMessage.removeListener(onRequest);
     chrome.runtime.onMessage.removeListener(onAbort);
   };
