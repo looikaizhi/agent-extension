@@ -101,3 +101,13 @@ export interface Trace {
   tools: string;
   entries: TraceEntry[];
 }
+
+/**
+ * §5.7's three orthogonal axes as they cross the wire — never merged into one
+ * "confidence" number: 合并任意两轴都会造出一个既不能解释也不能复核的等级.
+ * `Binding` is this paint's own verdict, `Evidence` what the step rests on,
+ * `Check` whether arrival was judged.
+ */
+export type WireBinding = 'bound' | 'ambiguous' | 'unbound';
+export type WireEvidence = 'handpicked' | 'documented' | 'model';
+export type WireCheck = 'pass' | 'unknown' | 'skipped';

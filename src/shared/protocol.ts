@@ -11,9 +11,6 @@ import type { AskOption, AskWants, GuideRouteHop, Rect, Ref, Trace, WaitUntil } 
  * edge into a cycle for the sake of three small string unions. Three literals
  * are cheap to keep in sync by hand; a cycle is not.
  */
-export type WireBinding = 'bound' | 'ambiguous' | 'unbound';
-export type WireEvidence = 'handpicked' | 'documented' | 'model';
-export type WireCheck = 'pass' | 'unknown' | 'skipped';
 
 /* ═══════════ identity ═══════════ */
 
@@ -216,6 +213,19 @@ export interface HighlightAck {
  * `<all_urls>` from install, so "it only reads the page" is a property of this
  * source tree rather than something Chrome enforces for us (方案 §2.3).
  */
+/**
+ * The port every open panel holds while it is there, named
+ * `${PANEL_PORT}:${panelId}`.
+ *
+ * Nothing travels over it. It exists for the one thing messages cannot say:
+ * *this panel is gone now*. The browser disconnects the port when the
+ * document goes away, so the host learns it as a fact, at the moment it
+ * becomes true — no heartbeat, no timeout, and no timer guessing at panel
+ * state (06c). It is also the only identity the real side panel has: its
+ * messages carry no document of any kind (see `EFFECT_CLAIM`).
+ */
+export const PANEL_PORT = 'panel';
+
 export const RPC_TYPES = [
   'PING',
   'EXTRACT',
@@ -316,14 +326,26 @@ export type ContentResponse<K extends RpcType = RpcType> =
  * nothing, and only repaints the step the tab's guide is already on.
  */
 export type HostRequest =
-  /** What the user said in the panel's one entry (`goal`), or a plan handed
-   *  over whole (`steps`, the element inspector's row), which runs as given
-   *  and never reaches the model. Said while a model guide is going, `goal` is
-   *  said *to* that guide — it hears it as a reading — and starts nothing;
-   *  otherwise it starts a run, and a run is recorded against it. */
-  | { type: 'START_GUIDE'; tabId: number; goal: string; steps?: readonly GuideStep[] }
+  /** What the user said in the panel's one entry. Said while a model guide is
+   *  going, it is said *to* that guide — it hears it as a reading — and starts
+   *  nothing; otherwise it starts a run, and a run is recorded against it.
+   *  Either way it goes into this tab's `Conversation` as the user's own words. */
+  | { type: 'SAID'; tabId: number; text: string }
+  /** A plan handed over whole (the element inspector's row): it runs as given
+   *  and never reaches the model. */
+  | { type: 'POINT_AT'; tabId: number; goal: string; steps: readonly GuideStep[] }
+  /** The panel's one authoritative read: this tab's conversation, what the run
+   *  is doing right now, and the step pinned on screen. Answered with a
+   *  `ConversationView`. Asked on mount, on every tab change, and whenever a
+   *  `CONVERSATION_CHANGED` ping arrives — a ping that never arrives costs
+   *  nothing, which is the point. */
+  | { type: 'GET_CONVERSATION'; tabId: number }
   /** Ends whatever flow currently owns the tab, agent- or inspector-driven alike. */
   | { type: 'END_GUIDE'; tabId: number }
+  /** Skips the step on screen — the same gesture as the overlay's 跳过, from
+   *  the panel's pinned card. A fixed plan moves on; a model-driven guide
+   *  stays where it is (`handleStepSkipped`). */
+  | { type: 'SKIP_STEP'; tabId: number }
   /** The user's answer to P-2's card. Declining is not an error: the guide
    *  stays where it is with the step unshown, and spends nothing. */
   | { type: 'CROSS_SITE_DECISION'; tabId: number; confirmed: boolean }
@@ -358,8 +380,16 @@ export type HostRequest =
    * (`agent/thread/effect.ts`'s `judgeClaim`), written down with the effect
    * of `threadId`. A losing instance does not retry, error, or render
    * anything — it silently yields, because another open panel is already
-   * running this call. */
-  | { type: 'EFFECT_CLAIM'; threadId: string; effectId: string };
+   * running this call.
+   *
+   * `panelId` is the panel's own name for itself, and the host takes it at
+   * face value: a message from the *real* side panel arrives with no
+   * `sender.documentId`, no `frameId` and no `sender.tab` at all, so a host
+   * that identified panels by their document granted nothing to the one
+   * surface this product is actually used through — every call sat unclaimed
+   * and the panel showed 「正在想」 for as long as the user was willing to
+   * watch it. Whether that panel is still there is `PANEL_PORT`'s job. */
+  | { type: 'EFFECT_CLAIM'; threadId: string; effectId: string; panelId: string };
 
 /**
  * `PANEL_RESUME_GUIDE`'s answer. Not `ContentResponse<'HIGHLIGHT'>` verbatim
@@ -434,95 +464,19 @@ export interface EffectAbortMessage {
  * than appending to or de-duplicating against whatever it showed before.
  */
 /**
- * CL-1: the guided flow is parked on a question the model asked (`ask`),
- * rather than on a step. Its own broadcast rather than a field on
- * `GuideState`, because the two describe different situations — `GuideState`
- * always answers "which step is on screen", and here there is no step at all.
- *
- * `wants` says what the user is asked for: one of `options`, or words only
- * they have. `options` carries every candidate the model listed, in its
- * order. The panel lists them all and picks none (K-6).
+ * The host, to every open panel: this tab's conversation moved. Data-free by
+ * design — the panel answers it with `GET_CONVERSATION`, so a ping lost to a
+ * closed panel, a tab switch or a sleeping worker changes nothing. The five
+ * broadcasts this replaced (`GUIDE_STATE` / `GUIDE_ASK` / `GUIDE_EXPLAIN` /
+ * `GUIDE_CROSS_SITE` / `AGENT_ANSWER`) each carried state that existed
+ * nowhere else, so a panel that missed one — filtered out by a tab switch,
+ * or simply not mounted yet — was wrong until something else happened to
+ * correct it, and 「正在想…」 never came down at all.
  */
-export interface GuideAsk {
-  type: 'GUIDE_ASK';
+export interface ConversationChanged {
+  type: 'CONVERSATION_CHANGED';
   tabId: number;
-  sessionId: SessionId;
-  question: string;
-  wants: AskWants;
-  options: readonly AskOption[];
-  /** Whether the run is still going: then the user answers by just saying
-   *  it, and the run hears it. `false` when the ask was the whole run — a
-   *  question that pointed at nothing (CONTEXT.md `Question`) — and the
-   *  answer has to be said together with what it was for. */
-  runGoesOn: boolean;
-}
-
-/**
- * The model answered a question about the page (`explain`). What backs the
- * answer up is outlined on the page by the host; the panel shows the words.
- */
-export interface GuideExplain {
-  type: 'GUIDE_EXPLAIN';
-  tabId: number;
-  sessionId: SessionId;
-  answer: string;
-}
-
-/**
- * P-2: this step would leave the site. Broadcast before the step is shown —
- * the promise is that the user sees where they are going *before* going, not
- * after. `from`/`to` are full hostnames: this stage has no brand extraction,
- * so the card states the literal address and claims nothing about who owns it.
- */
-export interface GuideCrossSite {
-  type: 'GUIDE_CROSS_SITE';
-  tabId: number;
-  sessionId: SessionId;
-  from: string;
-  to: string;
-}
-
-export interface GuideState {
-  type: 'GUIDE_STATE';
-  tabId: number;
-  sessionId: SessionId;
-  /** The step on screen, as `HighlightCommand.progress` says it. */
-  index: number;
-  total: number | null;
-  /** Absent while a step is on screen. */
-  failure?: HighlightFailure;
-  candidates?: number;
-  /** The model's latest coarse waypoint sequence (§5.4); empty on a fixed
-   *  plan, which has none. Displayed exactly as returned: no keyword
-   *  extraction, no breadcrumb assembly (05's Gotchas). */
-  route?: readonly GuideRouteHop[];
-  /** §5.7's three orthogonal axes, mirrored here from `ThreadState.evidence`/
-   *  `ThreadState.check` and this paint attempt's own `Binding` verdict —
-   *  never merged into one combined "confidence" value (05's Gotchas: "合并
-   *  任意两轴都会造出一个既不能解释也不能复核的等级"). */
-  evidence?: WireEvidence;
-  check?: WireCheck;
-  binding?: WireBinding;
-  /** Why *this* control — the model's own `why` for the step on screen.
-   *  Already travelled this far as `GuideStep.detail`; carried out here so the
-   *  panel can show the reasoning next to the plan rather than only as a
-   *  caption on the highlight. */
-  why?: string;
-  /** Where the guide has already been, oldest first, with how each step
-   *  turned out. This is the thing that was invisible: the run had a memory
-   *  from 07 onward, but only the model could read it. */
-  walked?: readonly {
-    title: string;
-    url: string;
-    action?: 'taken' | 'skipped' | 'unavailable';
-    effect?: { kind: 'moved'; to: string } | { kind: 'changed_in_place' } | { kind: 'none' } | { kind: 'unknown' };
-  }[];
-  /** Model calls spent so far — what the run cost, not a limit. Shown because
-   *  a guide that is looping is visible as a number climbing long before it
-   *  is visible as repeated advice. */
-  calls?: number;
-  /** Steps this run has taken, against its budget of twelve (ticket 09). */
-  spentSteps?: number;
+  rev: number;
 }
 
 /* ═══════════ events: content script → everyone ═══════════ */
