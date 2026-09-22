@@ -17,7 +17,8 @@
     "eval": "wxt build && node --import ./evals/alias-loader-register.mjs evals/extract/capture.mjs && node --experimental-strip-types evals/extract/score.mjs",
     "eval:score": "node --experimental-strip-types evals/extract/score.mjs",
     "eval:decision": "node --experimental-transform-types --import ./evals/alias-loader-register.mjs evals/decision/run.mjs",
-    "eval:task": "wxt build && node --experimental-transform-types --import ./evals/alias-loader-register.mjs evals/task/live-github-run.mjs"
+    "eval:task": "wxt build && node --experimental-transform-types --import ./evals/alias-loader-register.mjs evals/task/live-github-run.mjs",
+    "eval:sidepanel": "wxt build && node --experimental-transform-types --import ./evals/alias-loader-register.mjs evals/task/live-sidepanel-run.mjs"
   },
   "dependencies": {
     "dom-accessibility-api": "0.7.1",

@@ -1,0 +1,60 @@
+{
+  "run": "t14-conversation-smoke",
+  "startedAt": "2026-09-20T14:51:51.219Z",
+  "goals": [
+    "gh-repo-address"
+  ],
+  "passes": 1,
+  "plugins": [
+    "skill"
+  ],
+  "model": {
+    "baseURL": "https://api.deepseek.com/v1",
+    "model": "deepseek-flash",
+    "price": {
+      "input": 1,
+      "cached": 0.02,
+      "output": 4
+    }
+  },
+  "accounts": [
+    {
+      "host": "github.com",
+      "cookies": []
+    }
+  ],
+  "fingerprint": "b62a1f0a5f6b368e",
+  "trips": [
+    {
+      "pass": 1,
+      "id": "gh-repo-address",
+      "goal": "带我找到 n8n 这个开源项目，我想把它的仓库地址拿到手",
+      "endUrl": "https://github.com/n8n-io/n8n",
+      "lastStep": {
+        "kind": "done",
+        "after": "n8n-io/n8n"
+      },
+      "programmatic": {
+        "arrived": false,
+        "missed": "last_step"
+      },
+      "hops": 3,
+      "visited": [
+        "https://github.com/",
+        "https://github.com/search?q=n8n-io%2Fn8n&type=repositories",
+        "https://github.com/n8n-io/n8n"
+      ],
+      "calls": 7,
+      "requests": 7,
+      "tokens": {
+        "prompt": 40795,
+        "completion": 1823,
+        "cached": 30848
+      },
+      "ending": "model_done",
+      "confirmation": "all",
+      "sensitivePointed": 0,
+      "shot": "10-P1ghrepoaddress-3-第3跳重规划后.png"
+    }
+  ]
+}

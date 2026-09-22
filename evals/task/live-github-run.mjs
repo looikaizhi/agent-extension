@@ -275,6 +275,11 @@ async function wire() {
   }
   return out;
 }
+/** This tab's conversation, asked the way the panel asks it. */
+async function conversationOf(tabId) {
+  const view = await guidePanel.evaluate(async (t) => await chrome.runtime.sendMessage({ type: 'GET_CONVERSATION', tabId: t }), tabId);
+  return view?.conversation?.entries ?? [];
+}
 const clearWire = async () => {
   await guidePanel.evaluate(() => (window.__wire = []));
   await obs.evaluate(() => (window.__wire = []));
@@ -391,8 +396,8 @@ async function startGuide(url, goal, label) {
   await clearWire();
   const tabId = await tabIdOf();
   const t0 = Date.now();
-  const res = await host({ type: 'START_GUIDE', tabId, goal });
-  console.log(`  START_GUIDE ok=${res?.ok}`);
+  const res = await host({ type: 'SAID', tabId, text: goal });
+  console.log(`  SAID ok=${res?.ok}`);
   const t = await waitForThread(tabId, (x) => x.inflight === null, { label: '第一次规划' });
   console.log(`  ← ${Math.round((Date.now() - t0) / 1000)}s  ${describeThread(t)}`);
   await shoot(label, '1-第一步已高亮');
@@ -522,7 +527,7 @@ async function clickCurrentStep(thread, tabId) {
 
 
 /** Anything that means the run did not end where a healthy run ends. */
-function anomaliesOf(t, wireMsgs) {
+function anomaliesOf(t, entries) {
   const out = [];
   if (!t) return ['线程已不在：这一趟已经结束（终态即删，见 Run record），或者根本没有开始'];
   // An empty element table is never a model result — it means the extension
@@ -537,9 +542,10 @@ function anomaliesOf(t, wireMsgs) {
   if (t.clarify) out.push(`停在澄清 ${t.clarify}`);
   if (t.spentSteps >= 12) out.push('整趟步数用满');
   out.push(`模型调用 ${t.callCount} 次，走了 ${t.spentSteps} 步`);
-  for (const m of wireMsgs) {
-    if (m?.type === 'AGENT_ANSWER') out.push(`AGENT_ANSWER: ${String(m.text).slice(0, 80)}`);
-    if (m?.type === 'GUIDE_ASK') out.push(`GUIDE_ASK(${m.wants}): ${String(m.question).slice(0, 60)}`);
+  for (const e of entries) {
+    if (e.kind === 'note') out.push(`宿主说: ${String(e.text).slice(0, 80)}`);
+    if (e.kind === 'ask') out.push(`反问: ${String(e.text).slice(0, 60)}`);
+    if (e.kind === 'answer') out.push(`回答: ${String(e.text).slice(0, 60)}`);
   }
   return out;
 }
@@ -548,7 +554,7 @@ function anomaliesOf(t, wireMsgs) {
  * The overlay's own state, read from the page.
  *
  * The shadow root is closed, but the host element is not, and `Overlay.paint`
- * writes `data-status` onto it. Until now this spike watched only GUIDE_STATE
+ * writes `data-status` onto it. Until now this spike watched only the panel
  * broadcasts and the thread record — both of which live in the worker — so
  * everything the *renderer* decided locally was invisible here. That blind
  * spot is why "点击后浮层提前说找不到" had to be reported by a human.
@@ -598,7 +604,7 @@ async function trip(r, pass, round, plugins) {
   if (!thread?.steps?.length) {
     row.result = '没有第一步';
     row.endUrl = page.url();
-    row.anomalies = anomaliesOf(thread, await wire());
+    row.anomalies = anomaliesOf(thread, await conversationOf(tabId));
     console.log(`  结果: ${row.result} — ${row.anomalies.join('; ') || '无线索'}`);
     await endTrip(row, tabId, since, plugins);
     const calls = callsOf(await wire(), marks, row);
@@ -684,14 +690,18 @@ async function trip(r, pass, round, plugins) {
     // 两种话术都要认：模型自己判定到达说「看起来已经到了」，兜底判定打转说
     // 「引导在原地打转」。只认前者时，F5 拆分话术后兜底的那些就整批消失了，
     // 「done 收尾 9/15 → 2/15」于是成了我自己造出来的假象。
-    const doneMsg = w.find(
-      (m) =>
-        m?.type === 'AGENT_ANSWER' &&
-        (String(m.text).startsWith('看起来已经到了') || String(m.text).startsWith('引导在原地打转')),
+    const entries = await conversationOf(tabId);
+    const doneMsg = entries.find(
+      (e) => e.kind === 'note' && (String(e.text).startsWith('看起来已经到了') || String(e.text).startsWith('引导在原地打转')),
     );
     const next = final?.steps?.[final.cursor]?.title;
-    const gs = [...w].reverse().find((m) => m?.type === 'GUIDE_STATE' && m.why);
-    if (gs) console.log(`     [思考] ${gs.why}`);
+    // The entry for *this* hop, not the newest one: by the time a hop is
+    // reported the model has usually answered again, and the newest entry is
+    // the next step's.
+    const mine = [...entries].reverse().find((e) => e.kind === 'step' && e.text === title);
+    if (mine?.detail) console.log(`     [思考] ${mine.detail}`);
+    const rounds = mine?.rounds ?? [];
+    if (rounds.length) console.log(`     [工具] ${rounds.map((r) => `${r.tool}${r.got ? `（${r.got}）` : ''}`).join(' → ')}`);
     const statuses = await overlaySeen();
     const overlayAfter = await overlayNow();
     console.log(
@@ -746,7 +756,7 @@ async function trip(r, pass, round, plugins) {
 
   const final0 = await threadOf(tabId);
   row.endUrl = page.url();
-  row.anomalies = anomaliesOf(final0, await wire());
+  row.anomalies = anomaliesOf(final0, await conversationOf(tabId));
   row.fired = (row.hops.length ?? 0) > 0;
   row.clicked = row.hops.some((h) => !h.stopped);
   await endTrip(row, tabId, since, plugins);
