@@ -187,5 +187,25 @@ export interface PromptTable {
    *  looked at, honestly is. The one real producer (`project`) always sets
    *  it, because the extractor always knows. */
   frames?: readonly FrameNote[];
+  /**
+   * Where the items came from, when this table is more than one document:
+   * the top frame first, then every embedded frame that was read into.
+   *
+   * The host needs it to send a command *back* to the right place — a ref
+   * carries its frame (`makeRef` writes `f3e12`), but painting it needs that
+   * frame's own `snapshotId` and its own address, because the renderer checks
+   * both against the document it is actually running in.
+   *
+   * Absent on a single-document table, which is what every hand-written one
+   * and every table recorded before frames were entered honestly is.
+   */
+  sources?: readonly TableSource[];
   stats: ExtractStats;
+}
+
+export interface TableSource {
+  /** 0 is the top document. */
+  frameId: number;
+  snapshotId: string;
+  url: string;
 }

@@ -312,7 +312,7 @@ export default defineContentScript({
 
         case 'EXTRACT': {
           lastProfile = req.profile;
-          const view = extract(req.profile);
+          const view = extract(req.profile, req.frameId ?? 0);
           // Sensitivity is tracked over the *full* set, not the projected one:
           // a password field pruned for being off screen is still a password
           // field, and late binding can reach it.

@@ -79,10 +79,24 @@ export const ask: GuideIntentModule<AskEnvelope> = {
   recognize: recognizeAsk,
   explain: () => shapeMismatch('ask', 'question（字符串）+ wants（choice 或 text）+ options（{ref,label} 数组）'),
   claimedRefs: (envelope) => envelope.options.map((o) => o.ref),
-  violation: (envelope) =>
-    envelope.wants === 'choice' && envelope.options.length === 0
-      ? 'ask 要用户选一个，却一个选项都没有列出：要么把候选列进 options，要么把 wants 写成 text'
-      : null,
+  // Two shapes of "ask" that cannot be answered as an ask. Both go back
+  // through the repair round, so the wording is what the model reads next —
+  // it has to say which way out to take, not just what was wrong.
+  //
+  // One option is the interesting one: 「把这台实例删掉」 on a page whose only
+  // candidate is the 删除实例 button was answered with 「你要点下面这个按钮
+  // 吗？」 and that one button listed. Asking bought nothing — this product
+  // never clicks, so pointing at it is already the safe move — and cost a
+  // round trip. Measured across two live runs (601 calls) it happened once,
+  // so this is a cheap guard on a rare shape, not a fix for a common one.
+  violation: (envelope) => {
+    if (envelope.wants !== 'choice') return null;
+    if (envelope.options.length === 0)
+      return 'ask 要用户选一个，却一个选项都没有列出：要么把候选列进 options，要么把 wants 写成 text';
+    if (envelope.options.length === 1)
+      return 'ask 只列出一个候选——那不是让用户选，是在替他确认。这一页上只有这一个合适的控件时，直接用 point 指它；确实有多个同样合理的对象才用 ask，并把它们全部列出来';
+    return null;
+  },
   rationales: (envelope) => [envelope.question],
   consequence: (state, envelope) => {
     // CL-1 (§5.8): the thread waits on the question with its step intact

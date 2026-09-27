@@ -43,7 +43,8 @@ import { mergeTrace, traceKey } from '@/agent/agents/guide/trace';
 import type { RecordStore } from '@/agent/thread/record-store';
 import type { Reading } from '@/agent/context/turn';
 import type { ExternalEnding, ThreadState } from '@/agent/thread/thread';
-import type { PromptTable } from '@/core/extractor/types';
+import type { ProjectBudget, PromptItem, PromptTable } from '@/core/extractor/types';
+import { mergeTables, sourceFor } from '@/core/extractor/merge';
 import type {
   ContentEvent,
   EffectAbortMessage,
@@ -55,10 +56,12 @@ import type {
   HostRequest,
   OverlayMessage,
   ResumeGuideResponse,
+  SessionId,
 } from '@/shared/protocol';
 import { PANEL_PORT, sessionIdForTab, tabIdForSession } from '@/shared/protocol';
+import type { Ref } from '@/shared/types';
 import { buildOutline } from '@/shared/outline';
-import { ensureInjected, sendToTab } from '@/shared/rpc';
+import { ensureInjected, enterFrames, sendToEveryFrame, sendToTab } from '@/shared/rpc';
 import { MODEL_NOT_CONFIGURED, modelIsConfigured } from '@/agent/provider/call';
 import { loadConfig } from '@/shared/settings';
 
@@ -154,7 +157,7 @@ async function settleEnding(tabId: number, ending: GuideEnding, keepScreen = fal
   // themselves, or it went with the tab: `sendToTab` answers
   // `no_content_script` rather than throwing. Kept only when what is on
   // screen is the answer itself: a question ends by showing what backs it up.
-  if (!keepScreen) await sendToTab(tabId, { type: 'CLEAR' });
+  if (!keepScreen) await sendToEveryFrame(tabId, { type: 'CLEAR' });
   await sayWaitingForPanel(tabId, false);
   // The run is over: what the panel shows is no longer pending anything.
   pingTab(tabId);
@@ -288,7 +291,7 @@ async function carryGuideToTab(to: number, tab: chrome.tabs.Tab): Promise<boolea
   // It asked about the page the user has left; its answer would be a step for
   // a page nobody is on. Cancelled here, so it cannot land on the moved run.
   if (cancelledEffectId) broadcastEffectAbort(cancelledEffectId);
-  await sendToTab(from, { type: 'CLEAR' });
+  await sendToEveryFrame(from, { type: 'CLEAR' });
   await sayWaitingForPanel(from, false);
   await carryConversation(from, to, '这一趟跟着你到新标签页来了');
   return true;
@@ -342,10 +345,48 @@ async function sayWaitingForPanel(tabId: number, waiting: boolean): Promise<void
 }
 
 /** One extraction of the page as it is right now, or `null` if it cannot be read. */
+/**
+ * How one page's budget is divided when part of the page is another document.
+ *
+ * Carved out of the page's own number, never added on top: `budgetFor` exists
+ * to make the element table fit the context window, and a table that quietly
+ * grew by five frames' worth would break the one promise it makes. A frame
+ * gets at most 60 — about what an embedded console, checkout or player has by
+ * way of controls — and all frames together never take more than half, so a
+ * page with five of them still sends mostly itself.
+ */
+function splitBudget(page: ProjectBudget, frames: number): { top: ProjectBudget; perFrame: ProjectBudget } {
+  if (frames === 0) return { top: page, perFrame: page };
+  const want = Math.min(60, Math.max(20, Math.floor(page.maxNodes / 6)));
+  const each = Math.min(want, Math.floor(page.maxNodes / 2 / frames));
+  return { top: { maxNodes: page.maxNodes - each * frames }, perFrame: { maxNodes: each } };
+}
+
+/**
+ * This page as one table, frames included.
+ *
+ * Frames are enumerated *before* the top document is read, even though most
+ * pages have none: the split above cannot be computed after the fact, and
+ * reading the biggest document twice to find out would cost more than the
+ * probe does (`enterFrames` runs one throwaway function per frame and installs
+ * nothing where a content script is already answering).
+ */
 async function extractNow(tabId: number): Promise<PromptTable | null> {
   const budget = budgetFor((await loadConfig()).contextWindow);
-  const ex = await sendToTab(tabId, { type: 'EXTRACT', profile: 'interactive', budget });
-  return ex.ok ? ex.data : null;
+  const frames = await enterFrames(tabId);
+  const { top, perFrame } = splitBudget(budget, frames.length);
+
+  const ex = await sendToTab(tabId, { type: 'EXTRACT', profile: 'interactive', budget: top });
+  if (!ex.ok) return null;
+
+  const framed: { frameId: number; url: string; table: PromptTable }[] = [];
+  for (const f of frames) {
+    // `frameId` twice on purpose: once so this document's refs are namespaced
+    // to it (`makeRef`), once so the message reaches it at all.
+    const inner = await sendToTab(tabId, { type: 'EXTRACT', profile: 'interactive', budget: perFrame, frameId: f.frameId }, f.frameId);
+    if (inner.ok) framed.push({ frameId: f.frameId, url: f.url, table: inner.data });
+  }
+  return mergeTables(ex.data, framed);
 }
 
 /**
@@ -494,24 +535,13 @@ async function renderGuideOutcome(
       // `alsoRefs` rather than setting `ref`, so nothing here picks one for
       // the user — K-6). An ask for words has no candidates: `buildOutline`
       // returns `null` and only the question is shown.
-      const items = effect.options
-        .map((o) => state.table.items.find((i) => i.ref === o.ref))
-        .filter((i): i is NonNullable<typeof i> => i !== undefined);
-      const outline = buildOutline(items, '需要你先选一个');
-      if (outline) {
-        await sendToTab(tabId, {
-          type: 'HIGHLIGHT',
-          command: {
-            sessionId: threadId,
-            presentationId: `${presentationIdOf(threadId, state)}:ask`,
-            snapshotId: state.table.snapshotId,
-            view: state.table.url,
-            mode: 'explain',
-            step: outline,
-            autoScroll: true,
-          },
-        });
-      }
+      await outlineAcrossFrames(
+        tabId,
+        state.table,
+        effect.options.map((o) => o.ref),
+        '需要你先选一个',
+        { sessionId: threadId, presentationId: `${presentationIdOf(threadId, state)}:ask` },
+      );
       await say(tabId, { kind: 'ask', title: '需要你先说清楚', text: [effect.question, answerIt + noSecrets].join('\n') });
     } else if (effect.kind === 'observe') {
       // The model asked to look again. One read, now, and no retry on a clock:
@@ -557,24 +587,10 @@ async function renderGuideOutcome(
         true,
         { tool: 'explain', ...(usage ? { usage } : {}) },
       );
-      const items = effect.refs
-        .map((ref) => state.table.items.find((i) => i.ref === ref))
-        .filter((i): i is NonNullable<typeof i> => i !== undefined);
-      const outline = buildOutline(items, '依据');
-      if (outline) {
-        await sendToTab(tabId, {
-          type: 'HIGHLIGHT',
-          command: {
-            sessionId: threadId,
-            presentationId: `${presentationIdOf(threadId, state)}:explain`,
-            snapshotId: state.table.snapshotId,
-            view: state.table.url,
-            mode: 'explain',
-            step: outline,
-            autoScroll: true,
-          },
-        });
-      }
+      await outlineAcrossFrames(tabId, state.table, effect.refs, '依据', {
+        sessionId: threadId,
+        presentationId: `${presentationIdOf(threadId, state)}:explain`,
+      });
       await say(tabId, { kind: 'answer', title: '回答', text: effect.answer });
     } else if (effect.kind === 'requestCrossSiteConfirm') {
       // P-2. Broadcast only — nothing is painted, because the whole point is
@@ -695,6 +711,81 @@ async function conversationView(tabId: number): Promise<ConversationView> {
   };
 }
 
+/**
+ * Where a step has to be painted: the document its ref came from.
+ *
+ * A ref means nothing outside the document it was drawn in, and the renderer
+ * checks two things against the document it is actually running in — the
+ * snapshot the ref belongs to, and the address (`sameView`). So a command
+ * routed to a frame carries *that frame's* snapshot and *that frame's* url,
+ * never the top page's. Sending the top page's address into a frame is the
+ * shape of failure the extractor eval has been sitting in for weeks:
+ * `view_moved`, every time, silently.
+ *
+ * Falls back to the top document when the ref names a frame this table never
+ * entered — `sourceFor` returns null there, and the top document is where an
+ * unbound step (the inspector's, which carries a descriptor and no ref) has
+ * always been painted.
+ */
+function routeFor(table: PromptTable, ref: string | undefined): { frameId: number; snapshotId: string; view: string } {
+  const src = ref ? sourceFor(table, ref) : null;
+  // The top document keeps taking its view from the *table*, not from the
+  // source record, even though the two are written in the same breath. The
+  // table's `url` is what the thread means by 「这一步属于哪一页」 (CONTEXT.md
+  // `View`), and that is the value the refusal is supposed to be checked
+  // against — reading it from anywhere else quietly widens a guard whose whole
+  // job is to be narrow. Frames are the addition: they have their own address
+  // and their own snapshot, and nothing else can speak for them.
+  return src && src.frameId !== 0
+    ? { frameId: src.frameId, snapshotId: src.snapshotId, view: src.url }
+    : { frameId: 0, snapshotId: table.snapshotId, view: table.url };
+}
+
+/**
+ * The elements behind an answer, outlined where they actually are.
+ *
+ * One command reaches one document, so refs that came from different frames
+ * are sent as one command each — each frame's own overlay draws its own
+ * subset. Nothing is dropped for being somewhere else, which is the point:
+ * silently outlining two of three pieces of evidence is how a table with holes
+ * in it reads as a page with holes in it.
+ */
+async function outlineAcrossFrames(
+  tabId: number,
+  table: PromptTable,
+  refs: readonly Ref[],
+  title: string,
+  command: { sessionId: SessionId; presentationId: string },
+): Promise<void> {
+  const byFrame = new Map<number, PromptItem[]>();
+  for (const ref of refs) {
+    const item = table.items.find((i) => i.ref === ref);
+    if (!item) continue;
+    const frameId = sourceFor(table, ref)?.frameId ?? 0;
+    byFrame.set(frameId, [...(byFrame.get(frameId) ?? []), item]);
+  }
+  for (const [frameId, items] of byFrame) {
+    const outline = buildOutline(items, title);
+    if (!outline) continue;
+    const route = routeFor(table, items[0]!.ref);
+    await sendToTab(
+      tabId,
+      {
+        type: 'HIGHLIGHT',
+        command: {
+          ...command,
+          snapshotId: route.snapshotId,
+          view: route.view,
+          mode: 'explain',
+          step: outline,
+          autoScroll: true,
+        },
+      },
+      frameId,
+    );
+  }
+}
+
 /** The step on screen, read off the thread — `null` when there is none. */
 const shownOn = (state: ThreadState): PresentEffect | null => (state.steps[state.cursor] ? present(state) : null);
 
@@ -728,19 +819,24 @@ async function redrawGuide(tabId: number) {
  * is built, for the first time it is shown and every repaint after.
  */
 async function paintStep(tabId: number, threadId: ThreadId, state: ThreadState, effect: PresentEffect) {
-  return await sendToTab(tabId, {
-    type: 'HIGHLIGHT',
-    command: {
-      sessionId: threadId,
-      presentationId: presentationIdOf(threadId, state),
-      snapshotId: state.table.snapshotId,
-      view: state.table.url,
-      mode: 'guide',
-      step: effect.step,
-      progress: { index: effect.index, total: effect.total },
-      autoScroll: true,
+  const route = routeFor(state.table, effect.step.ref);
+  return await sendToTab(
+    tabId,
+    {
+      type: 'HIGHLIGHT',
+      command: {
+        sessionId: threadId,
+        presentationId: presentationIdOf(threadId, state),
+        snapshotId: route.snapshotId,
+        view: route.view,
+        mode: 'guide',
+        step: effect.step,
+        progress: { index: effect.index, total: effect.total },
+        autoScroll: true,
+      },
     },
-  });
+    route.frameId,
+  );
 }
 
 /**
@@ -775,14 +871,16 @@ async function outlineByHand(tabId: number, handed: GuideStep): Promise<boolean>
   }
   const { ref: _ref, alsoRefs: _also, ...step } = handed;
 
-  // One extraction, for the two things a `HighlightCommand` cannot be built
-  // without: which page this is (`view`) and which snapshot the renderer's fast
-  // path may trust. The host has no `tabs` permission, so the address itself
-  // can only come from the content script (CONTEXT.md `Thread`).
-  const cfg = await loadConfig();
-  const ex = await sendToTab(tabId, { type: 'EXTRACT', profile: 'interactive', budget: budgetFor(cfg.contextWindow) });
-  if (!ex.ok) {
-    await addEntry(tabId, { at: Date.now(), kind: 'note', text: `读不到这个页面的内容：${ex.message}` });
+  // One read, for the two things a `HighlightCommand` cannot be built without:
+  // which page this is (`view`) and which snapshot the renderer's fast path may
+  // trust. The host has no `tabs` permission, so the address itself can only
+  // come from the content script (CONTEXT.md `Thread`).
+  //
+  // Through `extractNow` so frames are in it: the element the user picked may
+  // live inside one, and routing needs that frame's own source (`routeFor`).
+  const table = await extractNow(tabId);
+  if (!table) {
+    await addEntry(tabId, { at: Date.now(), kind: 'note', text: '读不到这个页面的内容' });
     return false;
   }
 
@@ -792,18 +890,28 @@ async function outlineByHand(tabId: number, handed: GuideStep): Promise<boolean>
   await endGuideForTab(tabId, 'superseded');
 
   const sessionId = sessionIdForTab(tabId);
-  const painted = await sendToTab(tabId, {
-    type: 'HIGHLIGHT',
-    command: {
-      sessionId,
-      presentationId: `${sessionId}#byhand:${ex.data.snapshotId}`,
-      snapshotId: ex.data.snapshotId,
-      view: ex.data.url,
-      mode: 'guide',
-      step,
-      autoScroll: true,
+  // The handed ref is dropped for binding (it belongs to the panel's snapshot,
+  // not the one just taken) but its *frame* survives a re-extraction: frame ids
+  // are stable for as long as the document is. So it is read for routing only,
+  // which is how picking a control inside an embedded console still paints
+  // inside that console.
+  const route = routeFor(table, handed.ref);
+  const painted = await sendToTab(
+    tabId,
+    {
+      type: 'HIGHLIGHT',
+      command: {
+        sessionId,
+        presentationId: `${sessionId}#byhand:${route.snapshotId}`,
+        snapshotId: route.snapshotId,
+        view: route.view,
+        mode: 'guide',
+        step,
+        autoScroll: true,
+      },
     },
-  });
+    route.frameId,
+  );
   await addEntry(tabId, {
     at: Date.now(),
     kind: 'note',
@@ -866,12 +974,17 @@ async function startGuide(tabId: number, req: { goal: string }) {
   // the next page with. It is not tried again after a pause — how long a page
   // takes to become readable is not something this product guesses at, and
   // the user saying it again is a retry they can see.
-  const ex = await sendToTab(tabId, { type: 'EXTRACT', profile: 'interactive', budget: budgetFor(cfg.contextWindow) });
-  if (!ex.ok) {
-    await addEntry(tabId, { at: Date.now(), kind: 'note', text: `读不到这个页面的内容：${ex.message}` });
+  //
+  // Through `extractNow`, like every read after it. A run whose opening table
+  // came from the top document alone would compare that against tables that
+  // include the page's frames, and every comparison after the first would read
+  // as 「这一页的控件变了」 — the model told the page changed on a page that
+  // did nothing.
+  const table = await extractNow(tabId);
+  if (!table) {
+    await addEntry(tabId, { at: Date.now(), kind: 'note', text: '读不到这个页面的内容' });
     return false;
   }
-  const table = ex.data;
 
   // A new guide is also the end of the one already running here: its summary
   // is written and its in-flight call abandoned, exactly as if the user had
@@ -1011,7 +1124,7 @@ export default defineBackground(() => {
         // press takes it down either way: the user aimed at a surface that is
         // up, and what it shows may not be a run at all — a question's
         // highlight, or a guide that already ended.
-        if (!ending.ended) await sendToTab(tabId, { type: 'CLEAR' });
+        if (!ending.ended) await sendToEveryFrame(tabId, { type: 'CLEAR' });
         broadcast({ type: 'SESSION_ENDED', sessionId: sessionIdForTab(tabId), reason: 'aborted' });
         sendResponse({ ok: true });
       })();
@@ -1106,13 +1219,12 @@ export default defineBackground(() => {
             code: 'no_content_script',
             message: '本页面不允许扩展运行（或尚未授权该站点）',
           });
-        sendResponse(
-          await sendToTab(tabId, {
-            type: 'EXTRACT',
-            profile: 'interactive',
-            budget: budgetFor((await loadConfig()).contextWindow),
-          }),
-        );
+        // Through `extractNow`, not a bare EXTRACT to the top document: the
+        // panel's table and the guide's have to be the same page. Once frames
+        // are read into, a panel that skipped them would list controls the
+        // guide sees nothing of — and 「指给我」 is picked from this table.
+        const table = await extractNow(tabId);
+        sendResponse(table ? { ok: true, data: table } : { ok: false, code: 'extract_failed', message: '读不到这个页面的内容' });
       })();
       return true;
     }
@@ -1212,7 +1324,7 @@ export default defineBackground(() => {
     // panel's 关闭 does.
     if (m.type === 'MESSAGE_CLOSED')
       void (async () => {
-        if (!(await redrawGuide(from))) await sendToTab(from, { type: 'CLEAR' });
+        if (!(await redrawGuide(from))) await sendToEveryFrame(from, { type: 'CLEAR' });
       })();
     // The renderer painted the step as 「找不到」, or painted it and found its
     // target cannot be operated right now. Facts, not verdicts: whether to

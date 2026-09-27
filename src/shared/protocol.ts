@@ -252,7 +252,9 @@ export type RpcType = (typeof RPC_TYPES)[number];
 
 export interface ContentRpcMap {
   PING: { req: Record<never, never>; res: { version: string; frameId: number; title: string } };
-  EXTRACT: { req: { profile: ExtractProfile; budget: ProjectBudget }; res: PromptTable };
+  /** `frameId` 是宿主告诉它的：内容脚本没有办法知道自己在哪个框架里，而 ref 的
+   *  命名空间要靠它（`makeRef`）。缺省 0 = 顶层文档。 */
+  EXTRACT: { req: { profile: ExtractProfile; budget: ProjectBudget; frameId?: number }; res: PromptTable };
   HIGHLIGHT: { req: { command: HighlightCommand }; res: HighlightAck };
   CLEAR: { req: Record<never, never>; res: null };
   /** Element picking for writing a fixed plan's steps. `on: false` leaves the mode. */

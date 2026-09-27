@@ -458,6 +458,13 @@ export function toPromptText(table: PromptTable, fresh?: ReadonlySet<Ref>): stri
       `frames 这一页里嵌着 ${table.frames.length} 个框架，里面的东西我看不到：` +
         table.frames.map((f) => [f.label && JSON.stringify(f.label), f.host].filter(Boolean).join(' · ') || '（没有标题）').join('；'),
     );
+  // 已经读进来的框架：它们的控件就在下面这张表里，ref 以 f 开头。不说这一句，
+  // 模型会把 `f3e12` 当成打错的 ref——它见过的 ref 一直是 `e12` 这个形状。
+  const entered = (table.sources ?? []).filter((s) => s.frameId !== 0);
+  if (entered.length)
+    lines.push(
+      `frames-read 另有 ${entered.length} 个嵌入框架已经读进来了，它们的控件就在下面，ref 以 f 开头（例如 f3e12）；指它们和指别的控件没有区别。`,
+    );
 
   let prev: readonly string[] = [];
   for (const it of table.items) {
