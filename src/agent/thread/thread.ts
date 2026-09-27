@@ -7,12 +7,15 @@ import type { EffectOutcome } from './effect';
 
 /**
  * CONTEXT.md's `Outcome`, first half: what happened to the step on screen.
- * `taken` — the step was done; `skipped` — the user pressed 跳过;
- * `unavailable` — a safety rule stopped the run on the page it led to (P-3).
- * A target that could not be found is not an action: it is a reading
- * (CONTEXT.md `Reading`), and the model decides what it means.
+ * `taken` — the step was done; `unavailable` — a safety rule stopped the run on
+ * the page it led to (P-3). A target that could not be found is not an action:
+ * it is a reading (CONTEXT.md `Reading`), and the model decides what it means.
+ *
+ * `skipped` was the third, and it went with the fixed plan that produced it:
+ * a model-driven run cannot move past a step the user declined — it re-plans
+ * and hands the same step back — so nothing is left that could write one.
  */
-export type StepAction = 'taken' | 'skipped' | 'unavailable';
+export type StepAction = 'taken' | 'unavailable';
 
 /**
  * CONTEXT.md's `Outcome`, second half: what the page did afterwards — the page
@@ -81,12 +84,14 @@ export type Confirmation = 'all' | 'some' | 'none';
  *
  */
 /** §5.7's first axis — what the step on screen stands on, strongest first.
- *  `'handpicked'` is a fixed plan's: the person chose the element themselves,
- *  which is more direct than a document or an inference, but nobody has proven
- *  it works. `'documented'` is a model's answer given after it read a document
- *  on this site (`read_doc`) in the same conversation; `'model'` is one it gave
- *  without. */
-export type Evidence = 'handpicked' | 'documented' | 'model';
+ *  `'documented'` is a model's answer given after it read a document on this
+ *  site (`read_doc`) in the same conversation; `'model'` is one it gave
+ *  without.
+ *
+ *  `'handpicked'` was a third, and it belonged to the fixed plan: the person
+ *  had chosen the element themselves. The inspector still paints what they
+ *  pick, but it no longer starts a run, so nothing produces that value. */
+export type Evidence = 'documented' | 'model';
 
 /** `'pass'` is produced by `judgeArrival` (07) when the arrived page really
  *  contains the shape the model predicted in `expect_after`. It was declared
@@ -199,19 +204,9 @@ export interface ThreadState {
    *  still running. A thread that has one accepts nothing but a new `start`,
    *  and the host ends the run the moment one appears. */
   ending?: ReducerEnding;
-  /** Where this run's `steps` come from, and the one thing that decides whether
-   *  it may ever call the model.
-   *
-   *  `'model'` is a guide the reducer plans by asking; `'fixed'` is a plan that
-   *  was written before the run began (the inspector's row click) — it is
-   *  landed as given, advanced as the user deals with each step, and ends when
-   *  it runs out (`fixed-plan.ts`). A `'fixed'` run spends nothing, and that is
-   *  enforced at the one place a model call is emitted (`tryEmitCallModel`)
-   *  rather than trusted to every input handler. */
-  planSource: 'model' | 'fixed';
-  /** §5.7: "这一步的知识从哪来". `'handpicked'` for the whole of a fixed plan;
-   *  on the model's run, set again by every answer that lands — `'documented'`
-   *  when the conversation it came out of read a document, `'model'` when not. */
+  /** §5.7: "这一步的知识从哪来". Set again by every answer that lands —
+   *  `'documented'` when the conversation it came out of read a document,
+   *  `'model'` when not. */
   evidence: Evidence;
   /** §5.7: "到达期望验证的结果". Settled at each breakpoint by `judgeArrival`
    *  against the freshly extracted table: `'pass'` when the predicted shape is
@@ -239,6 +234,16 @@ export interface ThreadState {
    *  answer landed. A step may make four (`transitions.ts`); the fourth
    *  offers only answers. */
   stepCalls: number;
+  /**
+   * Consecutive calls on this step that never reached an answer — the
+   * endpoint refused the connection, the stream stalled, the request timed
+   * out. Not a model that answered badly: nothing came back at all.
+   *
+   * One is taken again automatically; the second in a row is told to the
+   * user, because by then it is not a hiccup. Reset by any result that comes
+   * back, so it counts a run of failures rather than their total.
+   */
+  transportFails?: number;
   /** Steps this run has taken: every answer that landed, and every step that
    *  ran out of calls without one. A run may take twelve. */
   spentSteps: number;
@@ -281,27 +286,6 @@ export interface WorldAt {
  */
 export type MachineInput =
   | { kind: 'start'; goal: string; table: PromptTable; effectId: string }
-  /**
-   * A plan that was already written — the inspector's 「点这一行」 flow. The
-   * reducer lands it and paints the first step: no
-   * extraction, no planning, no model call, ever.
-   *
-   * **No `effectId`, and that absence is the whole distinction**: this start
-   * needs no Effect budget because it never dispatches an Effect. Every other
-   * input that could spend one carries an id; this one cannot, so a fixed plan
-   * that somehow reached a dispatch site would have nothing to dispatch with.
-   *
-   * `goal` and `table` are required for the same reasons the model-driven
-   * start needs them: `ThreadState` has no meaning without a goal, the Run
-   * record writes it, and the table is what `pageChange` compares the next page
-   * against.
-   *
-   * `steps` is non-empty by type: a plan with nothing in it has nothing to show
-   * and nothing to wait for, and making it unrepresentable is what keeps a
-   * start from being terminal on arrival — the ending flow only watches for a
-   * thread *gaining* an ending.
-   */
-  | { kind: 'start_fixed'; goal: string; table: PromptTable; steps: readonly [GuideStep, ...GuideStep[]] }
   | {
       kind: 'effect_result';
       effectId: string;
@@ -310,8 +294,6 @@ export type MachineInput =
       nextEffectId: string;
     }
   | { kind: 'cross_site_decision'; confirmed: boolean }
-  /** The user pressed 跳过 on the step on screen (`handleStepSkipped`). */
-  | { kind: 'step_skipped' }
   /**
    * An observation source saw something (CONTEXT.md `Reading`), and `table`
    * is the page the host read right after — `null` when it could not be
@@ -321,7 +303,16 @@ export type MachineInput =
   /** What the host brought back for a tool the model called — the page read
    *  again (`observe`), or how a wait went (`wait_for`). `effectId` names the
    *  call it answers; `nextEffectId` is for the model call that carries it back. */
-  | { kind: 'tool_result'; effectId: string; result: ToolResult; nextEffectId: string };
+  | { kind: 'tool_result'; effectId: string; result: ToolResult; nextEffectId: string }
+  /**
+   * 「再试一次」 — the user, after a call that never got through.
+   *
+   * The run is still standing: its goal, its steps and everything read so far
+   * are where they were, so this is not a new journey but the same one asking
+   * again. Without it the only way out of a failed call was to type the whole
+   * thing over, which starts a different run and loses the way already walked.
+   */
+  | { kind: 'retry'; nextEffectId: string };
 
 /**
  * The two effect families design doc §2.1/§2.6 name — platform effects Host
@@ -405,7 +396,13 @@ export type MachineEffect =
    *  pure "tell the user" value for a terminal or recoverable-error state
    *  that has no `GuideStep` to attach to (quota exhaustion, an unresolved
    *  target, a contract violation). */
-  | { kind: 'notify'; message: string };
+  | {
+      kind: 'notify';
+      message: string;
+      /** This was a trip that failed, not an answer the user has to live with:
+       *  the same call can be made again, and the panel offers it. */
+      canRetry?: true;
+    };
 
 /**
  * Pass-through, not a transform: every field on `ThreadState` is already

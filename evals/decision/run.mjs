@@ -21,6 +21,11 @@
  * with, the report, every answer verbatim — and is never overwritten.
  *
  * The baseline is the run `evals/decision/baseline.json` names (`{ "run": … }`).
+ * It has to be a run made with code close enough to today's to mean something:
+ * `t13-baseline` sat there until 2026-09-23 with a 67.2% parse-failure rate —
+ * it predates tool calling, so every gate comparing against it passed on a
+ * landslide and measured nothing. It is now `merged-baseline`: both corpora,
+ * every annotation, three passes.
  * When there is one, its answers are scored again against today's annotations
  * and the run is held to the gate (`gate.ts`): any check that fails makes the
  * exit code non-zero. Changing the baseline is that file, edited by hand —
@@ -64,8 +69,10 @@ function setup(argv) {
     options: {
       ...SHARED_OPTIONS,
       from: { type: 'string' },
-      corpus: { type: 'string' },
-      annotations: { type: 'string' },
+      // 可以给多个：语料是一批批长出来的（一批一个文件，一批一份标注），而尺子
+      // 只有合起来用才有统计力量——闸门是在「两边共有的、有标注的状态」上比的。
+      corpus: { type: 'string', multiple: true },
+      annotations: { type: 'string', multiple: true },
       passes: { type: 'string', default: '3' },
       filter: { type: 'string' },
       limit: { type: 'string' },
@@ -75,7 +82,8 @@ function setup(argv) {
   const env = readEnv(repo);
   if (!env.DEEPSEEK_API_KEY) throw new Error('缺少 DEEPSEEK_API_KEY（.env.local）。');
 
-  if (Boolean(values.from) === Boolean(values.corpus)) throw new Error('语料二选一：--from <真机轮次 id> 或 --corpus <文件>');
+  const corpora = values.corpus ?? [];
+  if (Boolean(values.from) === corpora.length > 0) throw new Error('语料二选一：--from <真机轮次 id> 或 --corpus <文件>（--corpus 可以给多个）');
   let states;
   let source;
   let skipped = [];
@@ -84,8 +92,14 @@ function setup(argv) {
     ({ states, skipped } = got);
     source = `真机轮次 ${values.from}`;
   } else {
-    states = ndjson(path.resolve(values.corpus));
-    source = rel(path.resolve(values.corpus));
+    const files = corpora.map((c) => path.resolve(c));
+    states = files.flatMap((f) => ndjson(f));
+    const seen = new Set();
+    for (const st of states) {
+      if (seen.has(st.id)) throw new Error(`状态 ${st.id} 在这几份语料里出现了不止一次`);
+      seen.add(st.id);
+    }
+    source = files.map(rel).join(' + ');
   }
   if (values.filter) {
     const re = new RegExp(values.filter);
@@ -94,13 +108,14 @@ function setup(argv) {
   if (values.limit) states = states.slice(0, positive('limit', values.limit));
   if (!states.length) throw new Error('这组参数选不出任何状态');
 
-  const annotationsFile = values.annotations
-    ? path.resolve(values.annotations)
-    : fs.existsSync(DEFAULT_ANNOTATIONS)
-      ? DEFAULT_ANNOTATIONS
-      : undefined;
-  const annotations = annotationsFile ? JSON.parse(fs.readFileSync(annotationsFile, 'utf8')) : [];
-  if (!Array.isArray(annotations)) throw new Error(`${rel(annotationsFile)}：应当是一组标注`);
+  const annotationFiles = (values.annotations ?? []).map((a) => path.resolve(a));
+  if (!annotationFiles.length && fs.existsSync(DEFAULT_ANNOTATIONS)) annotationFiles.push(DEFAULT_ANNOTATIONS);
+  const annotations = annotationFiles.flatMap((f) => {
+    const read = JSON.parse(fs.readFileSync(f, 'utf8'));
+    if (!Array.isArray(read)) throw new Error(`${rel(f)}：应当是一组标注`);
+    return read;
+  });
+  const annotationsFile = annotationFiles.map(rel).join(' + ');
   const byId = new Map(states.map((s) => [s.id, s]));
   for (const a of annotations) {
     const s = byId.get(a.state);
@@ -151,13 +166,19 @@ try {
   process.exit(1);
 }
 
-const now = await fingerprint();
+const now = fingerprint();
 const recorded = [...new Set(o.states.map((s) => s.fingerprint))];
 console.log(`Decision eval ${o.run}：${o.source}，${o.states.length} 个状态 × ${o.passes} 遍；Plugin [${o.plugins.join(', ')}]；${o.model.model}`);
 if (o.skipped.length) console.log(`  日志里 ${o.skipped.length} 次调用没成为状态（没有 trace）`);
-console.log(`  标注：${o.annotationsFile ? `${rel(o.annotationsFile)}，${o.annotations.length} 条` : '没有'}`);
+console.log(`  标注：${o.annotationsFile ? `${o.annotationsFile}，${o.annotations.length} 条` : '没有'}`);
+// 只陈述事实，不下断言。指纹比的是一个固定上下文渲染出的三段文本，答得了
+// 「有没有可能变了」，答不了「这批语料还对不对得上」——后者由 extract.mjs 的逐
+// 字节核对说了算。而且 2026-09-24 换过一次口径（见 fingerprint.ts），跨口径的
+// 两个值本来就不可比，旧日那句「这正是要量的差别」在那之后是一句假话。
 if (recorded.some((f) => f !== now))
-  console.log(`  语料录于快照指纹 ${recorded.join('、')}，当前代码是 ${now}：发给模型的东西不同，这正是要量的差别`);
+  console.log(
+    `  语料录于快照指纹 ${recorded.join('、')}，当前代码是 ${now}：不一定是同一段提示词，逐条对不对得上由逐字节核对说了算`,
+  );
 
 const startedAt = new Date().toISOString();
 const jobs = o.states.flatMap((s) => Array.from({ length: o.passes }, (_, i) => ({ s, pass: i + 1 })));
@@ -210,7 +231,7 @@ fs.writeFileSync(
         hash: hash(o.states.map((s) => [s.id, s.context])),
       },
       annotations: {
-        file: o.annotationsFile ? rel(o.annotationsFile) : null,
+        file: o.annotationsFile || null,
         count: o.annotations.length,
         hash: hash([...o.annotations].sort((a, b) => (a.state < b.state ? -1 : 1))),
       },

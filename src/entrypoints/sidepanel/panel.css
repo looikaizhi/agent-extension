@@ -292,6 +292,59 @@ button.primary {
 .entry.note {
   border-left: 3px solid var(--warn);
 }
+/* 它记住的路：一条一行，每条都能单独拿回去。 */
+.walked {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.walked li {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.walked-goal {
+  font-weight: 600;
+}
+.walked-where {
+  margin: 2px 0 6px;
+  font-size: 12px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+/* 这条对话少了什么、还写不写得下：说在最前面，不夹在记录中间。 */
+.conversation-note {
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px dashed var(--line);
+  border-radius: 4px;
+}
+.conversation-note.warn {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+/* 一次没走通的调用，就地可以再试 —— 不必把目标重打一遍。 */
+.entry .retry {
+  margin-top: 8px;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.entry .retry:hover {
+  border-color: var(--accent);
+}
 .entry.working {
   border: 1px dashed var(--line);
   background: transparent;

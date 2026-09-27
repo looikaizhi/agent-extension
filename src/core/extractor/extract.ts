@@ -11,7 +11,7 @@ import {
   PRIMARY_INTERACTIVE_ROLES,
 } from './roles';
 import { resolveName, resolveRole, resolveState } from './semantics';
-import type { ExtractProfile, ExtractStats, LocatorView, UINode } from './types';
+import type { ExtractProfile, ExtractStats, FrameNote, LocatorView, UINode } from './types';
 import { findModalScope, isOurs, isVisible, inViewport, toRect } from './visibility';
 
 const MAX_SHADOW_DEPTH = 12;
@@ -57,8 +57,9 @@ export function extract(profile: ExtractProfile, frameId = 0): LocatorView {
   const scope: Document | Element = modal ?? document;
 
   const candidates: Candidate[] = [];
+  const embedded: Element[] = [];
   const truncated = { walk: false, semantics: false };
-  walk(scope, 0, candidates, stats, t0, truncated);
+  walk(scope, 0, candidates, stats, t0, truncated, embedded);
   const t1 = performance.now();
 
   const visible = candidates.filter((c) => isVisible(c.el));
@@ -185,8 +186,38 @@ export function extract(profile: ExtractProfile, frameId = 0): LocatorView {
     // "Incomplete", not "slow". Nothing downstream can recover from a table
     // that is missing nodes; a table that took a while is merely a table.
     degraded: truncated.walk || truncated.semantics,
+    frames: framesOf(embedded),
     stats,
   };
+}
+
+/** Big enough to hold something the user came for, biggest first, at most a
+ *  handful. A tracking pixel and a 0×0 frame are not holes in the page; saying
+ *  so for every one of them would bury the one frame that matters. */
+const FRAME_MIN = { width: 120, height: 60 };
+const FRAMES_MAX = 5;
+
+function framesOf(embedded: readonly Element[]): FrameNote[] {
+  return embedded
+    .map((el) => ({ el, rect: el.getBoundingClientRect() }))
+    .filter(({ el, rect }) => rect.width >= FRAME_MIN.width && rect.height >= FRAME_MIN.height && isVisible(el))
+    .sort((a, b) => b.rect.width * b.rect.height - a.rect.width * a.rect.height)
+    .slice(0, FRAMES_MAX)
+    .map(({ el }) => ({
+      label: (el.getAttribute('title') || el.getAttribute('name') || el.getAttribute('aria-label') || '').slice(0, 60).trim(),
+      // Only the host: the rest of an embedded frame's address is query and
+      // token soup, and the host is the part that says whose it is.
+      host: hostOf(el.getAttribute('src')),
+    }));
+}
+
+function hostOf(src: string | null): string {
+  if (!src) return '';
+  try {
+    return new URL(src, location.href).host;
+  } catch {
+    return '';
+  }
 }
 
 /**
@@ -226,7 +257,7 @@ export function extractStructureHash(): string {
   const modal = findModalScope(document);
   const scope: Document | Element = modal ?? document;
   const candidates: Candidate[] = [];
-  walk(scope, 0, candidates, stats, t0, { walk: false });
+  walk(scope, 0, candidates, stats, t0, { walk: false }, []);
 
   const nodes: { role: string; name: string }[] = [];
   for (const c of candidates) {
@@ -338,6 +369,8 @@ function walk(
   stats: ExtractStats,
   t0: number,
   truncated: { walk: boolean },
+  /** Frames met on the way: collected, never walked into (`FrameNote`). */
+  embedded: Element[],
 ): void {
   if (depth > MAX_SHADOW_DEPTH) return;
   if (performance.now() - t0 > BUDGET_MS) {
@@ -354,12 +387,17 @@ function walk(
       out.push({ el });
       stats.candidates += 1;
     }
-    // Frames are a separate document; the frame protocol handles them.
-    if (el.localName === 'iframe' || el.localName === 'frame') continue;
+    // A separate document, and the content script does not run in it: what is
+    // inside cannot be read at all. It is written down as a hole in the table
+    // rather than passed over in silence — see `FrameNote`.
+    if (el.localName === 'iframe' || el.localName === 'frame') {
+      embedded.push(el);
+      continue;
+    }
     const sr = el.shadowRoot; // open roots only — measured 32 on GitHub, 37 on MDN
     if (sr) {
       stats.shadowRoots += 1;
-      walk(sr, depth + 1, out, stats, t0, truncated);
+      walk(sr, depth + 1, out, stats, t0, truncated, embedded);
     }
   }
 }

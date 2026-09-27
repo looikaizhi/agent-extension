@@ -91,12 +91,22 @@ export interface Trace {
    * it 24 times would make the trace mostly one string. A `repair` entry
    * carries its own `system` inline because that one genuinely differs — a
    * fresh minimal conversation that never sees the page (§5.9).
+   *
+   * **Rendered text, and it stays rendered text** even as the messages the
+   * agent builds become structured (content parts, a neutral tool spec). A
+   * trace is read by two audiences and neither of them is a protocol: a person
+   * opening the debug panel, and the Decision corpus, which uses exactly this
+   * string to prove that a recorded state replays as the same call. Let it
+   * follow the neutral types into objects and every committed state's `sent`
+   * stops matching — and it fails *green*, because the extractor filters out
+   * anything that differs and would simply produce nothing.
    */
   system: string;
   /**
    * The tool schema the request offered, rendered as JSON — stored once, like
    * `system`, and for the same reason. What the model could answer with is
    * half of what it was asked; replaying a call without it is guessing.
+   * Rendered text for the same reason as `system` above.
    */
   tools: string;
   entries: TraceEntry[];
@@ -109,5 +119,5 @@ export interface Trace {
  * `Check` whether arrival was judged.
  */
 export type WireBinding = 'bound' | 'ambiguous' | 'unbound';
-export type WireEvidence = 'handpicked' | 'documented' | 'model';
+export type WireEvidence = 'documented' | 'model';
 export type WireCheck = 'pass' | 'unknown' | 'skipped';

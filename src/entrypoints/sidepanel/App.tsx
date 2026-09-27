@@ -157,8 +157,7 @@ export function App() {
       await chrome.runtime.sendMessage({
         type: 'POINT_AT',
         tabId,
-        goal: `定位「${title}」`,
-        steps: [{ descriptor, expectedUserAction: actionForRole(descriptor.role), title, detail }],
+        step: { descriptor, expectedUserAction: actionForRole(descriptor.role), title, detail },
       });
       await pull(tabId);
     },
@@ -199,13 +198,22 @@ export function App() {
             </div>
           )}
           <div className="row">
-            {view.step.skippable && <button onClick={() => void act({ type: 'SKIP_STEP' })}>跳过这一步</button>}
             <button onClick={() => void act({ type: 'END_GUIDE' })}>结束引导</button>
           </div>
         </section>
       )}
 
-      {view && <Conversation conversation={view.conversation} pending={pending} draft={draft} endRef={bottom} />}
+      {view && (
+        <Conversation
+          conversation={view.conversation}
+          pending={pending}
+          draft={draft}
+          {...(view.storageFull ? { storageFull: true as const } : {})}
+          {...(view.earlier ? { earlier: view.earlier } : {})}
+          onRetry={() => void act({ type: 'RETRY_GUIDE' })}
+          endRef={bottom}
+        />
+      )}
 
       {crossSite && (
         <div className="row cross-site">

@@ -66,6 +66,10 @@ export interface EntryStep {
 }
 
 export interface ConversationEntry {
+  /** On a note the host wrote about a call that never got through: the same
+   *  call can be made again, and the panel says so. Never on anything the
+   *  model said — an answer is not something to retry. */
+  canRetry?: true;
   /** Unique within its conversation, and stable — the panel keys on it. */
   id: string;
   at: number;
@@ -101,6 +105,12 @@ export interface Conversation {
    *  thinking while it is still happening. Folded into the entry that ends
    *  the turn, and never shown twice. */
   draft?: readonly ConversationRound[];
+  /** How many of the earliest entries are no longer kept. Only ever set
+   *  because the store had no room for the newest one: what happened most
+   *  recently is what the user is looking at, so the oldest go first — and
+   *  the count is shown, because a conversation that silently loses its
+   *  beginning is worse than one that says it did. */
+  dropped?: number;
 }
 
 /**
@@ -122,8 +132,21 @@ export type Pending =
 
 /** Everything the panel needs for one render, answered by one pull. */
 export interface ConversationView {
+  /**
+   * The conversation as the panel should show it — **its tail**, not
+   * necessarily all of it. `earlier` says how many entries came before what
+   * is here; they are still stored, just not carried on every pull.
+   */
   conversation: Conversation;
+  /** Entries older than the ones carried here. Absent when the view holds the
+   *  whole conversation. */
+  earlier?: number;
   pending: Pending;
+  /** The last thing that happened could not be written down at all — the
+   *  session store is full and even dropping the earlier entries did not make
+   *  room. Said out loud, because the alternative is a conversation that
+   *  quietly stops keeping up with what the user is doing. */
+  storageFull?: true;
   /** The step on screen right now, pinned above the conversation — `null`
    *  when nothing is painted. */
   step: PinnedStep | null;
@@ -134,8 +157,11 @@ export interface PinnedStep {
   title: string;
   detail?: string;
   index: number;
+  /** Always `null` now: the model answers one step at a time, so nobody —
+   *  itself included — knows how many are left. Kept as a field because the
+   *  renderer draws 「第 3 步」 from its absence and 「步骤 2 / 5」 from a
+   *  number, and that distinction is still the right one to express. */
   total: number | null;
-  skippable: boolean;
 }
 
 export const emptyConversation = (tabId: number): Conversation => ({ tabId, rev: 0, entries: [] });

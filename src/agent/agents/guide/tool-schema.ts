@@ -1,12 +1,16 @@
-import type { ToolDef } from '@/agent/provider/provider';
+import type { ToolSpec } from '@/agent/provider/types';
 import type { GuideAgentEnvelope } from './registry';
 
 /**
  * How one of the guide agent's intents is written as a function the model can
  * call — strict mode, every property required, no extra keys. Shared by every
- * intent's module, so each writes its own schema in the one shape the endpoint
- * enforces, and the bytes the model is sent do not depend on which file an
- * intent happens to live in.
+ * intent's module, so each writes its own schema one way, and what the model
+ * is offered does not depend on which file an intent happens to live in.
+ *
+ * Flat, the way the neutral `ToolSpec` is: Chat Completions nests a tool under
+ * `function`, Responses does not, and Anthropic calls the schema
+ * `input_schema`. Writing any one of those here would be the wire format
+ * leaking back into the agent, which is what this seam exists to stop.
  */
 
 export const str = (description?: string) => (description ? { type: 'string', description } : { type: 'string' });
@@ -25,12 +29,9 @@ export const fn = (
   description: string,
   required: readonly string[],
   properties: Record<string, unknown>,
-): ToolDef => ({
-  type: 'function',
-  function: {
-    name,
-    description,
-    strict: true,
-    parameters: { type: 'object', additionalProperties: false, required: [...required], properties },
-  },
+): ToolSpec => ({
+  name,
+  description,
+  strict: true,
+  inputSchema: { type: 'object', additionalProperties: false, required: [...required], properties },
 });

@@ -149,6 +149,9 @@ function tableOf(view: LocatorView, items: PromptItem[], omitted: number): Promp
     omitted,
     degraded: view.degraded,
     ambiguity: ambiguityOf(items),
+    // Carried whole: a frame is a hole in this table, and a projection that
+    // dropped the holes would read as a complete page.
+    frames: view.frames,
     stats: view.stats,
   };
 }
@@ -445,6 +448,16 @@ export function toPromptText(table: PromptTable, fresh?: ReadonlySet<Ref>): stri
   // have an entrance.
   if (table.omitted > 0)
     lines.push('truncated 这一页元素太多，下面只是其中一部分；导航一类的入口已优先保留');
+  // Said out loud for the same reason `truncated` is: without it, a page whose
+  // console, checkout or player lives in an embedded frame reads as a page
+  // that simply does not have one, and the model confidently points somewhere
+  // else. What is inside cannot be read at all — the content script runs in
+  // the top document only.
+  if (table.frames?.length)
+    lines.push(
+      `frames 这一页里嵌着 ${table.frames.length} 个框架，里面的东西我看不到：` +
+        table.frames.map((f) => [f.label && JSON.stringify(f.label), f.host].filter(Boolean).join(' · ') || '（没有标题）').join('；'),
+    );
 
   let prev: readonly string[] = [];
   for (const it of table.items) {

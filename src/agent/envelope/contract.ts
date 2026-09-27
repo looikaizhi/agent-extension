@@ -2,12 +2,21 @@ import type { Ref } from '@/shared/types';
 import { scanProvenance } from './scanner';
 
 /**
- * `parseContract` is the seam (design doc §5.1–§5.2). It turns a model's raw text response into one of the
- * known envelope shapes, or an `error` — and provenance verification
- * (CONTEXT.md `Provenance`) runs *inside* it, on every call, against the untouched input. There
- * is no second "validate provenance" entry point a caller could skip: an
- * envelope this function hands back has already been proven honest, in
- * production, not just in a test file.
+ * `parseToolContract` is the seam (design doc §5.1–§5.2). It turns what an
+ * endpoint reports — the function the model called, and the arguments text it
+ * wrote — into one of the known envelope shapes, or an `error`; and provenance
+ * verification (CONTEXT.md `Provenance`) runs *inside* it, on every call,
+ * against the untouched input. There is no second "validate provenance" entry
+ * point a caller could skip: an envelope this function hands back has already
+ * been proven honest, in production, not just in a test file.
+ *
+ * There was a second door once — a reader for an answer written as free text,
+ * for an endpoint that ignores `tool_choice: 'required'`. It worked, and it
+ * was never wired up: the trigger needed an `intent` field the system prompt
+ * never taught, so no model was ever told it could answer that way, and 165
+ * recorded states from real runs contain zero answers that arrived without a
+ * tool call. Refusing such an endpoint *before* the request goes out says
+ * something the user can act on; reading its prose said nothing to anyone.
  *
  * This file is the part both agents share: the reading machinery —
  * extraction, provenance, and what the model is told when an answer names no
@@ -17,7 +26,6 @@ import { scanProvenance } from './scanner';
  * recognised: an envelope with that `intent`, or any `intent` nobody knows, is
  * `error`, not a silent pass-through.
  */
-
 
 /** One of an agent's shapes: how it is recognised, and what the model is told
  *  when it is not. */
@@ -49,26 +57,7 @@ const err = (message: string) => ({ kind: 'error', message }) as const;
  *  sentence for every intent, whichever file explains it. */
 export const shapeMismatch = (intent: string, need: string) => `${intent} 信封的形状不合，需要：${need}`;
 
-export function parseContract<E>(raw: string, reader: EnvelopeReader<E>): ParseResult<E> {
-  const parsed = extractCandidate(raw);
-  if (parsed === undefined) return err('无法从模型输出中解析出合法 JSON（容错解析全部尝试失败）');
-
-  // Provenance runs against `raw` — the untouched input — never against
-  // `parsed` or any other cleaned intermediate. See CONTEXT.md `Provenance`: the scanner
-  // is the only thing allowed to answer "is this honest", and it can only
-  // do that against what the model actually said.
-  const violation = scanProvenance(raw, parsed);
-  if (violation) {
-    const at = violation.path.length ? violation.path.join('.') : '(顶层)';
-    return err(`解析结果在路径「${at}」处无法在原始输出中找到对应字面量：${violation.reason}`);
-  }
-
-  return read(parsed, reader);
-}
-
 /**
- * The tool-calling counterpart of `parseContract`.
- *
  * The endpoint hands back two things: which function the model chose, and the
  * arguments text it wrote. The function name *is* the intent — a structured
  * field the API reports, never something recovered from prose — so the model

@@ -45,6 +45,24 @@ export type ExtractProfile = 'interactive' | '+context' | '+diagnostics';
  * a process boundary — see K-4. Pruning happens in `project()`, so `relocate`
  * can still search for a target that scrolled out of view.
  */
+/**
+ * An embedded frame on the page, as much of it as can be read from outside.
+ *
+ * The content script runs in the top document only, and an extractor that
+ * walked into a frame would be walking a document it cannot see into at all
+ * when that frame is cross-origin. So a frame is not an element in the table:
+ * it is a hole in it, and this is the hole's label. Saying 「你要的东西在一个
+ * 嵌入框架里，我看不到」 is worth a great deal more than silently behaving as
+ * though the page did not contain it.
+ */
+export interface FrameNote {
+  /** `title`, `name` or `aria-label` — whatever the page author put there. */
+  label: string;
+  /** Where it comes from, when the address says: `js.stripe.com`. Empty for
+   *  a frame with no `src`, or one written inline with `srcdoc`. */
+  host: string;
+}
+
 export interface LocatorView {
   snapshotId: string;
   url: string;
@@ -58,6 +76,8 @@ export interface LocatorView {
   nodes: UINode[];
   /** Watchdog tripped: traversal was cut short. Observable, never silent. */
   degraded: boolean;
+  /** The frames big enough to hold something the user came for. */
+  frames: readonly FrameNote[];
   stats: ExtractStats;
 }
 
@@ -158,5 +178,14 @@ export interface PromptTable {
   /** Share of items not uniquely identifiable from prompt-visible fields.
    *  Measurement only — never sent to a model. */
   ambiguity: number;
+  /** Holes in this table: what is embedded on the page and cannot be seen
+   *  into. Told to the model, because "not in the table" must not read as
+   *  "not on the page" (`FrameNote`).
+   *
+   *  Optional, and absent means "this table says nothing about frames" —
+   *  which is what a hand-written one, or one recorded before frames were
+   *  looked at, honestly is. The one real producer (`project`) always sets
+   *  it, because the extractor always knows. */
+  frames?: readonly FrameNote[];
   stats: ExtractStats;
 }

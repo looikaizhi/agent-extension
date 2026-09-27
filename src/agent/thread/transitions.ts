@@ -141,7 +141,7 @@ export function stampEffect(history: readonly GuideHistoryEntry[], index: number
   return history.map((h, i) => (i === index ? { ...h, effect } : h));
 }
 
-export const notify = (message: string): MachineEffect => ({ kind: 'notify', message });
+export const notify = (message: string, canRetry?: true): MachineEffect => ({ kind: 'notify', message, ...(canRetry ? { canRetry } : {}) });
 
 /**
  * CONTEXT.md's `Presentation`, as the host names it: one name for each step that
@@ -156,12 +156,11 @@ export const presentationIdOf = (threadId: string, state: Pick<ThreadState, 'his
 export function present(state: ThreadState): Extract<MachineEffect, { kind: 'present' }> {
   const guideStep = state.steps[state.cursor];
   if (!guideStep) throw new Error(`present: no step at index ${state.cursor}`);
-  // A fixed plan is a list: this is step `cursor` of `steps.length`. The
-  // model's run holds only the step on screen, so its place in the run is how
-  // many steps have been shown — `history`, which already counts this one.
-  return state.planSource === 'fixed'
-    ? { kind: 'present', step: guideStep, index: state.cursor, total: state.steps.length }
-    : { kind: 'present', step: guideStep, index: Math.max(0, state.history.length - 1), total: null };
+  // A run holds only the step on screen, so its place in the run is how many
+  // steps have been shown — `history`, which already counts this one. There is
+  // no total to show: the model answers one step at a time and nobody, itself
+  // included, knows how many are left.
+  return { kind: 'present', step: guideStep, index: Math.max(0, state.history.length - 1), total: null };
 }
 
 /**
@@ -313,12 +312,6 @@ export function continueTurn(state: ThreadState & { turn: Turn }, effectId: stri
 
 /** The gates every model call passes, fresh or continuing. */
 function callBlocked(state: ThreadState): StepOut | null {
-  // A fixed plan has no model. Every input a fixed plan receives is decided in
-  // its own module (`fixed-plan.ts`), so reaching here with one is a bug in a
-  // future branch rather than a case to handle — and this is the funnel, so stating
-  // the invariant once here is what makes it structural instead of a rule
-  // every new dispatch site has to remember.
-  if (state.planSource === 'fixed') return { state, effects: [] };
   if (state.inflight) return { state, effects: [] };
   if (state.stepCalls >= STEP_CALLS) return stepSpent(state);
   // Only when a step would begin: the run's last step still gets all its calls.

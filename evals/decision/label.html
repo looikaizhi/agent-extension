@@ -1,4 +1,4 @@
-<title>第一批决策标注</title>
+<title>决策标注</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -114,7 +114,7 @@ td label{cursor:pointer}
   <header class="top">
     <div>
       <div class="eyebrow">Decision eval · 标注</div>
-      <h1>第一批决策标注</h1>
+      <h1>决策标注 · <span id="batch">/*__BATCH__*/</span></h1>
     </div>
     <div class="progress"><span id="tally"></span><span id="db-status">正在连接这张页的数据库……</span></div>
   </header>
@@ -129,8 +129,8 @@ td label{cursor:pointer}
   var DATA = /*__DATA__*/null;
   var S = DATA.states;
   var ACTIONS = DATA.actions;
-  var INTENTS = [['point', '指路'], ['done', '已经到了'], ['ask', '该问用户'], ['read_doc', '要查文档']];
-  var NAMES = { point: '指路', done: '已经到了', ask: '该问用户', read_doc: '要查文档', none: '没有回答', unreadable: '读不出' };
+  var INTENTS = [['point', '指路'], ['done', '已经到了'], ['ask', '该问用户'], ['read_doc', '要查文档'], ['explain', '直接回答']];
+  var NAMES = { point: '指路', done: '已经到了', ask: '该问用户', read_doc: '要查文档', explain: '直接回答', none: '没有回答', unreadable: '读不出' };
   var POS = { opening: '开局', middle: '中途', end: '临近终点' };
   var STATUS = { todo: '未标', part: '未完成：选了指路，还没勾第一步', done: '已标' };
   var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
@@ -149,11 +149,12 @@ td label{cursor:pointer}
   var tallyEl = document.getElementById('tally');
 
   function say(text, bad) { statusEl.textContent = text; statusEl.className = bad ? 'bad' : ''; }
-  function annOf(d) { return ann[d.doc] || { intent: null, acceptable: [] }; }
+  function annOf(d) { return ann[d.doc] || { intents: [], acceptable: [] }; }
+  function has(a, x) { return a.intents.indexOf(x) >= 0; }
   function statusOf(d) {
     var a = ann[d.doc];
-    if (!a || !a.intent) return 'todo';
-    return a.intent === 'point' && !a.acceptable.length ? 'part' : 'done';
+    if (!a || !a.intents.length) return 'todo';
+    return has(a, 'point') && !a.acceptable.length ? 'part' : 'done';
   }
   function tally() {
     var n = { todo: 0, part: 0, done: 0 };
@@ -195,7 +196,7 @@ td label{cursor:pointer}
     var sug = {};
     (d.suggestion ? d.suggestion.acceptable : []).forEach(function (x) { sug[x.ref] = true; });
     var q = filter.trim().toLowerCase();
-    var guide = a.intent === 'point';
+    var guide = has(a, 'point');
     var rows = d.items.filter(function (it) {
       if (onlyChecked && !acc[it.ref]) return false;
       return !q || (it.ref + ' ' + it.role + ' ' + it.name + ' ' + it.path).toLowerCase().indexOf(q) >= 0;
@@ -227,9 +228,9 @@ td label{cursor:pointer}
     var a = annOf(d);
     var done = d.done.length ? '<ol class="walk">' + d.done.map(function (x) { return '<li>' + esc(x.title) + (x.outcome && x.outcome !== 'confirmed' ? ' <span class="muted">（' + esc(x.outcome) + '）</span>' : '') + '</li>'; }).join('') + '</ol>' : '<p class="muted">还没走过任何一步：这是起点页。</p>';
     var route = d.route.length ? '<ol class="walk">' + d.route.map(function (r) { return '<li>' + esc(r.at) + '：' + esc(r.goal) + '</li>'; }).join('') + '</ol>' : '<p class="muted">没有路线。</p>';
-    var intentHint = a.intent === 'point'
+    var intentHint = has(a, 'point')
       ? (a.acceptable.length ? '已勾 ' + a.acceptable.length + ' 个可接受的第一步。每个勾上的元素，再点它可接受的动作。' : '<span class="warn">还没勾第一步：在下面的元素表里勾出所有算对的第一步。</span>')
-      : a.intent ? '意图不是指路时，不用勾第一步。' : '先选：在这一页上，正确的做法是什么？';
+      : a.intents.length ? '意图里没有指路时，不用勾第一步。' : '先选：在这一页上，正确的做法是什么？（两种答法都对时，两个都点上）';
     var sug = d.suggestion && !ann[d.doc]
       ? '<div class="sug"><span>你判了这一趟「到了」，建议用模型当时的回答：<b>' + esc(NAMES[d.suggestion.intent]) + '</b>' +
         (d.suggestion.acceptable.length ? '，第一步 <code>' + esc(d.suggestion.acceptable[0].ref) + '</code> ' + esc(d.suggestion.acceptable[0].actions.join('/')) : '') +
@@ -243,7 +244,7 @@ td label{cursor:pointer}
       '<section class="card"><p class="cap">模型当时的回答</p>' + answerHtml(d.answer) + '</section></div>' +
       '<section class="card judge"><p class="cap" style="margin:0">你的判断</p>' + sug +
       '<div class="seg" role="group" aria-label="正确的意图">' + INTENTS.map(function (x) {
-        return '<button type="button" data-intent="' + x[0] + '" aria-pressed="' + (a.intent === x[0]) + '"' + (db ? '' : ' disabled') + '>' + x[1] + '</button>';
+        return '<button type="button" data-intent="' + x[0] + '" aria-pressed="' + has(a, x[0]) + '"' + (db ? '' : ' disabled') + '>' + x[1] + '</button>';
       }).join('') + '</div><div class="hint">' + intentHint + '</div>' +
       (ann[d.doc] ? '<div><button type="button" class="plain" data-clear' + (db ? '' : ' disabled') + '>清空这一条</button></div>' : '') + '</section>' +
       '<section><div class="tools"><input type="search" id="filter" placeholder="按名字、角色、路径或 ref 过滤" value="' + esc(filter) + '" aria-label="过滤元素">' +
@@ -273,12 +274,12 @@ td label{cursor:pointer}
   function persist(d) {
     var a = ann[d.doc];
     var ref = db.doc('annotations/' + d.doc);
-    var op = a && a.intent
-      ? ref.set({ state: d.id, intent: a.intent, acceptable: a.intent === 'point' ? a.acceptable : [], at: new Date().toISOString() })
+    var op = a && a.intents.length
+      ? ref.set({ state: d.id, intents: a.intents, acceptable: has(a, 'point') ? a.acceptable : [], at: new Date().toISOString() })
       : ref.delete();
     op.then(function () {
       delete pending[d.doc];
-      say(a && a.intent ? '已存：' + d.id : '已清空：' + d.id);
+      say(a && a.intents.length ? '已存：' + d.id : '已清空：' + d.id);
     }, function (err) {
       delete pending[d.doc];
       say('没存上（' + (err && err.code) + '）：刷新页面后再改一次', true);
@@ -305,8 +306,12 @@ td label{cursor:pointer}
       return say('全部标完了');
     }
     if (!db) return;
-    if (t.dataset.intent) return change(d, { intent: t.dataset.intent, acceptable: a.acceptable });
-    if (t.hasAttribute('data-adopt')) return change(d, { intent: d.suggestion.intent, acceptable: d.suggestion.acceptable.map(function (x) { return { ref: x.ref, actions: x.actions.slice() }; }) });
+    // 多选：两种答法都对时，两个都点亮（比如「查文档」和「直接回答」）。
+    if (t.dataset.intent) {
+      var next = has(a, t.dataset.intent) ? a.intents.filter(function (x) { return x !== t.dataset.intent; }) : a.intents.concat(t.dataset.intent);
+      return change(d, next.length ? { intents: next, acceptable: a.acceptable } : null);
+    }
+    if (t.hasAttribute('data-adopt')) return change(d, { intents: [d.suggestion.intent], acceptable: d.suggestion.acceptable.map(function (x) { return { ref: x.ref, actions: x.actions.slice() }; }) });
     if (t.hasAttribute('data-clear')) return change(d, null);
     if (t.dataset.act) {
       var next = a.acceptable.map(function (x) {
@@ -314,7 +319,7 @@ td label{cursor:pointer}
         var has = x.actions.indexOf(t.dataset.act) >= 0;
         return { ref: x.ref, actions: has ? x.actions.filter(function (y) { return y !== t.dataset.act; }) : x.actions.concat(t.dataset.act) };
       }).filter(function (x) { return x.actions.length; });
-      return change(d, { intent: a.intent, acceptable: next });
+      return change(d, { intents: a.intents, acceptable: next });
     }
   });
 
@@ -328,7 +333,7 @@ td label{cursor:pointer}
     var next = t.checked
       ? a.acceptable.concat({ ref: it.ref, actions: defaultAction(d, it) })
       : a.acceptable.filter(function (x) { return x.ref !== it.ref; });
-    change(d, { intent: a.intent, acceptable: next });
+    change(d, { intents: a.intents, acceptable: next });
   });
 
   document.addEventListener('input', function (e) {
@@ -353,7 +358,7 @@ td label{cursor:pointer}
         seen[doc.id] = true;
         if (pending[doc.id]) return;
         var x = doc.exists && doc.data();
-        if (x && x.intent) ann[doc.id] = { intent: x.intent, acceptable: Array.isArray(x.acceptable) ? x.acceptable : [] };
+        if (x && Array.isArray(x.intents) && x.intents.length) ann[doc.id] = { intents: x.intents, acceptable: Array.isArray(x.acceptable) ? x.acceptable : [] };
       });
       Object.keys(ann).forEach(function (k) { if (!seen[k] && !pending[k]) delete ann[k]; });
       renderAll();

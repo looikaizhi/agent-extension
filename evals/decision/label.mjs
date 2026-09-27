@@ -53,7 +53,8 @@ function verdictOf(run, key) {
 function answerOf(s) {
   const o = s.answer;
   if (!o?.ok) return { intent: 'none' };
-  const p = o.tool ? guideAgent.parseOutput(o.tool, String(o.value)) : guideAgent.parseTextOutput(String(o.value));
+  // 没有工具调用就读不出来：散文兜底那条路已经删掉，而 165 条真机语料里零命中。
+  const p = o.tool ? guideAgent.parseOutput(o.tool, String(o.value)) : { kind: 'error' };
   if (p.kind !== 'ok') return { intent: p.kind === 'foreign' ? p.intent : 'unreadable' };
   const e = p.envelope;
   return {
@@ -71,7 +72,7 @@ const data = states.map((s) => {
   const judged = verdictOf(s.run, `P${s.pass}-${s.goal}`) === 'arrived';
   const first = answer.steps?.[0];
   const suggestion =
-    judged && ['point', 'done', 'ask', 'read_doc'].includes(answer.intent)
+    judged && ['point', 'done', 'ask', 'read_doc', 'explain'].includes(answer.intent)
       ? { intent: answer.intent, acceptable: answer.intent === 'point' && first ? [{ ref: first.ref, actions: [first.action] }] : [] }
       : null;
   const c = where.get(s.id);
@@ -106,7 +107,12 @@ fs.mkdirSync(out, { recursive: true });
 const json = JSON.stringify({ states: data, actions: GUIDE_STEP_ACTIONS }).replace(/</g, '\\u003c');
 // A function, not a string: page text is full of `$&` and `$'`, which a
 // replacement string would read as patterns.
-const html = fs.readFileSync(path.join(here, 'label.html'), 'utf8').replace('/*__DATA__*/null', () => json);
+const html = fs
+  .readFileSync(path.join(here, 'label.html'), 'utf8')
+  .replace('/*__DATA__*/null', () => json)
+  // Which batch this page is for: one labelling page per corpus file, and a
+  // page that does not say which is one the owner cannot tell apart later.
+  .replace('/*__BATCH__*/', () => path.basename(corpus).replace(/\.ndjson$/, ''));
 fs.writeFileSync(path.join(out, 'index.html'), html);
 console.log(
   `标注页：${path.relative(repo, path.join(out, 'index.html'))}（${data.length} 个状态，${data.filter((d) => d.suggestion).length} 个带建议，${(Buffer.byteLength(html) / 1e6).toFixed(1)}MB）`,

@@ -77,7 +77,9 @@ export interface CallRow {
 /** The refs a shown answer pointed the user at, read with the product's own
  *  parser — a text answer (no tool) is read the way the product read it. */
 function refsOf(tool: string | undefined, value: unknown): string[] {
-  const parsed = tool ? guideAgent.parseOutput(tool, String(value)) : guideAgent.parseTextOutput(String(value));
+  // 没有工具调用就读不出来：散文兜底那条路已经删掉，而 165 条真机语料里零命中。
+  if (!tool) return [];
+  const parsed = guideAgent.parseOutput(tool, String(value));
   if (parsed.kind !== 'ok') return [];
   return pointedAt(parsed.envelope as unknown as { intent: string } & Record<string, unknown>);
 }

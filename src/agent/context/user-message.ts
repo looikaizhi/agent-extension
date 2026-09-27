@@ -1,5 +1,6 @@
 import type { GuideHistoryEntry } from '@/agent/thread/thread';
 import type { Reading, Since, ToolResult } from '@/agent/context/turn';
+import type { Talk } from '@/agent/conversation/entries';
 import type { GuideRouteHop, Ref } from '@/shared/types';
 import { toPromptText } from '@/core/extractor/project';
 import type { PromptTable } from '@/core/extractor/types';
@@ -168,6 +169,18 @@ function historyText(history: GuideHistory, page?: Since['page']): string {
  * to pick a control, how to read the page header — is the guide agent's
  * system message, assembled in `guide/agent.ts`.
  */
+/**
+ * What was said earlier in this conversation, as the model is told it.
+ *
+ * Placed after the page and the history and immediately before the goal: it is
+ * ours rather than the page author's, and the goal stays the last thing read
+ * (`GOAL_LEAD_IN`'s ordering discipline).
+ */
+function talkText(recent: readonly Talk[]): string {
+  const lines = recent.map((t) => `${t.who === 'user' ? '用户' : '你'}：${t.text}`);
+  return `这条对话在这之前说过的话（最近的在最后）：\n${lines.join('\n')}`;
+}
+
 export function buildGuideUserMessage(
   goal: string,
   table: PromptTable,
@@ -183,6 +196,8 @@ export function buildGuideUserMessage(
   nonce = nonceFor(toPromptText(table, fresh && new Set(fresh))),
   /** What woke the model, when a reading did (`CallModelParams.since`). */
   since?: Since,
+  /** What was said earlier in this conversation (`CallModelParams.recent`). */
+  recent?: readonly Talk[],
 ): string {
   // One serialisation, and the nonce is checked against *this* string: the
   // marks are part of what gets wrapped, so a nonce vetted against an unmarked
@@ -205,7 +220,8 @@ export function buildGuideUserMessage(
   // the last step there, and it is ours, not the page's.
   const past = history ? historyText(history, since?.page) : '';
   const woke = since ? sinceText(since, table.url) : '';
-  return [...contributions, wrap(serialized, nonce), past, woke, `${GOAL_LEAD_IN}\n${goal}`].filter(Boolean).join('\n\n');
+  const talk = recent?.length ? talkText(recent) : '';
+  return [...contributions, wrap(serialized, nonce), past, woke, talk, `${GOAL_LEAD_IN}\n${goal}`].filter(Boolean).join('\n\n');
 }
 
 /**

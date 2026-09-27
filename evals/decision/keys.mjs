@@ -27,7 +27,7 @@ const { annotations, skipped } = keysFromAnswers(states);
 const file = path.join(here, 'annotations.json');
 fs.writeFileSync(file, JSON.stringify(annotations, null, 2) + '\n');
 const by = {};
-for (const a of annotations) by[a.intent] = (by[a.intent] ?? 0) + 1;
+for (const a of annotations) for (const i of a.intents) by[i] = (by[i] ?? 0) + 1;
 console.log(
   `写入 ${path.relative(repo, file)}：${annotations.length}/${states.length} 个状态有标准答案（${Object.entries(by).map(([k, v]) => `${k} ${v}`).join('，')}）`,
 );

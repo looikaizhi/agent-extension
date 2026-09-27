@@ -40,15 +40,71 @@ export function pingTab(tabId: number, rev = 0): void {
 
 const ping = (conversation: Conversation): void => pingTab(conversation.tabId, conversation.rev);
 
+/**
+ * Tabs whose last write did not get through. In memory on purpose: it says
+ * something about right now, and a worker that restarts has no claim to know
+ * it any more.
+ */
+const full = new Set<number>();
+
+/** Whether this tab's conversation is currently failing to be written. */
+export const writesFailing = (tabId: number): boolean => full.has(tabId);
+
+/** What is kept when the store has room for almost nothing. */
+const KEEP_LAST = 10;
+
+const forget = (c: Conversation, keep: number): Conversation => ({
+  ...c,
+  entries: c.entries.slice(-keep),
+  dropped: (c.dropped ?? 0) + Math.max(0, c.entries.length - keep),
+});
+
+/**
+ * Writes it down, making room if there is none: the earliest entries go
+ * first, and how many went is written down with them.
+ *
+ * `storage.session` holds every tab's thread — element tables included — as
+ * well as every conversation, and it is one quota for all of them. A write
+ * that throws used to take the whole render path with it (the host `await`s
+ * these in thirteen places), and the thing that had just happened was lost
+ * with no trace at all. Losing the oldest lines of a long conversation to
+ * keep the newest is a poor outcome; losing what just happened, silently, is
+ * a worse one.
+ *
+ * `null` when even `KEEP_LAST` entries do not fit — then nothing was written,
+ * and the caller is told so rather than handed a conversation that only looks
+ * saved.
+ */
+async function store(tabId: number, c: Conversation): Promise<Conversation | null> {
+  const attempts = [c, forget(c, Math.ceil(c.entries.length / 2)), forget(c, KEEP_LAST)];
+  for (const attempt of attempts) {
+    try {
+      await chrome.storage.session.set({ [keyFor(tabId)]: attempt });
+      full.delete(tabId);
+      return attempt;
+    } catch {
+      // No room. The next attempt asks for less; the last one gives up.
+    }
+  }
+  full.add(tabId);
+  return null;
+}
+
 /** Read, change, write, tell — serialized per tab. Returns what was written. */
 function change(tabId: number, fn: (c: Conversation) => Conversation): Promise<Conversation> {
   return writes(`conv-${tabId}`, async () => {
     const before = await readConversation(tabId);
     const after = fn(before);
     if (after === before) return before;
-    await chrome.storage.session.set({ [keyFor(tabId)]: after });
-    ping(after);
-    return after;
+    const written = await store(tabId, after);
+    // Nothing was written, so nothing is claimed: the panel is still told to
+    // look again, and what it pulls says the store is full.
+    if (!written) {
+      pingTab(tabId, before.rev);
+      return before;
+    }
+    ping(written);
+    return written;
   });
 }
 

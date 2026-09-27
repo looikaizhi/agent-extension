@@ -1,5 +1,6 @@
 import { guideAgent } from '@/agent/agents/guide/agent';
 import { moduleOf } from '@/agent/agents/guide/registry';
+import { adviceFor } from '@/agent/provider/advice';
 import type { EffectFailureKind } from './effect';
 import type { MachineEffect, MachineInput, ThreadState } from './thread';
 import { docResultOf } from '@/agent/tools/read-doc';
@@ -19,7 +20,6 @@ import {
 } from './transitions';
 import { sameView } from '@/shared/view';
 import { tableOf } from '@/agent/context/turn';
-import { fixedPlan } from './fixed-plan';
 
 /**
  * The pure reducer at the center of the guided flow (design doc §3; its
@@ -59,12 +59,11 @@ import { fixedPlan } from './fixed-plan';
  * table has already moved to the page the user is on, but the steps still
  * belong to the page they left, and painting one there is L-4 — a confident
  * pointer at the wrong element. The next plan is on its way and will present
- * itself. A fixed plan carries descriptors only, so it can always be painted
- * against wherever the user is.
+ * itself.
  */
 export function stepOnScreen(state: ThreadState): Extract<MachineEffect, { kind: 'present' }> | null {
   if (state.ending || !state.steps[state.cursor]) return null;
-  if (state.planSource === 'model' && state.inflight) return null;
+  if (state.inflight) return null;
   return present(state);
 }
 
@@ -109,7 +108,6 @@ function handleStart(input: Extract<MachineInput, { kind: 'start' }>, nextRev: n
     // Nothing has been pointed at yet: the model's first answer is given on
     // the page the run starts on.
     pointedOn: input.table,
-    planSource: 'model',
     // §5.7: where a model-planned run starts on both axes (thread.ts's doc
     // comments on these two fields say what the other values mean).
     evidence: 'model',
@@ -131,7 +129,12 @@ function handleStart(input: Extract<MachineInput, { kind: 'start' }>, nextRev: n
  * one condition is a divergence no test would catch, so there is one table.
  */
 const FAILURE_TEXT: Record<EffectFailureKind, (detail: string) => string> = {
-  transport: (d) => `调用失败：${d}`,
+  // The endpoint's own words first, then — only when they name something the
+  // user can act on — one sentence saying what that is. A guide that dies
+  // against the thinking-mode wall says the same thing the settings page
+  // says about the same wall, from the same module, because two wordings for
+  // one condition is a divergence no test would catch.
+  transport: (d) => `调用失败：${d}${adviceFor(d) ? `\n${adviceFor(d)}` : ''}`,
   parse: (d) => `模型输出无法解析：${d}`,
   violation: (d) => `模型输出不合法：${d}`,
 };
@@ -165,7 +168,7 @@ function handleEffectResult(
   if (inflight.kind === 'fetchDoc') return handleDocFetched(state, input, nextRev);
 
   const unbilled = Math.max(0, input.outcome.providerCalls - 1);
-  const cleared: ThreadState = { ...state, inflight: null, callCount: state.callCount + unbilled };
+  const cleared: ThreadState = { ...state, inflight: null, callCount: state.callCount + unbilled, transportFails: 0 };
   // Every way this result can end the step's conversation without an answer —
   // refused, unreadable, someone else's answer — ends it here, and on the
   // step's last call ends the step too (`closeTurn`). Only a tool call carries
@@ -195,7 +198,19 @@ function handleEffectResult(
     // word, but only over text it actually receives). Saying 「调用失败」 to
     // a user whose plan was refused for naming a password field was wrong
     // twice over: the call succeeded, and the reason was worth telling.
-    return { state: closed, effects: [notify(FAILURE_TEXT[input.outcome.failureKind](input.outcome.error))] };
+    // A transport failure is not the model failing to answer — it is the trip
+    // failing: nothing came back to judge. The first one on this step is taken
+    // again rather than stopping the run, because a hiccup that ends a journey
+    // is a journey the user has to retype from the beginning.
+    const trip = input.outcome.failureKind === 'transport' && input.outcome.retryable;
+    // Only while this step still has a call to spend: asking again with an
+    // empty budget lands on 「这一步我已经想了 4 次」, which swallows the one
+    // thing the user needed to hear — that the trip never went through.
+    if (trip && !state.transportFails && cleared.stepCalls < STEP_CALLS)
+      return askAgain({ ...cleared, transportFails: 1 }, input.nextEffectId, nextRev);
+    // Twice in a row is not a hiccup. The user is told, and offered the one
+    // thing that costs them nothing to try: the same call again.
+    return { state: closed, effects: [notify(FAILURE_TEXT[input.outcome.failureKind](input.outcome.error), trip || undefined)] };
   }
 
   // Re-derived here, not trusted from the panel (§8.3, "判定权在 Host"). The
@@ -229,7 +244,14 @@ function handleEffectResult(
   // An endpoint that gave no id still gets a round the model can pair: the
   // effect id is unique, and made here rather than in the panel it is the same
   // on every replay of this input.
-  const call = { id: input.outcome.callId ?? `call_${input.effectId}`, name: envelope.intent, args: value };
+  const call = {
+    id: input.outcome.callId ?? `call_${input.effectId}`,
+    name: envelope.intent,
+    args: value,
+    // Carried, never read here: only the adapter that issued it knows what is
+    // in it, and the next request has to hand it back beside this call.
+    ...(input.outcome.reasoning ? { reasoning: input.outcome.reasoning } : {}),
+  };
   const ids = { nextEffectId: input.nextEffectId, nextRev, call };
   if (m.kind === 'tool') {
     // The step's last call offered only answers. An endpoint that answered
@@ -330,12 +352,8 @@ function handleToolResult(state: ThreadState, input: Extract<MachineInput, { kin
  * way standing (a `done` on the same view is kept); the user's own words never
  * do — that answer was for a goal they have since added to. So nothing waits
  * for it: what is out is called off, and the model is asked again now.
- *
- * A fixed plan has no model to wake; it consumes the reading itself
- * (`fixed-plan.ts`).
  */
 function handleReading(state: ThreadState, input: Extract<MachineInput, { kind: 'reading' }>, nextRev: number): StepOut {
-  if (state.planSource === 'fixed') return fixedPlan.onReading(state, input.reading, input.table);
   const read: ThreadState = {
     ...state,
     ...(input.table ? { table: input.table } : {}),
@@ -351,25 +369,10 @@ function handleReading(state: ThreadState, input: Extract<MachineInput, { kind: 
   return tryEmitCallModel(read, input.nextEffectId, nextRev);
 }
 
-/**
- * `step_skipped` — the user pressed 跳过 on the step on screen. A fixed plan
- * moves to its next step (`fixed-plan.ts`).
- *
- * A model-driven guide has no answer yet. Re-planning would hand back the very
- * step the user just declined, and nothing here can record "don't offer this
- * again"; so the guide stays where it is. What the button should say about
- * that is still an open question, and it is not this reducer's to invent.
- */
-function handleStepSkipped(state: ThreadState): StepOut {
-  if (state.planSource === 'fixed') return fixedPlan.onSkipped(state);
-  return { state, effects: [] };
-}
-
 function dispatch(state: ThreadState | null, input: MachineInput, nextRev: number): StepOut {
   // `start` is the one input that may replace a finished thread — that is the
   // user asking for something else, or asking again.
   if (input.kind === 'start') return handleStart(input, nextRev);
-  if (input.kind === 'start_fixed') return fixedPlan.start(input);
   if (!state) throw new Error(`machine.ts: no thread to apply a "${input.kind}" input to`);
 
   // A finished thread accepts nothing. Without this, an ending was a label
@@ -383,8 +386,10 @@ function dispatch(state: ThreadState | null, input: MachineInput, nextRev: numbe
   switch (input.kind) {
     case 'effect_result':
       return handleEffectResult(state, input, nextRev);
-    case 'step_skipped':
-      return handleStepSkipped(state);
+    // Nothing is in flight — the call that failed cleared it — so this is the
+    // ordinary 「ask again」 with everything the run already knows.
+    case 'retry':
+      return state.inflight ? { state, effects: [] } : askAgain(state, input.nextEffectId, nextRev);
     case 'reading':
       return handleReading(state, input, nextRev);
     case 'cross_site_decision':

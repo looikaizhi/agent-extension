@@ -69,7 +69,6 @@ export default defineContentScript({
           target.scrollIntoView({ block: 'center', behavior: 'smooth' });
           target.focus({ preventScroll: true });
         },
-        onSkip: () => presenter.skip(),
         onExit: () => {
           const current = presenter.current;
           if (current) emit({ type: 'SESSION_ENDED', sessionId: current.sessionId, reason: 'user_closed' });

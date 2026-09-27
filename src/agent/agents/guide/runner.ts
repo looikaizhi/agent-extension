@@ -1,8 +1,8 @@
 import type { ParseResult } from '@/agent/envelope/contract';
-import type { ChatMessage } from '@/agent/provider/provider';
-import type { ProviderConfig } from '@/shared/settings';
-import type { ToolDef } from '@/agent/provider/provider';
-import { complete, describeProviderError, ProviderError } from '@/agent/provider/provider';
+import { verdictFor, type ProviderConfig } from '@/shared/settings';
+import { callModel } from '@/agent/provider/call';
+import type { ModelContentPart, ModelMessage, ToolSpec } from '@/agent/provider/types';
+import { describeProviderError, ProviderError } from '@/agent/provider/transport';
 import type { EffectFailureKind, EffectUsage } from '@/agent/thread/effect';
 import { guideAgent, type GuideContext } from './agent';
 import type { GuideAgentEnvelope } from './registry';
@@ -15,8 +15,9 @@ import type { NonceCache } from '@/agent/context/nonce';
  * request to happen in the side panel while every decision about it belongs
  * to the pure reducer in the service worker.
  *
- * This file is the only place in `src/agent` that touches the network, and
- * it does so through `complete()` alone. `tests/unit/architecture.spec.ts`
+ * This file is the only place in `src/agent` that *asks* for the network, and
+ * it does so through `callModel()` alone — which asks `transport.ts`, the one
+ * file that actually opens a socket. `tests/unit/architecture.spec.ts`
  * forbids anything under `agent/host/` from reaching it — the host decides,
  * the runner executes, and nothing about that split changes just because the
  * two now sit under one directory.
@@ -68,6 +69,9 @@ export interface RunResult {
   /** The endpoint's id for that call, when it gave one — what a tool round is
    *  paired by when it is replayed to the model with its result. */
   callId?: string;
+  /** The reasoning the endpoint reported before that call, opaque, to go back
+   *  with its result. Absent on protocols that report none. */
+  reasoning?: Extract<ModelContentPart, { type: 'reasoning' }>;
 }
 
 /**
@@ -109,11 +113,20 @@ const addUsage = (a: EffectUsage | undefined, b: EffectUsage | undefined): Effec
   };
 };
 
-const requestEvent = (kind: 'request' | 'repair', messages: ChatMessage[], tools?: readonly ToolDef[]): RunEvent =>
+/** The text of a message, for the trace. Messages are content parts now; a
+ *  trace entry is not, and must not become one — see `Trace` in
+ *  `shared/types.ts` for what reads these strings and what silently breaks
+ *  when they stop being strings. */
+const textOf = (m: ModelMessage | undefined): string =>
+  (m?.content ?? [])
+    .map((part) => (part.type === 'text' ? part.text : ''))
+    .join('');
+
+const requestEvent = (kind: 'request' | 'repair', messages: readonly ModelMessage[], tools?: readonly ToolSpec[]): RunEvent =>
   ({
     kind,
-    system: messages[0]?.content ?? '',
-    user: messages[1]?.content ?? '',
+    system: textOf(messages[0]),
+    user: textOf(messages[1]),
     // Rendered, not the objects: the trace is something a person reads, and
     // the schema is the half of a tool-path request that is easiest to get
     // wrong and hardest to reconstruct afterwards.
@@ -124,7 +137,7 @@ export async function* runGuide(
   ctx: GuideContext,
   cfg: ProviderConfig,
   signal: AbortSignal,
-  completeFn: typeof complete = complete,
+  callFn: typeof callModel = callModel,
   /** Supplied by the panel so the element table lands on a cacheable prefix
    *  (`context/nonce.ts`). Absent means a fresh nonce per call, which is correct
    *  but pays full price for the table every time. */
@@ -136,10 +149,17 @@ export async function* runGuide(
   /** `text` is whatever will be parsed; `tool` names the function when the
    *  endpoint made a call. `content` is kept separately so the fallback below
    *  has something to read when it did not. */
-  type Said = { text: string; tool?: string; content: string; id?: string; finishReason?: string };
+  type Said = {
+    text: string;
+    tool?: string;
+    content: string;
+    id?: string;
+    finishReason?: string;
+    reasoning?: Extract<ModelContentPart, { type: 'reasoning' }>;
+  };
   const send = async (
-    messages: ChatMessage[],
-    tools?: readonly ToolDef[],
+    messages: readonly ModelMessage[],
+    tools?: readonly ToolSpec[],
   ): Promise<Said | { error: string; retryable: boolean }> => {
     calls += 1;
     let text = '';
@@ -156,27 +176,49 @@ export async function* runGuide(
      * one envelope is what this contract means, and a second would be the
      * endpoint answering a question nobody asked.
      */
-    const byIndex = new Map<number, { id?: string; name?: string; args: string }>();
+    const byIndex = new Map<number, { id?: string; name: string; args: string }>();
     let finishReason: string | undefined;
+    let reasoning: Extract<ModelContentPart, { type: 'reasoning' }> | undefined;
     try {
-      for await (const d of completeFn(cfg, messages, signal, tools ? { tools, toolChoice: 'required' } : undefined)) {
-        text += d.content;
-        if (d.tool) {
-          const at = byIndex.get(d.tool.index) ?? { args: '' };
-          at.args += d.tool.arguments;
-          // Identity arrives on the first fragment only; later ones omit it.
-          at.name ??= d.tool.name;
-          at.id ??= d.tool.id;
-          byIndex.set(d.tool.index, at);
+      for await (const d of callFn(cfg, messages, signal, tools ? { tools, toolChoice: 'required' } : undefined)) {
+        switch (d.type) {
+          case 'text-delta':
+            text += d.text;
+            break;
+          // The protocol says where a call begins, so nothing here guesses
+          // which fragment carries the name and the id. A wire that has no
+          // such event makes its adapter synthesize one — the guess survives,
+          // but only inside the one adapter that needs it.
+          case 'tool-input-start':
+            byIndex.set(d.index, { name: d.name, args: '', ...(d.id ? { id: d.id } : {}) });
+            break;
+          case 'tool-input-delta': {
+            const at = byIndex.get(d.index);
+            if (at) at.args += d.delta;
+            break;
+          }
+          case 'finish':
+            if (d.reason) finishReason = d.reason;
+            if (d.usage)
+              mine = {
+                prompt: d.usage.prompt,
+                completion: d.usage.completion,
+                total: d.usage.total,
+                ...(d.usage.cachedPrompt !== undefined ? { cachedPrompt: d.usage.cachedPrompt } : {}),
+              };
+            break;
+          // Kept whole, to be handed back with this call's result: OpenAI
+          // Responses requires the item it issued, and only that adapter
+          // knows what is inside it.
+          case 'reasoning':
+            reasoning = { type: 'reasoning', text: d.text, ...(d.providerOptions ? { providerOptions: d.providerOptions } : {}) };
+            break;
+          // `stream-start` carries what the adapter had to drop. Nothing reads
+          // it yet — it belongs on the Round (CONTEXT.md `Conversation`), and
+          // putting it there is not this change.
+          case 'stream-start':
+            break;
         }
-        if (d.finishReason) finishReason = d.finishReason;
-        if (d.usage)
-          mine = {
-            prompt: d.usage.prompt,
-            completion: d.usage.completion,
-            total: d.usage.total,
-            ...(d.usage.cachedPrompt !== undefined ? { cachedPrompt: d.usage.cachedPrompt } : {}),
-          };
       }
     } catch (err) {
       // Whatever the stream managed to report before it broke was still spent.
@@ -193,38 +235,61 @@ export async function* runGuide(
       ...(first?.name ? { tool: first.name } : {}),
       ...(first?.id ? { id: first.id } : {}),
       ...(finishReason ? { finishReason } : {}),
+      ...(reasoning ? { reasoning } : {}),
     };
   };
 
   /**
-   * Tool call first; prose second.
+   * An answer is a tool call. There is no second way to read one.
    *
-   * The second branch exists because `tool_choice: 'required'` is not
-   * universally honoured — several OpenAI-compatible endpoints do not document
-   * it at all, and an unlisted parameter is silently ignored rather than
-   * refused. On those, the model answers in text, and the tool path has
-   * nothing to read. Parsing that text as an envelope costs nothing on the
-   * path that was already about to fail, and it is the difference between
-   * "works on three endpoints" and "works on the ones that speak the wire".
+   * There used to be: text that parsed as an envelope was accepted, for an
+   * endpoint that ignores `tool_choice: 'required'` and answers in prose.
+   * **The mechanism worked and its tests were green — what was never wired up
+   * was the trigger.** It required an `intent` field in the envelope, and the
+   * system prompt has never taught an envelope format or used that word, so no
+   * model was ever told it could answer that way. Across 165 recorded states
+   * from real runs, zero answers arrived without a tool call. It was a path
+   * that lived only in a test file.
    *
-   * The envelope's own `intent` becomes the tool name, so everything
-   * downstream — the wire, the host's re-derivation, the provenance scan —
-   * sees one shape regardless of which branch produced it.
+   * What replaces it is better and earlier: an endpoint known not to honour
+   * forced tool calls is refused before the request goes out, where the user
+   * can be told something actionable — not after a call has been paid for.
    */
   const parseSaid = (said: Said): { result: ParseResult<GuideAgentEnvelope>; tool?: string; raw: string } => {
     if (said.tool) return { result: guideAgent.parseOutput(said.tool, said.text), tool: said.tool, raw: said.text };
-    if (!said.content.trim())
-      return { result: { kind: 'error', message: '端点既没有返回工具调用，也没有返回任何文字' }, raw: '' };
-    const asText = guideAgent.parseTextOutput(said.content);
-    if (asText.kind === 'ok') return { result: asText, tool: asText.envelope.intent, raw: said.content };
     return {
-      result: { kind: 'error', message: `端点没有返回工具调用，其文字回答也不是合法信封：${asText.message}` },
+      result: { kind: 'error', message: said.content.trim() ? '端点没有返回工具调用，只回了一段文字' : '端点既没有返回工具调用，也没有返回任何文字' },
       raw: said.content,
     };
   };
 
   const tools = guideAgent.outputSchema(ctx);
   const messages = guideAgent.buildMessages(ctx, nonceFor);
+
+  // Said before sending, not discovered after. Every answer this agent can
+  // give is a tool call, so an endpoint that ignores "you must call one"
+  // cannot drive this product at all — and finding that out from a reply
+  // means the call was already paid for and the user got a sentence about
+  // parsing instead of about their endpoint. `unknown` sends: nothing has
+  // asked these endpoints yet (`settings.ts`), and refusing them all would
+  // break every working configuration to guard against one that is not.
+  //
+  // Asked about the model this call names, not about the endpoint as a whole:
+  // one address serves models that answer the forced tool call and models that
+  // reply with prose, and refusing the good ones on the bad ones' account
+  // would be a gate nobody could get past.
+  if (verdictFor(cfg) === 'unsupported') {
+    return {
+      raw: '',
+      providerCalls: 0,
+      failure: {
+        kind: 'transport',
+        error: '这个端点会忽略「必须调用工具」，本产品在它上面跑不动——换一个模型或端点再验收一次；如果确认是误判，在设置里按「仍然按可用处理」。',
+        retryable: false,
+      },
+    };
+  }
+
   yield requestEvent('request', messages, tools);
 
   const first = await send(messages, tools);
@@ -283,18 +348,12 @@ export async function* runGuide(
     // and `context/nonce.ts` keeps it byte-identical, so the endpoint's cache
     // covers everything up to the appended pair (measured: 3584 of 3712
     // prompt tokens cached on a repeat call).
-    const repairMessages =
+    const repairMessages: readonly ModelMessage[] =
       first.tool && first.id
         ? [
             ...messages,
-            {
-              role: 'assistant' as const,
-              content: null,
-              tool_calls: [
-                { id: first.id, type: 'function' as const, function: { name: first.tool, arguments: first.text } },
-              ],
-            },
-            { role: 'tool' as const, tool_call_id: first.id, content: verdict.reason },
+            { role: 'assistant', content: [{ type: 'tool-call', toolCallId: first.id, toolName: first.tool, input: first.text }] },
+            { role: 'tool', content: [{ type: 'tool-result', toolCallId: first.id, output: verdict.reason }] },
           ]
         : messages;
     yield requestEvent('repair', repairMessages, tools);
@@ -333,6 +392,7 @@ export async function* runGuide(
     providerCalls: calls,
     ...(toolName ? { tool: toolName } : {}),
     ...(callId ? { callId } : {}),
+    ...(said.reasoning ? { reasoning: said.reasoning } : {}),
     ...(usage ? { usage } : {}),
   };
 }
@@ -344,11 +404,11 @@ export async function runGuideToEnd(
   ctx: GuideContext,
   cfg: ProviderConfig,
   signal: AbortSignal,
-  completeFn: typeof complete = complete,
+  callFn: typeof callModel = callModel,
   onEvent?: (e: RunEvent) => void,
   nonceFor?: NonceCache,
 ): Promise<RunResult> {
-  const it = runGuide(ctx, cfg, signal, completeFn, nonceFor);
+  const it = runGuide(ctx, cfg, signal, callFn, nonceFor);
   let n = await it.next();
   while (!n.done) {
     onEvent?.(n.value);

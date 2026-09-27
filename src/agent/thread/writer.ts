@@ -1,11 +1,12 @@
+import type { Talk } from '@/agent/conversation/entries';
 import { deadlineFor, judgeClaim, judgeRecovery, type DispatchedEffect, type EffectRequest } from './effect';
 import { step, stepOnScreen } from './machine';
 import { presentationIdOf } from './transitions';
 import type { Ending, ExternalEnding, MachineEffect, MachineInput } from './thread';
 import { contributionsFor, enabledPlugins, pluginsNamed } from '@/agent/context/plugins';
 import type { FlagStore } from '@/agent/flags';
-import { buildRunRecord } from './record';
-import { writeRunRecord, type RecordStore } from './record-store';
+import { buildRunRecord, type RunRecord } from './record';
+import { writeRunRecord, RUN_RECORDS_KEY, type RecordStore } from './record-store';
 import { createSerialQueue } from '@/shared/serial';
 import { decodeThread, encodeThread, type ThreadState } from './thread';
 import type { ThreadId, ThreadStore } from './ports';
@@ -33,6 +34,18 @@ const effectKeyFor = (id: ThreadId) => `effect:${id}`;
 /** When the tool the *host* is carrying out stops being worth waiting for. */
 const toolKeyFor = (id: ThreadId) => `tool:${id}`;
 const pluginsKeyFor = (id: ThreadId) => `plugins:${id}`;
+
+/** Every run this browser has recorded — `[]` when there are none, and on a
+ *  store that cannot be read: a Plugin missing its material is a paragraph
+ *  that does not appear, never a call that does not go out. */
+async function loadRunRecords(records: RecordStore): Promise<readonly RunRecord[]> {
+  try {
+    const stored = (await records.get(RUN_RECORDS_KEY))[RUN_RECORDS_KEY];
+    return Array.isArray(stored) ? (stored as RunRecord[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 /** The names of the Plugins a run started with — `[]` when none were on. */
 async function loadRunPlugins(store: ThreadStore, id: ThreadId): Promise<readonly string[]> {
@@ -64,6 +77,8 @@ export function toEffectRequest(
   deadline: number,
   /** What the enabled Plugins add to a model call's Context (`agent/context/plugins.ts`). */
   contributions: readonly string[] = [],
+  /** What was said earlier in this conversation (`CallModelParams.recent`). */
+  recent: readonly Talk[] = [],
 ): EffectRequest {
   if (effect.kind === 'callModel') {
     return {
@@ -75,6 +90,7 @@ export function toEffectRequest(
         table: effect.table,
         history: effect.history,
         ...(contributions.length ? { contributions } : {}),
+        ...(recent.length ? { recent } : {}),
         ...(effect.freshRefs?.length ? { freshRefs: effect.freshRefs } : {}),
         ...(effect.since ? { since: effect.since } : {}),
         ...(effect.final ? { final: effect.final } : {}),
@@ -104,6 +120,10 @@ export interface GuideEffectDeps {
    *  beside the trace switch, so a harness can set them before a run. Read
    *  once per run, when it starts. */
   flags: FlagStore;
+  /** What was said earlier in this tab's conversation, most recent last.
+   *  Injected rather than read here: the conversation lives in `chrome.storage`
+   *  and this layer may not touch it (N-1). */
+  recent: (threadId: ThreadId) => Promise<readonly Talk[]>;
   /** Called at most once per `applyGuideInput` call, only after this call's
    *  persistence has resolved (E-1) — never awaited internally, so a
    *  synchronous fake in a test can observe call order without racing a
@@ -206,7 +226,7 @@ async function applyGuideInputInner(
   threadId: ThreadId,
   input: GuideInput | WithoutNextId<Extract<MachineInput, { kind: 'reading' }>>,
 ): Promise<GuideReduction> {
-  const starting = input.kind === 'start' || input.kind === 'start_fixed';
+  const starting = input.kind === 'start';
   const prior = starting ? null : await loadGuideThread(deps.store, threadId);
 
   // The thread ended while this input was on its way. `dispatch` throws for any
@@ -238,13 +258,23 @@ async function applyGuideInputInner(
   // beside the thread — so every call it sends and its Run record agree, and a
   // switch changed mid-run applies from the next run.
   const startedWith = starting ? (await enabledPlugins(deps.flags)).map((p) => p.name) : undefined;
+  // Read here for the same reason the Plugins are: the conversation belongs to
+  // the host, and the reducer may not go looking for it.
+  const recent = dispatched?.kind === 'callModel' ? await deps.recent(threadId) : [];
+  // What this browser has already walked, for the Plugins that are made of it
+  // (`Memory`). Read here rather than in the Plugin: it is a storage call, and
+  // that layer may not make one.
   const contributions =
     dispatched?.kind === 'callModel'
-      ? contributionsFor(pluginsNamed(startedWith ?? (await loadRunPlugins(deps.store, threadId))), dispatched.table.url)
+      ? contributionsFor(
+          pluginsNamed(startedWith ?? (await loadRunPlugins(deps.store, threadId))),
+          dispatched.table.url,
+          await loadRunRecords(deps.records),
+        )
       : [];
   const req =
     dispatched && result.state.inflight
-      ? toEffectRequest(threadId, dispatched, result.state.inflight.at, deadlineFor(dispatched.kind, deps.now()), contributions)
+      ? toEffectRequest(threadId, dispatched, result.state.inflight.at, deadlineFor(dispatched.kind, deps.now()), contributions, recent)
       : null;
 
   const { state, effects } = result;
@@ -562,12 +592,26 @@ export function applySaid(
 ): Promise<GuideReduction | null> {
   return writes(threadId, async () => {
     const prior = await loadGuideThread(deps.store, threadId);
-    if (!prior || prior.planSource !== 'model' || prior.ending) return null;
+    if (!prior || prior.ending) return null;
     return applyGuideInputInner(deps, threadId, { kind: 'reading', reading: { kind: 'said', text }, table: await read() });
   });
 }
 
 const ABOUT_THE_STEP: ReadonlySet<Reading['kind']> = new Set(['used', 'not_shown', 'not_found', 'not_actionable']);
+
+/**
+ * 「再试一次」 from the user, after a call that never got through.
+ *
+ * Guarded exactly like `applySaid`: without a thread there is no run to ask
+ * again for, and a finished one is not asked anything.
+ */
+export function retryGuideCall(deps: GuideEffectDeps, threadId: ThreadId): Promise<GuideReduction | null> {
+  return writes(threadId, async () => {
+    const prior = await loadGuideThread(deps.store, threadId);
+    if (!prior || prior.ending) return null;
+    return applyGuideInputInner(deps, threadId, { kind: 'retry', nextEffectId: deps.newEffectId() });
+  });
+}
 
 export function applyReading(
   deps: GuideEffectDeps,

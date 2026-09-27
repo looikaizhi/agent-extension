@@ -44,6 +44,7 @@ import { parseArgs } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { PLUGINS, pluginKey } from '@/agent/context/plugins';
 import { fingerprint } from '../fingerprint.ts';
+import { callsOf } from './calls.mjs';
 import { SHARED_OPTIONS, modelFrom, pluginsFrom, providerConfig, readEnv, runIdFrom } from '../options.ts';
 import { judge } from './arrival.ts';
 import { GOALS } from './goals.ts';
@@ -828,46 +829,6 @@ const describeLast = (s) =>
       ? `${s.action} ${s.role}「${s.name}」${s.behindCrossSiteCard ? '（在跨站确认卡后面）' : ''}`
       : `无（${s.why}）`;
 
-/**
- * Every model call a journey made, one log row each: the request's parameters
- * whole (the full element table among them), the outcome whole, and the
- * call's own trace.
- *
- * The trace comes from the result message itself — the panel sends each
- * call's trace back beside its result — so it pairs with its request by
- * `effectId` and is never cut short by the thread trace's 24-entry cap, which
- * a five-hop journey already fills.
- *
- * Every call, not the first of each hop: a page that arrives in two stages
- * re-plans twice, and a log that kept one call per hop lost a run's middle
- * reasoning. And whole, not field by field: a hand-written projection dropped
- * `tool`, `expect_after` and `previous_step` in turn as the envelope grew, and
- * each read downstream as the model having failed to produce it.
- *
- * `hop` is the hop whose window the request went out in; 0 is the opening plan.
- */
-function callsOf(w, marks, row) {
-  const results = new Map(w.filter((m) => m?.type === 'EFFECT_RESULT').map((m) => [m.effectId, m]));
-  const seen = new Set();
-  const out = [];
-  w.forEach((m, i) => {
-    if (m?.type !== 'EFFECT_REQUEST' || m.kind !== 'callModel' || seen.has(m.effectId)) return;
-    seen.add(m.effectId);
-    const result = results.get(m.effectId);
-    out.push({
-      kind: 'call',
-      pass: row.pass,
-      id: row.id,
-      seq: out.length + 1,
-      hop: marks.filter((k) => k.from <= i).at(-1)?.hop ?? 0,
-      effectId: m.effectId,
-      params: m.params,
-      outcome: result?.outcome ?? null,
-      trace: result?.trace ?? null,
-    });
-  });
-  return out;
-}
 
 /**
  * Ends the journey if it is still going, then reads the Run record every
@@ -915,7 +876,7 @@ export async function main({ run, goals, passes, plugins, model }) {
       host: a.host,
       cookies: (a.cookies ?? []).map((c) => `${c.name}=${c.value}`),
     })),
-    fingerprint: await fingerprint(),
+    fingerprint: fingerprint(),
   };
   logRecord({ kind: 'header', ...about });
   /** Versioned, unlike `raw/`: what the report, the pairing with the next run

@@ -54,7 +54,7 @@ function Thinking({ rounds, open, title }: { rounds: readonly ConversationRound[
   );
 }
 
-function Entry({ entry }: { entry: ConversationEntry }) {
+function Entry({ entry, onRetry }: { entry: ConversationEntry; onRetry?: () => void }) {
   if (entry.kind === 'said') return <div className="entry said">{entry.text}</div>;
 
   const body =
@@ -87,6 +87,14 @@ function Entry({ entry }: { entry: ConversationEntry }) {
       <>
         <Prose text={entry.text} />
         {entry.detail && <Prose text={entry.detail} />}
+        {/* A trip that failed, offered again. Only on the newest such note
+            (`onRetry` is passed for that one alone): an older failure has
+            already been overtaken by whatever happened after it. */}
+        {onRetry && (
+          <button className="retry" onClick={onRetry}>
+            再试一次
+          </button>
+        )}
         {entry.options && entry.options.length > 0 && (
           // Every candidate, none picked for the user (K-6): the answer is
           // theirs to type.
@@ -111,20 +119,38 @@ export function Conversation({
   conversation,
   pending,
   draft,
+  storageFull,
+  earlier,
+  onRetry,
   endRef,
 }: {
   conversation: ConversationData;
   pending: Pending;
+  /** The store had no room for the newest thing that happened. */
+  storageFull?: true;
+  /** Entries older than the ones shown: kept, but not carried on every pull. */
+  earlier?: number;
   /** What the model is writing right now, as far as it has arrived. */
   draft: string;
+  /** 「再试一次」 on the last call that never got through. */
+  onRetry?: () => void;
   /** The bottom of the list, so the newest entry can be scrolled to. */
   endRef?: React.Ref<HTMLDivElement>;
 }) {
   const working = pending.kind === 'thinking' || pending.kind === 'running_tool';
+  // Nothing to try again while something is already under way, and only the
+  // last word of the conversation can be the one still standing.
+  const last = conversation.entries.at(-1);
+  const retryable = !working && last?.canRetry ? last.id : null;
   return (
     <div className="conversation">
+      {/* 更早的话去哪了，以及此刻还写不写得下——都说出来，不让这条对话
+          悄悄地少掉东西。 */}
+      {conversation.dropped ? <div className="conversation-note">更早的 {conversation.dropped} 条已不再保留</div> : null}
+      {earlier ? <div className="conversation-note">更早还有 {earlier} 条，没有载入</div> : null}
+      {storageFull && <div className="conversation-note warn">这条对话写不下了：刚刚发生的事没能记下来</div>}
       {conversation.entries.map((e) => (
-        <Entry key={e.id} entry={e} />
+        <Entry key={e.id} entry={e} {...(e.id === retryable && onRetry ? { onRetry } : {})} />
       ))}
 
       {/* The turn that has not landed yet: what it has done so far, and what

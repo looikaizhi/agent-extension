@@ -1,5 +1,5 @@
 import { runGuideToEnd, type RunResult } from '@/agent/agents/guide/runner';
-import { complete } from '@/agent/provider/provider';
+import { callModel } from '@/agent/provider/call';
 import type { EffectUsage } from '@/agent/thread/effect';
 import type { ProviderConfig } from '@/shared/settings';
 import { contextFor, type State } from './corpus';
@@ -39,15 +39,15 @@ export async function replay(
   plugins: readonly string[],
   cfg: ProviderConfig,
   {
-    completeFn = complete,
+    callFn = callModel,
     wait = sleep,
     retries = RETRIES,
-  }: { completeFn?: typeof complete; wait?: (ms: number) => Promise<void>; retries?: number } = {},
+  }: { callFn?: typeof callModel; wait?: (ms: number) => Promise<void>; retries?: number } = {},
 ): Promise<Replay> {
   const ctx = contextFor(state, plugins);
   for (let attempt = 1; ; attempt++) {
     const started = Date.now();
-    const r = await runGuideToEnd(ctx, cfg, new AbortController().signal, completeFn);
+    const r = await runGuideToEnd(ctx, cfg, new AbortController().signal, callFn);
     const ms = Date.now() - started;
     if (r.failure?.kind === 'transport' && r.failure.retryable && attempt <= retries) {
       await wait(1000 * 2 ** (attempt - 1));

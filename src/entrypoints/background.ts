@@ -1,3 +1,6 @@
+import { walkedPaths } from '@/agent/context/memory';
+import { RUN_RECORDS_KEY } from '@/agent/thread/record-store';
+import { recentTalk } from '@/agent/conversation/entries';
 import type { ThreadId, ThreadStore } from '@/agent/thread/ports';
 import {
   applyGuideInput,
@@ -9,6 +12,7 @@ import {
   type PanelOpen,
   carryGuideThread,
   guideThreadExists,
+  retryGuideCall,
   endGuide,
   peekGuideEffect,
   peekGuideThread,
@@ -23,7 +27,16 @@ import { bindingFromAck } from '@/agent/thread/binding';
 import type { EffectRequest } from '@/agent/thread/effect';
 import { present, presentationIdOf } from '@/agent/thread/transitions';
 import { pendingOf, roundOf } from '@/agent/conversation/entries';
-import { addEntry, addRound, carryConversation, dropConversation, pingTab, readConversation, stampEntry } from '@/host/conversation-store';
+import {
+  addEntry,
+  addRound,
+  carryConversation,
+  dropConversation,
+  pingTab,
+  readConversation,
+  stampEntry,
+  writesFailing,
+} from '@/host/conversation-store';
 import type { ConversationView, EntryStep } from '@/shared/conversation';
 import { budgetFor } from '@/agent/budget';
 import { mergeTrace, traceKey } from '@/agent/agents/guide/trace';
@@ -46,7 +59,7 @@ import type {
 import { PANEL_PORT, sessionIdForTab, tabIdForSession } from '@/shared/protocol';
 import { buildOutline } from '@/shared/outline';
 import { ensureInjected, sendToTab } from '@/shared/rpc';
-import { MODEL_NOT_CONFIGURED, modelIsConfigured } from '@/agent/provider/provider';
+import { MODEL_NOT_CONFIGURED, modelIsConfigured } from '@/agent/provider/call';
 import { loadConfig } from '@/shared/settings';
 
 /**
@@ -181,6 +194,8 @@ const guideEffectDeps: GuideEffectDeps = {
   store: threadStore,
   records: recordStore,
   flags: { get: (key) => chrome.storage.local.get(key) },
+  // 「刚才说过的话」是这条对话的，而对话是宿主的：agent 层不去找它，宿主交给它。
+  recent: async (threadId) => recentTalk((await readConversation(tabIdForSession(threadId))).entries, RECENT_TALK),
   send: (req) => void dispatchEffect(req),
   now: () => Date.now(),
   newEffectId: () => crypto.randomUUID(),
@@ -295,6 +310,26 @@ async function carryGuideToTab(to: number, tab: chrome.tabs.Tab): Promise<boolea
  */
 const couldBeGuided = (url: string | undefined): boolean => Boolean(url?.startsWith('http'));
 
+/**
+ * How many entries a pull carries.
+ *
+ * The panel pulls the whole view, and while something is under way it pulls
+ * every two seconds — so what crosses the wire is the length of the
+ * conversation times how long the user watches it. Nothing is deleted for
+ * this: the tail is what anyone is looking at, and `earlier` says how much
+ * came before it.
+ */
+const VIEW_ENTRIES = 80;
+
+/**
+ * How much of the conversation a new call is told about.
+ *
+ * Three turns and 300 characters a line: enough for 「这些产品」 to have
+ * something to refer to, and small beside the element table a call already
+ * carries (four thousand tokens and up), so continuity costs a rounding error.
+ */
+const RECENT_TALK = { turns: 3, chars: 300 };
+
 const DEFAULT_TITLE = '页面引导';
 const WAITING_TITLE = '引导在等侧栏：点这里打开侧栏，引导就会接着走';
 
@@ -378,8 +413,8 @@ async function renderGuideOutcome(
   /** Something to read that is not a step: it goes into the conversation, and
    *  onto the overlay's card now — or, when this reduction ends the run, once
    *  the run has been settled (the clearing would take it with it). */
-  const note = async (text: string, detail?: string) => {
-    await addEntry(tabId, { at: Date.now(), kind: 'note', text, ...(detail ? { detail } : {}) });
+  const note = async (text: string, detail?: string, canRetry?: true) => {
+    await addEntry(tabId, { at: Date.now(), kind: 'note', text, ...(detail ? { detail } : {}), ...(canRetry ? { canRetry } : {}) });
     if (outcome.ending) closingNote = text;
     else await say(tabId, { kind: 'note', title: '提示', text });
   };
@@ -415,9 +450,7 @@ async function renderGuideOutcome(
           ...(usage ? { usage } : {}),
         },
         true,
-        // A fixed plan reaches the screen without a model call; there is no
-        // round to show for it.
-        state.planSource === 'model' ? { tool: 'point', ...(usage ? { usage } : {}) } : undefined,
+        { tool: 'point', ...(usage ? { usage } : {}) },
       );
 
       // Nothing else in what the paint says is written down. It used to be:
@@ -476,7 +509,6 @@ async function renderGuideOutcome(
             mode: 'explain',
             step: outline,
             autoScroll: true,
-            skippable: false,
           },
         });
       }
@@ -540,7 +572,6 @@ async function renderGuideOutcome(
             mode: 'explain',
             step: outline,
             autoScroll: true,
-            skippable: false,
           },
         });
       }
@@ -591,7 +622,7 @@ async function renderGuideOutcome(
             : `引导在原地打转，已经停下：${effect.why}`;
       await note(text);
     } else if (effect.kind === 'notify') {
-      await note(effect.message);
+      await note(effect.message, undefined, effect.canRetry);
     } else if (effect.kind === 'cancel') {
       broadcastEffectAbort(effect.effectId);
     }
@@ -642,8 +673,14 @@ async function conversationView(tabId: number): Promise<ConversationView> {
   const shown = thread && !thread.ending ? shownOn(thread) : null;
   const presentationId = thread && shown ? presentationIdOf(threadId, thread) : null;
   const entry = presentationId ? conversation.entries.find((e) => e.step?.presentationId === presentationId) : undefined;
+  const tail =
+    conversation.entries.length > VIEW_ENTRIES
+      ? { ...conversation, entries: conversation.entries.slice(-VIEW_ENTRIES) }
+      : conversation;
   return {
-    conversation,
+    conversation: tail,
+    ...(tail === conversation ? {} : { earlier: conversation.entries.length - VIEW_ENTRIES }),
+    ...(writesFailing(tabId) ? { storageFull: true as const } : {}),
     pending: pendingOf(thread, { panelOpen: await aPanelIsOpen(), lastEntry: conversation.entries.at(-1) ?? null }),
     step:
       shown && entry
@@ -653,7 +690,6 @@ async function conversationView(tabId: number): Promise<ConversationView> {
             ...(shown.step.detail !== undefined ? { detail: shown.step.detail } : {}),
             index: shown.index,
             total: shown.total,
-            skippable: thread!.planSource === 'fixed',
           }
         : null,
   };
@@ -689,8 +725,7 @@ async function redrawGuide(tabId: number) {
 
 /**
  * One guide step onto the page — the single place a step's `HighlightCommand`
- * is built, for the first time it is shown and every repaint after. 跳过 is
- * offered only where it does something: a fixed plan.
+ * is built, for the first time it is shown and every repaint after.
  */
 async function paintStep(tabId: number, threadId: ThreadId, state: ThreadState, effect: PresentEffect) {
   return await sendToTab(tabId, {
@@ -704,28 +739,81 @@ async function paintStep(tabId: number, threadId: ThreadId, state: ThreadState, 
       step: effect.step,
       progress: { index: effect.index, total: effect.total },
       autoScroll: true,
-      skippable: state.planSource === 'fixed',
     },
   });
 }
 
 /**
- * The steps of a plan that needs no planning — the inspector's, handed over
- * whole — or `null` when this goal is the model's to plan.
+ * 「指给我」 from the element inspector: outline the one element the user picked,
+ * and nothing else.
  *
- * `ref` and `alsoRefs` are dropped from handed-over steps. A ref only means
- * something inside the snapshot it was drawn from, and the host is about to
- * take its own; carried across, a panel-side `e12` would be read against the
- * host's snapshot, where it can name a different element — L-4, the one hard
- * zero. The descriptor is what survives a snapshot, and binding from it happens
- * when the step is painted.
+ * It starts no run, which is the whole point. It used to land a one-step
+ * `Fixed plan` — a second state machine in the thread layer, complete with its
+ * own advance rules, a 跳过 button and a Run record — to paint one box the user
+ * had already chosen for themselves. Nothing predicted it and nothing had to be
+ * confirmed, so there was nothing for a run to decide.
+ *
+ * `mode: 'guide'` rather than `'explain'`: the box should survive the page
+ * re-rendering under it, and only that mode rebinds from the descriptor.
+ * Readings the overlay reports about it (used, lost, not actionable) reach a
+ * tab with no thread and are dropped, which is correct — nobody asked.
+ *
+ * `ref` and `alsoRefs` are dropped from what the panel hands over. A ref only
+ * means something inside the snapshot it was drawn from; carried across, a
+ * panel-side `e12` would be read against the snapshot taken here, where it can
+ * name a different element — L-4, the one hard zero.
  */
-function fixedStepsFor(steps: readonly GuideStep[] | undefined): [GuideStep, ...GuideStep[]] | null {
-  const [first, ...rest] = (steps ?? []).map(({ ref: _ref, alsoRefs: _alsoRefs, ...identity }) => identity);
-  return first ? [first, ...rest] : null;
+async function outlineByHand(tabId: number, handed: GuideStep): Promise<boolean> {
+  if (!(await ensureInjected(tabId))) {
+    await addEntry(tabId, {
+      at: Date.now(),
+      kind: 'note',
+      text: '这个页面上用不了',
+      detail: '浏览器不允许扩展在这种页面上运行（chrome:// 开头的页面、应用商店、其它扩展的页面、PDF，以及没给本扩展访问权限的站点）。',
+    });
+    return false;
+  }
+  const { ref: _ref, alsoRefs: _also, ...step } = handed;
+
+  // One extraction, for the two things a `HighlightCommand` cannot be built
+  // without: which page this is (`view`) and which snapshot the renderer's fast
+  // path may trust. The host has no `tabs` permission, so the address itself
+  // can only come from the content script (CONTEXT.md `Thread`).
+  const cfg = await loadConfig();
+  const ex = await sendToTab(tabId, { type: 'EXTRACT', profile: 'interactive', budget: budgetFor(cfg.contextWindow) });
+  if (!ex.ok) {
+    await addEntry(tabId, { at: Date.now(), kind: 'note', text: `读不到这个页面的内容：${ex.message}` });
+    return false;
+  }
+
+  // One overlay, one owner: a guide running in this tab believes its step is on
+  // screen, so painting over it would leave the run pointing at something the
+  // user cannot see. Ended the same way 结束引导 ends it.
+  await endGuideForTab(tabId, 'superseded');
+
+  const sessionId = sessionIdForTab(tabId);
+  const painted = await sendToTab(tabId, {
+    type: 'HIGHLIGHT',
+    command: {
+      sessionId,
+      presentationId: `${sessionId}#byhand:${ex.data.snapshotId}`,
+      snapshotId: ex.data.snapshotId,
+      view: ex.data.url,
+      mode: 'guide',
+      step,
+      autoScroll: true,
+    },
+  });
+  await addEntry(tabId, {
+    at: Date.now(),
+    kind: 'note',
+    text: painted.ok ? `已经在页面上框出「${step.title}」` : `没能框出「${step.title}」：${painted.message}`,
+    ...(step.detail !== undefined ? { detail: step.detail } : {}),
+  });
+  return painted.ok;
 }
 
-async function startGuide(tabId: number, req: { goal: string; steps?: readonly GuideStep[] }) {
+async function startGuide(tabId: number, req: { goal: string }) {
   // Every refusal below says so in the conversation. A refusal the user
   // cannot see is what left the panel on 「正在想…」 for good: the host knew,
   // and nobody was told.
@@ -741,19 +829,16 @@ async function startGuide(tabId: number, req: { goal: string; steps?: readonly G
 
   const threadId = sessionIdForTab(tabId);
 
-  // One entry, one run at a time (08b). What the user says while a model
-  // guide is going is said *to* it — a reading it wakes on, whether it turns
-  // out to be a question on the way or a change of what to do. Only when
-  // nothing is there to hear it does a new run start. A plan handed over
-  // whole (the inspector's row) always starts one.
-  if (!req.steps) {
-    const heard = await applySaid(guideEffectDeps, threadId, req.goal, async () =>
-      (await ensureInjected(tabId)) ? await extractNow(tabId) : null,
-    );
-    if (heard) {
-      await renderGuideOutcome(tabId, threadId, heard);
-      return true;
-    }
+  // One entry, one run at a time (08b). What the user says while a guide is
+  // going is said *to* it — a reading it wakes on, whether it turns out to be a
+  // question on the way or a change of what to do. Only when nothing is there
+  // to hear it does a new run start.
+  const heard = await applySaid(guideEffectDeps, threadId, req.goal, async () =>
+    (await ensureInjected(tabId)) ? await extractNow(tabId) : null,
+  );
+  if (heard) {
+    await renderGuideOutcome(tabId, threadId, heard);
+    return true;
   }
 
   // A new guide gets a fresh debug trace. Threads are keyed by tab and so is
@@ -765,18 +850,13 @@ async function startGuide(tabId: number, req: { goal: string; steps?: readonly G
   // destroy it.
   await chrome.storage.session.remove(traceKey(threadId)).catch(() => {});
 
-  // A plan handed over whole — the inspector's row — runs as a fixed plan:
-  // landed as given, never planned, never billed. Everything else is the
-  // model's.
-  //
   // Without a model there is nothing to plan with, and saying so is the
   // answer. This used to fall back to the local lexical matcher, which on real
   // pages almost never produced a usable one — four live github.com goals in
   // two languages all got a wrong or ambiguous single highlight — and every
   // e2e fixture was small enough to hide that.
-  const steps = fixedStepsFor(req.steps);
   const cfg = await loadConfig();
-  if (!steps && !modelIsConfigured(cfg)) {
+  if (!modelIsConfigured(cfg)) {
     await addEntry(tabId, { at: Date.now(), kind: 'note', text: MODEL_NOT_CONFIGURED });
     return false;
   }
@@ -804,9 +884,7 @@ async function startGuide(tabId: number, req: { goal: string; steps?: readonly G
   const outcome = await applyGuideInput(
     guideEffectDeps,
     threadId,
-    steps
-      ? { kind: 'start_fixed', goal: req.goal, table, steps }
-      : { kind: 'start', goal: req.goal, table, effectId: guideEffectDeps.newEffectId() },
+    { kind: 'start', goal: req.goal, table, effectId: guideEffectDeps.newEffectId() },
   );
   await renderGuideOutcome(tabId, threadId, outcome);
   return true;
@@ -842,9 +920,7 @@ export default defineBackground(() => {
     if (m.type === 'POINT_AT') {
       const r = m as Extract<HostRequest, { type: 'POINT_AT' }>;
       void (async () => {
-        await addEntry(r.tabId, { at: Date.now(), kind: 'said', text: r.goal });
-        const ok = await startGuide(r.tabId, { goal: r.goal, steps: r.steps });
-        sendResponse({ ok });
+        sendResponse({ ok: await outlineByHand(r.tabId, r.step) });
       })();
       return true;
     }
@@ -890,15 +966,35 @@ export default defineBackground(() => {
 
     // The panel's pinned card offers 跳过 for a fixed plan, the same gesture
     // the overlay's own button makes.
-    if (m.type === 'SKIP_STEP') {
-      const { tabId } = m as Extract<HostRequest, { type: 'SKIP_STEP' }>;
+    if (m.type === 'GET_MEMORY') {
       void (async () => {
-        await ifGuiding(tabId, async (id) => {
-          const t = await peekGuideThread(threadStore, id);
-          if (t) await stampEntry(tabId, presentationIdOf(id, t), 'skipped');
-          await renderGuideOutcome(tabId, id, await applyGuideInput(guideEffectDeps, id, { kind: 'step_skipped' }));
-        });
-        sendResponse({ ok: true });
+        const stored = (await chrome.storage.local.get(RUN_RECORDS_KEY))[RUN_RECORDS_KEY];
+        sendResponse({ paths: walkedPaths(Array.isArray(stored) ? stored : []) });
+      })();
+      return true;
+    }
+
+    if (m.type === 'FORGET_MEMORY') {
+      const { runId } = m as Extract<HostRequest, { type: 'FORGET_MEMORY' }>;
+      void (async () => {
+        const stored = (await chrome.storage.local.get(RUN_RECORDS_KEY))[RUN_RECORDS_KEY];
+        const records = (Array.isArray(stored) ? stored : []) as { runId: string }[];
+        // 忘掉的是那一趟的记录本身，不是给它加一个「别看这条」的标记：用户说
+        // 删，留着一份影子副本就是没删。
+        const kept = runId ? records.filter((r) => r.runId !== runId) : [];
+        await chrome.storage.local.set({ [RUN_RECORDS_KEY]: kept });
+        sendResponse({ ok: true, left: kept.length });
+      })();
+      return true;
+    }
+
+    if (m.type === 'RETRY_GUIDE') {
+      const { tabId } = m as Extract<HostRequest, { type: 'RETRY_GUIDE' }>;
+      void (async () => {
+        const threadId = sessionIdForTab(tabId);
+        const outcome = await retryGuideCall(guideEffectDeps, threadId);
+        if (outcome) await renderGuideOutcome(tabId, threadId, outcome);
+        sendResponse({ ok: Boolean(outcome) });
       })();
       return true;
     }
@@ -1084,14 +1180,6 @@ export default defineBackground(() => {
       void readingArrived(from, { kind: 'target_lost' });
     }
     if (m.type === 'PAGE_STRUCTURE_CHANGED') void readingArrived(from, { kind: 'changed' });
-    // A fixed plan moves to its next step; a model-driven guide stays where it
-    // is (`handleStepSkipped` says why).
-    if (m.type === 'STEP_SKIPPED')
-      void ifGuiding(from, async (id) => {
-        const t = await peekGuideThread(threadStore, id);
-        if (t) await stampEntry(from, presentationIdOf(id, t), 'skipped');
-        await renderGuideOutcome(from, id, await applyGuideInput(guideEffectDeps, id, { kind: 'step_skipped' }));
-      });
     // Closing the overlay ends the run, and for a model-driven one that means
     // money: the call still in flight is abandoned rather than paid for and
     // thrown away. This used to clean up the old host only, so a model-driven run left its
@@ -1157,7 +1245,15 @@ export default defineBackground(() => {
       // so the switch below sees no url to judge and no page to read. This is
       // where that tab finishes arriving — and the reading right after is the
       // one the carried run continues on.
-      if (tab.active) await carryGuideToTab(tabId, tab);
+      //
+      // Asked again rather than read off `tab`: when a tab is created in the
+      // foreground, its activation and its loading race, and the snapshot this
+      // listener is handed can still say `active: false` for the tab the user
+      // is already looking at. Both events then decline to carry the run — the
+      // switch because there was no page yet, this one because of a stale
+      // flag — and it stays on the tab they left.
+      const now = await chrome.tabs.get(tabId).catch(() => null);
+      if (now?.active) await carryGuideToTab(tabId, now);
       await readingArrived(tabId, { kind: 'loaded', url: tab.url ?? '' });
     })();
   });

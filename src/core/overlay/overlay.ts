@@ -55,9 +55,6 @@ export interface StepView {
   looking?: string;
   /** Extra holes with no pulse and no card anchor: what backs an answer, an ask's candidates. */
   alsoRects?: Rect[];
-  /** Offer 跳过 — both buttons, the step row's and the lost screen's. A button
-   *  that does nothing when pressed is worse than no button. */
-  skippable: boolean;
   /** Only outline: what backs an answer, or an ask's candidates. No step card —
    *  there is no step, and the words are on the message card. */
   outline?: boolean;
@@ -65,7 +62,6 @@ export interface StepView {
 
 export interface OverlayCallbacks {
   onNext(): void;
-  onSkip(): void;
   onExit(): void;
   onRetry(): void;
   /** The message card was closed with 关闭. */
@@ -126,7 +122,6 @@ export class Overlay {
     const bindAll = (sel: string, fn: () => void) =>
       this.root.querySelectorAll(sel).forEach((b) => b.addEventListener('click', fn));
     bindAll('.btn-next', () => this.cb.onNext());
-    bindAll('.btn-skip', () => this.cb.onSkip());
     bindAll('.btn-exit', () => this.cb.onExit());
     bindAll('.btn-retry', () => this.cb.onRetry());
     bindAll('.btn-m-close', () => this.said && this.cb.onCloseMessage(this.said.kind));
@@ -178,14 +173,8 @@ export class Overlay {
     }
   };
 
-  private canSkip = false;
-
   setStep(step: StepView): void {
-    this.canSkip = step.skippable;
     this.outlineOnly = step.outline === true;
-    this.root
-      .querySelectorAll<HTMLElement>('.btn-skip')
-      .forEach((b) => (b.style.display = step.skippable ? '' : 'none'));
     const p = step.progress;
     this.root.querySelector('.step-n')!.textContent = !p ? '' : p.total === null ? `第 ${p.index + 1} 步` : `步骤 ${p.index + 1} / ${p.total}`;
     this.root.querySelector('.title')!.textContent = step.title;
@@ -361,7 +350,6 @@ export class Overlay {
       visible: this.visible,
       rect: this.lastRect,
       status: this.status,
-      canSkip: this.canSkip,
       waiting: this.root.querySelector('.waiting')!.textContent !== '',
       message: this.said
         ? {
@@ -517,12 +505,10 @@ const TEMPLATE = `
   <div class="looking"></div>
   <div class="row step-actions">
     <button class="btn-next primary" title="把焦点移到目标上，之后按回车或空格即可触发——扩展不代你操作">跳到目标</button>
-    <button class="btn-skip">跳过</button>
     <button class="btn-exit">结束</button>
   </div>
   <div class="row lost-actions" style="display:none">
     <button class="btn-retry primary">重试定位</button>
-    <button class="btn-skip">跳过此步</button>
     <button class="btn-exit">结束引导</button>
   </div>
 </div>

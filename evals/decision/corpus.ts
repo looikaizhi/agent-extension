@@ -1,9 +1,10 @@
-import { guideAgent, type GuideContext } from '@/agent/agents/guide/agent';
+import type { GuideContext } from '@/agent/agents/guide/agent';
 import { contributionsFor, pluginsNamed } from '@/agent/context/plugins';
 import type { GuideHistory } from '@/agent/context/user-message';
 import type { CallModelParams, EffectOutcome } from '@/agent/thread/effect';
 import type { PromptTable } from '@/core/extractor/types';
 import type { Ref, Trace } from '@/shared/types';
+import { NONCE, renderedCall } from '../rendered';
 
 /**
  * The Decision eval's corpus: states, one model call each, taken apart from
@@ -18,9 +19,6 @@ import type { Ref, Trace } from '@/shared/types';
  * byte for byte, the table wrapper's random marker aside.
  */
 
-/** The wrapper around the element table carries a random marker (S-01).
- *  Pinned to one value on both sides, so everything else can be compared. */
-const NONCE = '00000000-0000-4000-8000-000000000000';
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g;
 const pin = (s: string) => s.replace(UUID, NONCE);
 
@@ -120,20 +118,20 @@ export function contextFor(state: State, plugins: readonly string[] = state.plug
   return { ...state.context, contributions: contributionsFor(pluginsNamed(plugins), state.context.table.url) };
 }
 
-/** The call a state records, rebuilt through today's code with the given Plugins. */
+/**
+ * The call a state records, rebuilt through today's code with the given
+ * Plugins.
+ *
+ * Rendered by `renderedCall`, the same function the fingerprint hashes — so
+ * "what the model read" means one thing in this repository rather than two
+ * that can quietly disagree.
+ */
 export function rebuild(
   state: State,
   plugins: readonly string[] = state.plugins,
 ): { system: string; tools: string; user: string; contributions: string[] } {
   const ctx = contextFor(state, plugins);
-  const contributions = [...(ctx.contributions ?? [])];
-  const [system, user] = guideAgent.buildMessages(ctx, () => NONCE);
-  return {
-    system: String(system!.content),
-    tools: JSON.stringify(guideAgent.outputSchema(ctx)),
-    user: String(user!.content),
-    contributions,
-  };
+  return { ...renderedCall(ctx), contributions: [...(ctx.contributions ?? [])] };
 }
 
 export type Part = 'contributions' | 'system' | 'tools' | 'user';

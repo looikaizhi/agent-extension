@@ -11,7 +11,7 @@ import { checkAnnotation, type Annotation, type GuideIntent } from './score';
  * pulled set of answer keys would be scored as if it were whole.
  */
 
-const INTENTS: readonly GuideIntent[] = ['point', 'done', 'ask', 'read_doc'];
+const INTENTS: readonly GuideIntent[] = ['point', 'done', 'ask', 'read_doc', 'explain'];
 
 /** The page's id for a state: `/` is not allowed in a document id. */
 export const docIdOf = (state: string) => state.replace(/\//g, '~');
@@ -22,13 +22,14 @@ export function annotationFrom(doc: unknown): Annotation {
   const d = ((doc as { data?: unknown })?.data ?? doc) as Record<string, unknown>;
   const state = d?.state;
   if (typeof state !== 'string' || !state) throw new RangeError('标注缺 state');
-  const intent = d.intent as GuideIntent;
-  if (!INTENTS.includes(intent)) throw new RangeError(`${state}：意图「${String(d.intent)}」不是 ${INTENTS.join('、')} 之一`);
-  if (intent !== 'point') return { state, intent };
+  const intents = (Array.isArray(d.intents) ? d.intents : []) as GuideIntent[];
+  if (!intents.length) throw new RangeError(`${state}：一个正确意图都没有`);
+  for (const i of intents) if (!INTENTS.includes(i)) throw new RangeError(`${state}：意图「${String(i)}」不是 ${INTENTS.join('、')} 之一`);
+  if (!intents.includes('point')) return { state, intents };
   const acceptable = Array.isArray(d.acceptable) ? d.acceptable : [];
   return {
     state,
-    intent,
+    intents,
     acceptable: acceptable.map((a: { ref?: unknown; actions?: unknown }) => {
       const actions = Array.isArray(a?.actions) ? a.actions.map(String) : [];
       const unknown = actions.filter((x) => !(GUIDE_STEP_ACTIONS as readonly string[]).includes(x));
@@ -59,7 +60,9 @@ export function keysFromAnswers(states: readonly State[]): { annotations: Annota
       skipped.push({ state: s.id, why: '当时没有回答' });
       continue;
     }
-    const p = o.tool ? guideAgent.parseOutput(o.tool, String(o.value)) : guideAgent.parseTextOutput(String(o.value));
+    // 没有工具调用就读不出来：散文兜底那条路已经删掉，而 165 条真机语料里
+    // 零命中——记录下来的回答全都来自工具调用。
+    const p = o.tool ? guideAgent.parseOutput(o.tool, String(o.value)) : ({ kind: 'error', message: '没有工具调用' } as const);
     if (p.kind !== 'ok') {
       skipped.push({ state: s.id, why: '当时的回答读不出' });
       continue;
@@ -71,8 +74,8 @@ export function keysFromAnswers(states: readonly State[]): { annotations: Annota
     }
     const a: Annotation =
       e.intent === 'point'
-        ? { state: s.id, intent: 'point', acceptable: [{ ref: e.ref!, actions: [e.action!] }] }
-        : { state: s.id, intent: e.intent as GuideIntent };
+        ? { state: s.id, intents: ['point'], acceptable: [{ ref: e.ref!, actions: [e.action!] }] }
+        : { state: s.id, intents: [e.intent as GuideIntent] };
     try {
       checkAnnotation(s.context.table, a);
       annotations.push(a);

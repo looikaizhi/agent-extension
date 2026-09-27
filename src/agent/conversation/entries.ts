@@ -72,6 +72,49 @@ export function roundOf(round: ToolRound, usage?: { prompt: number; completion: 
   };
 }
 
+/** One line of what was actually said, and by whom. */
+export interface Talk {
+  who: 'user' | 'guide';
+  text: string;
+}
+
+/** A turn starts when the user says something. */
+const TALKING: ReadonlySet<ConversationEntry['kind']> = new Set(['said', 'answer', 'ask']);
+
+/**
+ * What was said before the sentence this run is serving — the user's words and
+ * the guide's own answers, verbatim, most recent last.
+ *
+ * Only what the two of them said to each other: a step the guide pointed at is
+ * already in the run's `history`, with what became of it, and the host's own
+ * notes are bookkeeping rather than conversation.
+ *
+ * Everything from the last 「user said」 onwards is left out, because that is
+ * this run's own goal and the message already ends with it.
+ *
+ * Why at all: an `explain` that lands ends its run, so every question is a run
+ * of its own and the model could not see a word of what it had just answered.
+ * On a live pricing page the user asked 「那我要怎么打开看到这些产品呢」 and
+ * 「这些产品」 referred to a list the model had written one turn earlier — with
+ * nothing in the prompt to refer to, it re-derived the whole page from scratch.
+ */
+export function recentTalk(
+  entries: readonly ConversationEntry[],
+  { turns, chars }: { turns: number; chars: number },
+): Talk[] {
+  const last = entries.findLastIndex((e) => e.kind === 'said');
+  const before = last < 0 ? entries : entries.slice(0, last);
+  const said = before.map((e, i) => (e.kind === 'said' ? i : -1)).filter((i) => i >= 0);
+  const from = said.length > turns ? said[said.length - turns]! : 0;
+  return before
+    .slice(from)
+    .filter((e) => TALKING.has(e.kind))
+    .map((e) => ({
+      who: e.kind === 'said' ? ('user' as const) : ('guide' as const),
+      text: e.text.length > chars ? `${e.text.slice(0, chars)}…` : e.text,
+    }));
+}
+
 /** The next entry id for this conversation — unique, stable, and ordered. */
 const idFor = (conversation: Conversation): string => `${conversation.tabId}:${conversation.rev + 1}`;
 

@@ -1,5 +1,6 @@
+import type { Talk } from '@/agent/conversation/entries';
 import type { GuideHistory } from '@/agent/context/user-message';
-import type { Since, TurnOnWire } from '@/agent/context/turn';
+import type { Since, ToolCall, TurnOnWire } from '@/agent/context/turn';
 import type { PromptTable } from '@/core/extractor/types';
 import type { Ref } from '@/shared/types';
 
@@ -43,6 +44,12 @@ export interface CallModelParams {
    *  same reason `history` is: the prompt is built in the panel (CONTEXT.md
    *  `Panel`). */
   contributions?: readonly string[];
+  /** What was said earlier in this conversation — the user's words and the
+   *  guide's own answers, most recent last. Read on the host when the call is
+   *  sent (the conversation is the host's, `CONTEXT.md` `Conversation`) and
+   *  carried here for the same reason `history` is: the prompt is built in the
+   *  panel. Absent when nothing was said before this. */
+  recent?: readonly Talk[];
   /**
    * Refs that were not on this page a moment ago, when the page did not
    * navigate. Empty or absent everywhere else: on a fresh page everything is
@@ -144,6 +151,9 @@ export type EffectOutcome =
        *  as a call and its result paired by this id; the host makes one from
        *  the effect id when the endpoint gave none. */
       callId?: string;
+      /** The reasoning the endpoint reported before that call, opaque, to be
+       *  replayed with its result. Absent on protocols that report none. */
+      reasoning?: ToolCall['reasoning'];
     }
   | {
       ok: false;
@@ -169,12 +179,12 @@ export interface EffectResult {
 
 /**
  * §5.10/design doc's per-kind budget for how long a dispatched effect stays
- * legitimate. `callModel` is set above `provider.ts`'s own `TOTAL_TIMEOUT_MS`
+ * legitimate. `callModel` is set above `transport.ts`'s own `TOTAL_TIMEOUT_MS`
  * (120s) rather than equal to it: the panel's own SSE client already has a
  * total-timeout of its own, and the host declaring a call dead *before* the
  * panel's own client would have could discard a result that was always going
  * to arrive (as a `ProviderError`) on its own. `fetchDoc` has no streaming to
- * stall on, so it borrows `provider.ts`'s `STALL_TIMEOUT_MS` outright.
+ * stall on, so it borrows `transport.ts`'s `STALL_TIMEOUT_MS` outright.
  */
 export const CALL_MODEL_TIMEOUT_MS = 150_000;
 export const FETCH_DOC_TIMEOUT_MS = 30_000;

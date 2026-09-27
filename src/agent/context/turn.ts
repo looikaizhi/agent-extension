@@ -1,4 +1,5 @@
 import type { PromptTable } from '@/core/extractor/types';
+import type { ModelContentPart } from '@/agent/provider/types';
 import type { NotActionableWhy } from '@/shared/protocol';
 import type { Ref, WaitUntil } from '@/shared/types';
 
@@ -21,6 +22,17 @@ export interface ToolCall {
   id: string;
   name: string;
   args: string;
+  /**
+   * The reasoning the model did before this call, when the endpoint reported
+   * any — kept because it has to go back with the call's result.
+   *
+   * Opaque on purpose, the way `id` is: what OpenAI Responses wants returned
+   * is the item it issued, not a rendering of it, so the part carries the
+   * endpoint's own item inside `providerOptions` and the adapter that issued
+   * it is the only thing that reads it. A protocol that reports none leaves
+   * this absent and nothing downstream notices.
+   */
+  reasoning?: Extract<ModelContentPart, { type: 'reasoning' }>;
 }
 
 /** What a tool round sent back to the model. */

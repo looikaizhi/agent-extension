@@ -1,6 +1,6 @@
 import type { ToolCall } from '@/agent/context/turn';
 import type { EnvelopeShape } from '@/agent/envelope/contract';
-import type { ToolDef } from '@/agent/provider/provider';
+import type { ToolSpec } from '@/agent/provider/types';
 import type { ThreadState } from '@/agent/thread/thread';
 import type { StepOut } from '@/agent/thread/transitions';
 import type { PromptTable } from '@/core/extractor/types';
@@ -37,7 +37,7 @@ export interface GuideIntentModule<E extends { intent: string }> extends Envelop
    *  asked beside is not settled. Every other answer settles it. */
   readonly leavesStepOnScreen?: true;
   /** What the model is offered: this intent as a function it can call. */
-  tool(ctx: GuideContext): ToolDef;
+  tool(ctx: GuideContext): ToolSpec;
   /** Its line in the system message's tool-choice policy — the bar for reaching for it. */
   readonly policy: string;
   /** Every ref this envelope stakes a claim on — the set R-a and R-e run over. */

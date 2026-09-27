@@ -124,8 +124,8 @@ export interface GuideStep {
 }
 
 /**
- * `guide` is a step the user is meant to operate — the model's, or a fixed
- * plan's. `explain` only outlines: what backs an answer, or the candidates of
+ * `guide` is a step the user is meant to operate — the model's, or the one the
+ * element inspector paints by hand. `explain` only outlines: what backs an answer, or the candidates of
  * an ask. Nothing in it is to be clicked, so it is never rebound, never looked
  * for again and never judged for actionability.
  */
@@ -145,7 +145,7 @@ export interface HighlightCommand {
   sessionId: SessionId;
   /** CONTEXT.md's `Presentation`, issued by the host and never made up by the
    *  content script. The same id again is the same presentation painted again —
-   *  a reload, a fixed plan redrawn on a changed page — and keeps what it has
+   *  a reload, a step redrawn on a changed page — and keeps what it has
    *  running; a different id that reaches the screen ends everything the
    *  previous presentation left behind. */
   presentationId: string;
@@ -167,11 +167,6 @@ export interface HighlightCommand {
    *  backs an answer is not a step of anything. */
   progress?: { index: number; total: number | null };
   autoScroll: boolean;
-  /** Whether 跳过 does anything for this step. Only a fixed plan can move past
-   *  a step the user declined — a model-driven guide would re-plan and hand
-   *  the same step back — so the button is offered only there, and every skip
-   *  the side panel records is one that actually happened. */
-  skippable: boolean;
 }
 
 export type HighlightFailure =
@@ -272,7 +267,6 @@ export interface ContentRpcMap {
       visible: boolean;
       rect: Rect | null;
       status: string;
-      canSkip: boolean;
       waiting: boolean;
       /** The card shown when it is not a step, and where its buttons are. */
       message: (OverlayMessage & { buttons: { label: string; rect: Rect }[] }) | null;
@@ -331,9 +325,10 @@ export type HostRequest =
    *  nothing; otherwise it starts a run, and a run is recorded against it.
    *  Either way it goes into this tab's `Conversation` as the user's own words. */
   | { type: 'SAID'; tabId: number; text: string }
-  /** A plan handed over whole (the element inspector's row): it runs as given
-   *  and never reaches the model. */
-  | { type: 'POINT_AT'; tabId: number; goal: string; steps: readonly GuideStep[] }
+  /** The element inspector's 「指给我」: outline the one element the user picked
+   *  themselves. It paints and nothing more — no run is started, so nothing
+   *  watches whether they use it and nothing is written down. */
+  | { type: 'POINT_AT'; tabId: number; step: GuideStep }
   /** The panel's one authoritative read: this tab's conversation, what the run
    *  is doing right now, and the step pinned on screen. Answered with a
    *  `ConversationView`. Asked on mount, on every tab change, and whenever a
@@ -342,13 +337,20 @@ export type HostRequest =
   | { type: 'GET_CONVERSATION'; tabId: number }
   /** Ends whatever flow currently owns the tab, agent- or inspector-driven alike. */
   | { type: 'END_GUIDE'; tabId: number }
-  /** Skips the step on screen — the same gesture as the overlay's 跳过, from
-   *  the panel's pinned card. A fixed plan moves on; a model-driven guide
-   *  stays where it is (`handleStepSkipped`). */
-  | { type: 'SKIP_STEP'; tabId: number }
   /** The user's answer to P-2's card. Declining is not an error: the guide
    *  stays where it is with the step unshown, and spends nothing. */
   | { type: 'CROSS_SITE_DECISION'; tabId: number; confirmed: boolean }
+  /** What this browser has walked and still remembers (CONTEXT.md `Memory`),
+   *  newest first — for the one place the user can see it and take it back. */
+  | { type: 'GET_MEMORY' }
+  /** Forget one walked path, or all of them when `runId` is absent. The user
+   *  asked; nothing else ever removes them. */
+  | { type: 'FORGET_MEMORY'; runId?: string }
+  /** 「再试一次」 after a call that never got through. The same run asks
+   *  again — goal, steps and everything read so far stay where they are —
+   *  which is the whole point: retyping the goal would start a different one
+   *  and throw away the way already walked. */
+  | { type: 'RETRY_GUIDE'; tabId: number }
   /** The panel's "抽取本页元素", relayed rather than sent directly: the content
    *  script must answer to exactly one commander, and `tabId` must be
    *  interpreted in exactly one place rather than once per sender. */
@@ -485,7 +487,6 @@ export const EVENT_TYPES = [
   /** The user used the target of the step on screen — one of the four
    *  observation sources (CONTEXT.md `Reading`). */
   'STEP_USED',
-  'STEP_SKIPPED',
   'TARGET_LOST',
   /** Its counterpart. Without it the host's view of the session diverges from
    *  what is actually on screen the moment a lost step recovers. */
@@ -550,7 +551,6 @@ export type ContentEvent =
    * one — this is the one reading that records something about the step.
    */
   | { type: 'STEP_USED'; sessionId: SessionId; presentationId: string; how: 'clicked' | 'typed' }
-  | { type: 'STEP_SKIPPED'; sessionId: SessionId; stepIndex: number }
   | {
       type: 'TARGET_LOST';
       sessionId: SessionId;

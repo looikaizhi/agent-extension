@@ -1,31 +1,40 @@
 import { createHash } from 'node:crypto';
 import type { GuideContext } from '@/agent/agents/guide/agent';
-import { runGuideToEnd } from '@/agent/agents/guide/runner';
 import { PLUGINS, contributionsFor } from '@/agent/context/plugins';
-import type { ChatMessage, CompleteOptions, Delta, complete } from '@/agent/provider/provider';
 import type { PromptTable } from '@/core/extractor/types';
-import { DEFAULT_CONFIG } from '@/shared/settings';
 import { makeRef } from '@/shared/types';
+import { renderedCall } from './rendered';
 
 /**
  * Which version of "what the guide agent sends the model" an eval result was
- * produced with: a hash of the system message, the tool schema and a user
- * message, computed from the code that is running now.
+ * produced with: a hash of the three strings the model actually reads — the
+ * system message, the user message, and the tool schema — rendered by the code
+ * that is running now.
  *
  * Two results are directly comparable only when this matches; when it does
  * not, part of the difference between them is the prompt. Computed rather
  * than read from the frozen snapshot: that file is only as current as the last
  * unit-test run, and it lives under `tests/`, which is not versioned.
  *
- * The request is built by the real run loop against a recording `complete` —
- * the way the snapshot test captures it — so what is hashed is what would go
- * out, request options and all. The user message comes from one fixed input
- * with every registered Plugin's paragraph in it: a changed Skill text is a
- * changed prompt, whichever Plugins a given run turns on.
+ * **Three strings, and deliberately nothing else.** This used to hash the
+ * whole request — every message object and the request options with it — which
+ * answered a different question than the one it was asked: it moved whenever
+ * the *way* the request was sent changed, even with the prompt untouched to
+ * the byte. Sending is a wire format's business, and this product now speaks
+ * more than one; a fingerprint that a protocol can move would print "the
+ * prompt differs" on every run after a refactor that changed no prompt, and
+ * would retire every historical run's comparability along with it. The three
+ * strings are protocol-independent, so adding a protocol cannot reach this —
+ * `architecture.spec.ts` holds that by keeping the provider layer out of this
+ * file's imports entirely.
+ *
+ * > 口径改于 2026-09-24（旧口径下本仓最后一个值是 `3b8dfa64353b10a5`）。两种口
+ * > 径算出来的哈希不可互比——不是因为提示词变了，而是因为问的问题变了。
+ *
+ * The user message comes from one fixed input with every registered Plugin's
+ * paragraph in it: a changed Skill text is a changed prompt, whichever Plugins
+ * a given run turns on.
  */
-
-/** The wrapper's random marker, pinned so the rest can be compared. */
-const NONCE = '00000000-0000-4000-8000-000000000000';
 
 const TABLE: PromptTable = {
   snapshotId: 'fingerprint',
@@ -66,23 +75,12 @@ const CONTEXT: GuideContext = {
   freshRefs: [makeRef(0, 4)],
 };
 
-export async function fingerprint(): Promise<string> {
-  const sent: { messages: ChatMessage[]; options?: CompleteOptions }[] = [];
-  async function* recording(
-    _cfg: unknown,
-    messages: ChatMessage[],
-    _signal: AbortSignal,
-    options?: CompleteOptions,
-  ): AsyncGenerator<Delta> {
-    sent.push({ messages, ...(options ? { options } : {}) });
-    yield {
-      content: '',
-      tool: { index: 0, id: 'call_done', name: 'done', arguments: JSON.stringify({ evidence: 'content_on_page', why: '指纹' }) },
-    };
-  }
-  await runGuideToEnd(CONTEXT, DEFAULT_CONFIG, new AbortController().signal, recording as typeof complete, undefined, () => NONCE);
-  // A second request would be the repair round: the scripted answer stopped
-  // being valid, and the hash would cover a repair prompt nobody meant to pin.
-  if (sent.length !== 1) throw new Error(`指纹：运行循环发了 ${sent.length} 次请求，应当恰好 1 次`);
-  return createHash('sha256').update(JSON.stringify(sent[0])).digest('hex').slice(0, 16);
+/**
+ * Synchronous, and no longer driven through the run loop against a scripted
+ * endpoint. Rendering is all this needs, so a fake `complete` was one more
+ * thing to keep in step with the shape of a delta — it had already been
+ * rewritten once for that reason and was about to be again.
+ */
+export function fingerprint(): string {
+  return createHash('sha256').update(JSON.stringify(renderedCall(CONTEXT))).digest('hex').slice(0, 16);
 }

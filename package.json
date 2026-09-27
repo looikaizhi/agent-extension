@@ -18,6 +18,7 @@
     "eval:score": "node --experimental-strip-types evals/extract/score.mjs",
     "eval:decision": "node --experimental-transform-types --import ./evals/alias-loader-register.mjs evals/decision/run.mjs",
     "eval:task": "wxt build && node --experimental-transform-types --import ./evals/alias-loader-register.mjs evals/task/live-github-run.mjs",
+    "eval:record": "wxt build && node --experimental-transform-types --import ./evals/alias-loader-register.mjs evals/decision/record.mjs",
     "eval:sidepanel": "wxt build && node --experimental-transform-types --import ./evals/alias-loader-register.mjs evals/task/live-sidepanel-run.mjs"
   },
   "dependencies": {

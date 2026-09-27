@@ -32,11 +32,13 @@ const { states, skipped } = statesOf(rows);
 console.log(`轮次 ${run}：${states.length} 个状态${skipped.length ? `；${skipped.length} 次调用没成为状态` : ''}`);
 for (const s of skipped) console.log(`  跳过 ${s.call}：${s.why}`);
 
-const now = await fingerprint();
+const now = fingerprint();
 const then = states[0]?.fingerprint;
+// 同 run.mjs：陈述两个值，不替下面那道逐字节核对下结论——它就在几行之后，
+// 说得比指纹准。（指纹口径改于 2026-09-24，跨口径的两个值不可比。）
 if (then && then !== now)
   console.log(
-    `⚠️ 这一轮的快照指纹是 ${then}，当前代码是 ${now}：发给模型的东西已经变了，重拼对不上是意料之中。要从这一轮抽语料，就用产生它的那一版代码。`,
+    `⚠️ 这一轮的快照指纹是 ${then}，当前代码是 ${now}：下面的逐字节核对会说清还剩多少条对得上。要整批抽出来，就用产生它的那一版代码。`,
   );
 
 const good = [];

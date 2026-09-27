@@ -54,7 +54,9 @@ const parse = (v, tool) => {
   // function name, so scoring it with the text parser reports every answer as
   // "缺少 intent" — an instrument failure that reads like a total product
   // failure. It already cost one run's numbers.
-  const r = tool ? guideAgent.parseOutput(tool, v) : guideAgent.parseTextOutput(v);
+  // 没有工具调用就读不出来：散文兜底那条路已经删掉，而 165 条真机语料里零命中。
+  if (!tool) return null;
+  const r = guideAgent.parseOutput(tool, v);
   return r.kind === 'ok' ? r.envelope : null;
 };
 

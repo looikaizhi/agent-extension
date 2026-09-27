@@ -1,4 +1,5 @@
-import type { ChatMessage, ToolDef } from '@/agent/provider/provider';
+import type { Talk } from '@/agent/conversation/entries';
+import type { ModelContentPart, ModelMessage, ToolSpec } from '@/agent/provider/types';
 import type { Ref } from '@/shared/types';
 import type { PromptTable } from '@/core/extractor/types';
 import type { ParseResult } from '@/agent/envelope/contract';
@@ -10,7 +11,7 @@ import { INTENTS } from '@/agent/intents';
 import { refsViolation, type ValidateResult } from '@/agent/envelope/validate';
 import { CHOICE_GUIDE, LANGUAGE_GUIDE, MARK_GUIDE, TOOL_CHOICE_CLOSING, toolChoiceOpening } from '@/agent/prompts/system';
 import { buildGuideUserMessage, buildToolResultText, FINAL_CALL_TEXT } from '@/agent/context/user-message';
-import { parseContract, parseToolContract, type EnvelopeReader } from '@/agent/envelope/contract';
+import { parseToolContract, type EnvelopeReader } from '@/agent/envelope/contract';
 import { GUIDE_INTENT_MODULES, isRegistered, moduleFor, moduleOf, type GuideAgentEnvelope } from './registry';
 
 /**
@@ -64,6 +65,8 @@ export interface GuideContext {
    *  system message stays general; this is where a site's own vocabulary goes
    *  instead. */
   contributions?: readonly string[];
+  /** What was said earlier in this conversation (`CallModelParams.recent`). */
+  recent?: readonly Talk[];
   /** Refs that appeared since the last call, when the page did not navigate.
    *  Absent on the first call and after every navigation. */
   freshRefs?: readonly Ref[];
@@ -90,6 +93,11 @@ const GUIDE_SYSTEM = [
   MARK_GUIDE,
   LANGUAGE_GUIDE,
 ].join('\n\n');
+
+/** One message that is nothing but text. Parts rather than a bare string
+ *  because that is what every protocol can express; which of them collapses it
+ *  back to a string is the adapter's business, not this file's. */
+const said = (role: ModelMessage['role'], text: string): ModelMessage => ({ role, content: [{ type: 'text', text }] });
 
 /**
  * An envelope-shaped object whose `intent` is not one an agent answers with —
@@ -135,7 +143,7 @@ export const guideAgent = {
    * On a step's last call only the answers are offered: a step that has
    * looked three times has to say what it has, not look again.
    */
-  outputSchema: (ctx: GuideContext): ToolDef[] =>
+  outputSchema: (ctx: GuideContext): ToolSpec[] =>
     GUIDE_INTENT_MODULES.filter((m) => !ctx.final || m.kind === 'output').map((m) => m.tool(ctx)),
 
   /** The system message, verbatim — the same string `buildMessages` sends. */
@@ -154,18 +162,15 @@ export const guideAgent = {
    * On a step's last call one more message comes after everything, ours:
    * answer now (`FINAL_CALL_TEXT`). Last, so nothing before it changes.
    */
-  buildMessages: (ctx: GuideContext, nonces?: NonceCache): ChatMessage[] => {
+  buildMessages: (ctx: GuideContext, nonces?: NonceCache): ModelMessage[] => {
     const nonceOf = (t: PromptTable) => nonces?.(t.snapshotId, toPromptText(t));
     const opening = ctx.turn?.table ?? ctx.table;
     const fresh = ctx.turn ? ctx.turn.freshRefs : ctx.freshRefs;
     const since = ctx.turn ? ctx.turn.since : ctx.since;
     return [
-      { role: 'system', content: GUIDE_SYSTEM },
-      {
-        role: 'user',
-        content: buildGuideUserMessage(ctx.goal, opening, ctx.history, ctx.contributions, fresh, nonceOf(opening), since),
-      },
-      ...(ctx.turn?.rounds ?? []).flatMap((r): ChatMessage[] => {
+      said('system', GUIDE_SYSTEM),
+      said('user', buildGuideUserMessage(ctx.goal, opening, ctx.history, ctx.contributions, fresh, nonceOf(opening), since, ctx.recent)),
+      ...(ctx.turn?.rounds ?? []).flatMap((r): ModelMessage[] => {
         const read = tableOf(r.result);
         // One nonce per snapshot for a page; per call for a document, which is
         // the same text on every later round of the step.
@@ -173,13 +178,18 @@ export const guideAgent = {
         return [
           {
             role: 'assistant',
-            content: null,
-            tool_calls: [{ id: r.call.id, type: 'function', function: { name: r.call.name, arguments: r.call.args } }],
+            // The reasoning item first, then the call it reasoned toward — the
+            // order OpenAI Responses requires, and nothing for a protocol that
+            // reports none (`context/turn.ts`).
+            content: [
+              ...(r.call.reasoning ? [r.call.reasoning] : []),
+              { type: 'tool-call' as const, toolCallId: r.call.id, toolName: r.call.name, input: r.call.args },
+            ],
           },
-          { role: 'tool', tool_call_id: r.call.id, content: buildToolResultText(r.result, nonce) },
+          { role: 'tool', content: [{ type: 'tool-result', toolCallId: r.call.id, output: buildToolResultText(r.result, nonce) }] },
         ];
       }),
-      ...(ctx.final ? [{ role: 'user' as const, content: FINAL_CALL_TEXT }] : []),
+      ...(ctx.final ? [said('user', FINAL_CALL_TEXT)] : []),
     ];
   },
 
@@ -190,23 +200,6 @@ export const guideAgent = {
    */
   parseOutput: (toolName: string, rawArgs: string): ParseResult<GuideAgentEnvelope> =>
     parseToolContract(toolName, rawArgs, GUIDE_READER),
-
-  /**
-   * The fallback for an endpoint that does not honour `tool_choice: 'required'`
-   * and answers with prose instead of a call.
-   *
-   * That is not hypothetical: of the OpenAI-compatible endpoints whose docs
-   * were checked, only OpenAI, Kimi and DeepSeek list `required` at all —
-   * Qwen's parameter table has no `tool_choice` entry, Zhipu documents only
-   * `auto`, and Gemini's compatibility layer says unlisted parameters are
-   * silently ignored. On any of those the model may answer in text, and
-   * without this the whole guide dies with 「端点没有返回任何工具调用」.
-   *
-   * Producing free-text envelopes was deleted; *reading* one never was, and
-   * `contract.ts` still knows how. So the cost of this is one function call on
-   * a path that is already failing.
-   */
-  parseTextOutput: (raw: string): ParseResult<GuideAgentEnvelope> => parseContract(raw, GUIDE_READER),
 
   /**
    * Takes the table rather than a whole `GuideContext`: R-a…R-f judge an

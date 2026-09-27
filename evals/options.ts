@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { PLUGINS } from '@/agent/context/plugins';
-import type { ProviderConfig } from '@/shared/settings';
+import { PRESETS, presetRequestByModel, type ProviderConfig } from '@/shared/settings';
 
 /**
  * The options every eval command shares — which Plugins, which endpoint and
@@ -85,10 +85,26 @@ export function runIdFrom(value: string | undefined): string {
   return run;
 }
 
-/** What the product would store for this choice. The DeepSeek preset, so the
- *  request fields that endpoint needs go out too (`settings.ts`). */
+/** What the product would store for this choice. The DeepSeek preset, and its
+ *  required field written in under this run's model the way the settings page
+ *  would write it — the send path reads the configuration now, not the preset
+ *  table, so a run that left this out would be a run with thinking on, which
+ *  DeepSeek's own endpoint answers by refusing `tool_choice: required`.
+ *  `openai-chat` spelled out rather than left to the default, because the
+ *  baseline a run is compared against was measured on that wire and nothing
+ *  here may drift off it silently. */
 export function providerConfig(m: ModelChoice, apiKey: string): ProviderConfig {
-  return { preset: 'deepseek', baseURL: m.baseURL, model: m.model, apiKey, contextWindow: 32_000 };
+  const preset = PRESETS.find((p) => p.id === 'deepseek')!;
+  return {
+    preset: 'deepseek',
+    protocol: 'openai-chat',
+    verdictByModel: {},
+    baseURL: m.baseURL,
+    model: m.model,
+    apiKey,
+    requestByModel: { ...presetRequestByModel(preset), [m.model]: { ...preset.request } },
+    contextWindow: 32_000,
+  };
 }
 
 /** In the price's currency; `null` without prices. Cached input is billed at its own rate. */

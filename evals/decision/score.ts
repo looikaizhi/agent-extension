@@ -17,8 +17,19 @@ import { clusterRate, clusteredWilson, passHatK, type Cluster, type Interval, ty
  * real behaviour, and a stricter reader would be scoring itself.
  */
 
-/** What a guide call can rightly answer with. */
-export type GuideIntent = 'point' | 'done' | 'ask' | 'read_doc';
+/**
+ * What a guide call can rightly answer with.
+ *
+ * Written out rather than read off the agent's registry: this is the set the
+ * owner is asked to choose between when labelling, and it should change only
+ * when someone decides it should — not because a tool was registered.
+ *
+ * `explain` was missing until 2026-09-22, and its absence was not neutral:
+ * the whole judgement of 「该指路还是该回答」 fell outside the ruler, which is
+ * exactly the judgement that went wrong on a live pricing page (a 「我要怎么
+ * 打开……呢」 that should have pointed and instead answered).
+ */
+export type GuideIntent = 'point' | 'done' | 'ask' | 'read_doc' | 'explain';
 
 export interface AcceptableStep {
   ref: string;
@@ -29,11 +40,21 @@ export interface AcceptableStep {
 /** The owner's answer for one state. */
 export interface Annotation {
   state: string;
-  intent: GuideIntent;
-  /** Required when `intent` is `point`: every step that counts. A goal
+  /**
+   * Every intent that counts here — a set for the same reason `acceptable` is
+   * one: a state can have more than one right answer. A page that explains
+   * the thing being asked about can as rightly be read (`read_doc`) as
+   * answered from what is already on screen (`explain`), and a key that
+   * admits only one of them scores the other as a mistake it is not.
+   */
+  intents: readonly GuideIntent[];
+  /** Required when `point` is among them: every step that counts. A goal
    *  on GitHub often has several ways in, so this is a set, never one answer. */
   acceptable?: readonly AcceptableStep[];
 }
+
+/** Whether this key admits `intent`. */
+export const admits = (a: Annotation, intent: string): boolean => a.intents.includes(intent as GuideIntent);
 
 /** One replay's result — as much of the run loop's `RunResult` as scoring reads. */
 export interface Answer {
@@ -80,6 +101,12 @@ export function pointedAt(envelope: { intent: string } & Record<string, unknown>
       return (envelope.options as { ref: string }[]).map((o) => o.ref);
     case 'read_doc':
       return [envelope.via_ref as string];
+    // An answer's evidence is drawn on the user's page one box at a time, so a
+    // ref here is pointed at just as surely as a step's — and an answer citing
+    // a control that is not on the table, or a password field, is the same
+    // failure the gate keeps at zero for `point`.
+    case 'explain':
+      return (envelope.refs as string[] | undefined) ?? [];
     default:
       return [];
   }
@@ -88,8 +115,9 @@ export function pointedAt(envelope: { intent: string } & Record<string, unknown>
 /** Throws when the annotation itself points off this state's table, or at a
  *  sensitive control — an answer key that no answer could match. */
 export function checkAnnotation(table: PromptTable, a: Annotation): void {
-  if (a.intent !== 'point') return;
-  if (!a.acceptable?.length) throw new RangeError(`状态 ${a.state}：意图是 point，却没有可接受的一步`);
+  if (!a.intents.length) throw new RangeError(`状态 ${a.state}：一个正确意图都没有`);
+  if (!admits(a, 'point')) return;
+  if (!a.acceptable?.length) throw new RangeError(`状态 ${a.state}：意图里有 point，却没有可接受的一步`);
   for (const s of a.acceptable) {
     const item = table.items.find((i) => i.ref === s.ref);
     if (!item) throw new RangeError(`状态 ${a.state}：标注里的 ${s.ref} 不在这张元素表里`);
@@ -104,13 +132,14 @@ export function checkAnnotation(table: PromptTable, a: Annotation): void {
  */
 export function scoreAnswer(table: PromptTable, answer: Answer, annotation?: Annotation): Score {
   if (annotation) checkAnnotation(table, annotation);
-  const noStep = annotation?.intent === 'point' ? { element: false, action: false, success: false } : null;
+  const noStep = annotation && admits(annotation, 'point') ? { element: false, action: false, success: false } : null;
   /** What an answer that cannot be right scores: wrong, when there is a key to be wrong against. */
   const wrong = annotation ? false : null;
   if (answer.failure?.kind === 'transport')
     return { outcome: 'transport', intentCorrect: null, firstStep: null, offTable: [], sensitive: [], success: null };
 
-  const parsed = answer.tool ? guideAgent.parseOutput(answer.tool, answer.raw) : guideAgent.parseTextOutput(answer.raw);
+  // 没有工具调用就读不出来：散文兜底那条路已经删掉，而 165 条真机语料里零命中。
+  const parsed = answer.tool ? guideAgent.parseOutput(answer.tool, answer.raw) : ({ kind: 'error', message: '没有工具调用' } as const);
   if (parsed.kind === 'error')
     return { outcome: 'parse', intentCorrect: wrong, firstStep: noStep, offTable: [], sensitive: [], success: wrong };
   const envelope = parsed.envelope as unknown as { intent: string } & Record<string, unknown>;
@@ -127,9 +156,9 @@ export function scoreAnswer(table: PromptTable, answer: Answer, annotation?: Ann
     return { outcome: 'violation', ...where, intentCorrect: wrong, firstStep: noStep, success: wrong };
 
   if (!annotation) return { outcome: 'answered', ...where, intentCorrect: null, firstStep: null, success: null };
-  const intentCorrect = envelope.intent === annotation.intent;
+  const intentCorrect = admits(annotation, envelope.intent);
   let firstStep: Score['firstStep'] = null;
-  if (annotation.intent === 'point') {
+  if (admits(annotation, 'point')) {
     const first = envelope.intent === 'point' ? (envelope as unknown as { ref: string; action: string }) : undefined;
     if (!first) firstStep = noStep;
     else {
@@ -221,7 +250,7 @@ export function accuracyClusters(states: readonly StateRuns[]): { intent: Cluste
   const labelled = (s: StateRuns) => s.annotation !== undefined;
   return {
     intent: clusters(labelled, (s) => s.intentCorrect === true),
-    firstStep: clusters((s) => s.annotation?.intent === 'point', (s) => s.firstStep?.success === true),
+    firstStep: clusters((s) => Boolean(s.annotation && admits(s.annotation, 'point')), (s) => s.firstStep?.success === true),
     success: clusters(labelled, (s) => s.success === true),
   };
 }

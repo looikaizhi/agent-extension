@@ -35,7 +35,9 @@ const POSITIONS: readonly Position[] = ['opening', 'middle', 'end'];
 export function recordedIntent(s: State): string {
   const o = s.answer;
   if (!o?.ok) return 'none';
-  const p = o.tool ? guideAgent.parseOutput(o.tool, String(o.value)) : guideAgent.parseTextOutput(String(o.value));
+  // 没有工具调用就读不出来：散文兜底那条路已经删掉，而 165 条真机语料里零命中。
+  if (!o.tool) return 'unreadable';
+  const p = guideAgent.parseOutput(o.tool, String(o.value));
   return p.kind === 'ok' ? p.envelope.intent : 'unreadable';
 }
 

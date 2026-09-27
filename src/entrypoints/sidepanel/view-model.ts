@@ -1,4 +1,5 @@
-import { ProviderError, type Usage } from '@/agent/provider/provider';
+import type { ModelUsage } from '@/agent/provider/types';
+import { ProviderError } from '@/agent/provider/transport';
 import type { WireBinding, WireCheck, WireEvidence } from '@/shared/types';
 
 /**
@@ -33,7 +34,7 @@ export interface CallRecord {
    * never reported — that claim is what the panel warns about, and it would be
    * false here.
    */
-  usage: Usage | null | 'merged';
+  usage: ModelUsage | null | 'merged';
 }
 
 export interface CostSummary {
@@ -47,7 +48,7 @@ export interface CostSummary {
   completion: number;
   total: number;
   /** True when *any* contributing usage was character-count estimated
-   *  (`Usage.estimated`) rather than reported by the endpoint. */
+   *  (`ModelUsage.estimated`) rather than reported by the endpoint. */
   estimated: boolean;
 }
 
@@ -112,8 +113,6 @@ export function summarizeCost(calls: readonly CallRecord[]): CostSummary {
  */
 export function describeEvidence(evidence: WireEvidence): string {
   switch (evidence) {
-    case 'handpicked':
-      return '由你在元素表里亲手指定';
     case 'documented':
       return '依据站内文档';
     case 'model':

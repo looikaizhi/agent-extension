@@ -1,4 +1,4 @@
-import { complete } from '@/agent/provider/provider';
+import { callModel } from '@/agent/provider/call';
 import { runGuideToEnd } from '@/agent/agents/guide/runner';
 import { createTrace } from '@/agent/agents/guide/trace';
 import type { Trace } from '@/shared/types';
@@ -26,7 +26,7 @@ import type { ProviderConfig } from '@/shared/settings';
  *
  * Kept separate from `App.tsx` on purpose, the same way `view-model.ts` is: every
  * judgement here is ordinary data-in/data-out logic, so it takes its
- * `complete`/`fetch` dependency as a parameter (defaulting to the real one)
+ * `callModel`/`fetch` dependency as a parameter (defaulting to the real one)
  * and can be driven in a plain node test with a canned async generator or a
  * canned `Response`, instead of needing a real network call or `chrome.*`.
  * `App.tsx` only ever calls `startEffectListener` — the one function here
@@ -38,7 +38,7 @@ import type { ProviderConfig } from '@/shared/settings';
 /**
  * Transport, and nothing else: hand the run to `guide/runner.ts`, put what
  * comes back on the wire. The pipeline it used to spell out inline
- * (`buildMessages` → `complete()` → `parseOutput` → repair → `validate`)
+ * (`buildMessages` → `callModel()` → `parseOutput` → repair → `validate`)
  * reads in one place now, and that place is not tied to the side panel.
  *
  * What stays true across the move: `value` on success is the model's raw
@@ -59,10 +59,10 @@ export async function runCallModelEffect(
   req: EffectRequest & { kind: 'callModel' },
   cfg: ProviderConfig,
   signal: AbortSignal,
-  completeFn: typeof complete = complete,
+  callFn: typeof callModel = callModel,
 ): Promise<{ result: EffectResult; trace: Trace | null }> {
   const trace = createTrace();
-  const r = await runGuideToEnd(req.params as CallModelParams, cfg, signal, completeFn, trace.record, nonces);
+  const r = await runGuideToEnd(req.params as CallModelParams, cfg, signal, callFn, trace.record, nonces);
 
   const outcome: EffectOutcome = r.failure
     ? {
@@ -81,6 +81,7 @@ export async function runCallModelEffect(
         providerCalls: r.providerCalls,
         ...(r.tool ? { tool: r.tool } : {}),
         ...(r.callId ? { callId: r.callId } : {}),
+        ...(r.reasoning ? { reasoning: r.reasoning } : {}),
         ...(r.usage ? { usage: r.usage } : {}),
       };
   // The trace comes back beside the result, never folded into it: the outcome
@@ -167,8 +168,8 @@ export interface RecoveryOutcome {
  * Called once, on mount, before this file's message listener is even
  * attached. `ask` only ever *reads* what the host already knows
  * (`PANEL_GUIDE_INFLIGHT`) — this function has no parameter through which it
- * could reach `complete`/`fetch`, which is the structural half of "不自动重
- * 发"; a test asserting a `fetch`/`complete` spy saw zero calls across this
+ * could reach `callModel`/`fetch`, which is the structural half of "不自动重
+ * 发"; a test asserting a `fetch`/`callModel` spy saw zero calls across this
  * call is the behavioural half.
  */
 export async function recoverInflightOnMount(
@@ -195,7 +196,7 @@ export async function recoverInflightOnMount(
  * is enough — and nothing ever sent that call again: the thread kept it in
  * flight until the user gave up. Which instance spends the money is the
  * `EFFECT_CLAIM` claim's job immediately below: the host grants exactly one
- * before anyone calls `complete()`/`fetch()`.
+ * before anyone calls `callModel()`/`fetch()`.
  */
 /**
  * What one `callModel` effect actually spent, reported to whoever mounted the
@@ -275,19 +276,22 @@ export function startEffectListener(
         const cfg = await loadCfg();
         if (req.kind === 'callModel') {
           // The stream is teed on its way past: the panel can show what is
-          // being written without the run loop knowing a panel exists.
-          const streaming: typeof complete = onDraft
+          // being written without the run loop knowing a panel exists. Still
+          // one higher-order function wrapping the real one — what changed is
+          // only which event it reads, now that a tool call's fragments say
+          // outright that that is what they are.
+          const streaming: typeof callModel = onDraft
             ? async function* (c, messages, signal, options) {
                 let args = '';
-                for await (const d of complete(c, messages, signal, options)) {
-                  if (d.tool?.arguments) {
-                    args += d.tool.arguments;
+                for await (const d of callModel(c, messages, signal, options)) {
+                  if (d.type === 'tool-input-delta') {
+                    args += d.delta;
                     onDraft(args);
                   }
                   yield d;
                 }
               }
-            : complete;
+            : callModel;
           const ran = await runCallModelEffect(req as EffectRequest & { kind: 'callModel' }, cfg, controller.signal, streaming);
           result = ran.result;
           // Reported whatever the outcome: a refused envelope was still paid

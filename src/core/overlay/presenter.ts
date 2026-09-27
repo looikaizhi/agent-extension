@@ -55,7 +55,6 @@ export interface Presenter {
   readonly watch: { watching: boolean; looks: number };
   show(command: HighlightCommand): Promise<ContentResponse<'HIGHLIGHT'>>;
   retry(): void;
-  skip(): void;
   teardown(): void;
 }
 
@@ -70,11 +69,6 @@ export function createPresenter(ports: PresenterPorts): Presenter {
   let trackedFor = '';
   /** The one step currently on screen. There is no flow here, by design. */
   let current: HighlightCommand | null = null;
-
-  function reportSkipped(): void {
-    if (!current) return;
-    ports.emit({ type: 'STEP_SKIPPED', sessionId: current.sessionId, stepIndex: current.progress?.index ?? 0 });
-  }
 
   /** Removes the activation listener for the step currently on screen. */
   let unwatchActivation: (() => void) | null = null;
@@ -388,7 +382,6 @@ export function createPresenter(ports: PresenterPorts): Presenter {
       title: cmd.step.title,
       detail: cmd.step.detail,
       value: cmd.step.value,
-      skippable: cmd.skippable,
       ...(cmd.mode === 'explain' ? { outline: true } : {}),
       looking: `找的是：${d.role}｜${d.name}${d.scope ? `（在「${d.scope}」内）` : ''}${d.nth !== undefined ? `（第 ${d.nth} 个）` : ''}`,
     };
@@ -435,7 +428,6 @@ export function createPresenter(ports: PresenterPorts): Presenter {
       const { res, painted } = render();
       if (painted) followUp(cmd, res);
     },
-    skip: reportSkipped,
     teardown,
   };
 }
