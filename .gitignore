@@ -3,7 +3,13 @@ node_modules/
 dist/
 .wxt/
 stats.html
-tests/
+
+# 测试进版本管理：单测（守卫、归约器、协议）、e2e 脚本与夹具页是这个仓库最值钱
+# 的一部分，它们一直被整个忽略掉，于是任何 CI 都跑不到它们。只有**跑出来的产物**
+# 留在外面——真机截图有 650M，跑一次就再生一份。
+tests/spike/live-github-shots*/
+tests/spike/*.ndjson
+tests/**/*.png
 
 # 评估的运行产物；evals/ 的其余部分（代码、标注、判定、语料、各轮结果）进版本管理
 evals/extract/captured/

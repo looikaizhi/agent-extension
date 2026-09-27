@@ -91,7 +91,7 @@ for (const [slug, notes] of Object.entries(annotations)) {
 
     const ex = await sw.evaluate(
       async ([id, b]) =>
-        await chrome.tabs.sendMessage(id, { type: 'EXTRACT', profile: 'interactive', budget: b }),
+        await chrome.tabs.sendMessage(id, { type: 'EXTRACT', profile: 'interactive', budget: b }, { frameId: 0 }),
       [tabId, BUDGET],
     );
     if (!ex?.ok) throw new Error(ex?.message ?? 'EXTRACT failed');
@@ -122,14 +122,33 @@ for (const [slug, notes] of Object.entries(annotations)) {
       }, note.id);
 
       // What the product would actually point at, through the whole pipeline.
+      //
+      // `view` is not optional and was missing here for weeks: the renderer
+      // compares it against the document it is running in (`sameView`) and
+      // refuses outright when they differ — so every single target came back
+      // `view_moved`, the scorer read that as「没找到」, and L-1 sat at 0% while
+      // nothing was wrong with the extractor at all. A metric that can fail
+      // for a reason outside the thing it measures has to say so loudly; this
+      // one said 0%, which reads exactly like a real regression.
+      //
+      // `mode` was `'locate'`, a name that has not existed since the two modes
+      // became `guide`/`explain`. It worked only because everything that is
+      // not `'explain'` behaves like a guide step.
+      //
+      // `{ frameId: 0 }` because embedded frames now carry a content script of
+      // their own (`enterFrames`), and a message with no frame named is
+      // answered by whichever document replies first — one fixture here is an
+      // iframe, so this is not hypothetical.
       const ack = await sw.evaluate(
-        async ([id, cmd]) => await chrome.tabs.sendMessage(id, { type: 'HIGHLIGHT', command: cmd }),
+        async ([id, cmd]) => await chrome.tabs.sendMessage(id, { type: 'HIGHLIGHT', command: cmd }, { frameId: 0 }),
         [
           tabId,
           {
             sessionId: 'eval',
+            presentationId: `eval#${note.id}`,
             snapshotId: ex.data.snapshotId,
-            mode: 'locate',
+            view: ex.data.url,
+            mode: 'guide',
             progress: { index: 0, total: 1 },
             autoScroll: false,
             step: {
@@ -140,7 +159,7 @@ for (const [slug, notes] of Object.entries(annotations)) {
           },
         ],
       );
-      await sw.evaluate(async (id) => await chrome.tabs.sendMessage(id, { type: 'CLEAR' }), tabId);
+      await sw.evaluate(async (id) => await chrome.tabs.sendMessage(id, { type: 'CLEAR' }, { frameId: 0 }), tabId);
       targets.push({ ...note, trueRect, ack: ack?.ok ? ack.data : { failure: 'transport' } });
     }
 
