@@ -1,0 +1,1799 @@
+{
+  "run": {
+    "captured": "2026-09-02",
+    "target": "github.com",
+    "model": "deepseek-chat",
+    "prompt": "toPromptText 带 page/title 表头 + 层级缩进；system 含 CHOICE_GUIDE",
+    "rounds": 7,
+    "totals": {
+      "hops": 22,
+      "calls": 35,
+      "done": 3,
+      "quotaExceeded": 1,
+      "reachedGoal": null
+    },
+    "arrivalNote": "reachedGoal 无人工标注，故为 null。thread.check 是产品自己的到达判定（judgeArrival），只在步骤带 expect_after 时才会跑；本次 27 条重规划步骤全部没有 expect_after，所以它从第 2 跳起不再工作。"
+  },
+  "rounds": [
+    {
+      "round": 1,
+      "goal": "带我找到 n8n 这个开源项目，我想把它的仓库地址拿到手",
+      "startUrl": "https://github.com",
+      "arrival": {
+        "finalUrl": "https://github.com/",
+        "productCheck": "unknown",
+        "evidence": "model",
+        "stepOutcomes": [
+          null
+        ],
+        "doneProposed": false,
+        "expectAfterCount": 1,
+        "expectations": [
+          {
+            "via_ref": "e6",
+            "must_contain": {
+              "role": "textbox",
+              "name": "Search"
+            }
+          }
+        ],
+        "reachedGoal": null
+      },
+      "result": {
+        "status": "active",
+        "hops": 2,
+        "modelCalls": 2,
+        "anomalies": [
+          "AGENT_ANSWER: 「Search or jump to」这一步看起来没有反应，可以再试一次，或者跳过它。"
+        ]
+      },
+      "initialPlan": {
+        "table": {
+          "url": "https://github.com/",
+          "title": "GitHub",
+          "items": 59,
+          "truncated": false,
+          "degraded": false,
+          "modalScoped": false
+        },
+        "envelope": {
+          "intent": "guide",
+          "route": [
+            {
+              "at": "GitHub 首页",
+              "goal": "通过全局搜索找到 n8n 仓库"
+            }
+          ],
+          "steps": [
+            {
+              "ref": "e6",
+              "action": "click",
+              "value": null,
+              "why": "这个按钮是全局快速搜索对话框的入口，点击后可输入关键词在全站搜索仓库。",
+              "expect_after": {
+                "via_ref": "e6",
+                "must_contain": {
+                  "role": "textbox",
+                  "name": "Search"
+                }
+              }
+            }
+          ],
+          "question": null,
+          "options": null,
+          "why": null,
+          "via_ref": null,
+          "query": null
+        }
+      },
+      "hops": [
+        {
+          "hop": 1,
+          "executedStep": {
+            "title": "Open quick search dialog, type / to search",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/",
+                "title": "GitHub",
+                "items": 5,
+                "truncated": false
+              },
+              "usage": {
+                "prompt": 1823,
+                "completion": 112,
+                "total": 1935
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "GitHub 首页",
+                    "goal": "通过全局搜索找到 n8n 仓库"
+                  },
+                  {
+                    "at": "n8n 仓库页面",
+                    "goal": "获取仓库地址"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e1",
+                    "action": "click",
+                    "why": "点击搜索框以打开全局搜索入口，这是从首页找到 n8n 仓库的第一步。"
+                  }
+                ]
+              }
+            }
+          ],
+          "nextStepTitle": "Search or jump to",
+          "repeatedStep": false,
+          "doneProposed": false
+        },
+        {
+          "hop": 2,
+          "executedStep": {
+            "title": "Search or jump to",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/",
+          "replans": [],
+          "nextStepTitle": "Search or jump to",
+          "repeatedStep": true,
+          "doneProposed": false
+        }
+      ],
+      "journey": [
+        {
+          "step": "Open quick search dialog, type / to search",
+          "from": "https://github.com/",
+          "landedAt": "https://github.com/",
+          "outcome": "confirmed"
+        },
+        {
+          "step": "Search or jump to",
+          "from": "https://github.com/",
+          "landedAt": null,
+          "outcome": "failed"
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "goal": "我想看看 n8n 这个项目最近有哪些人提了 issue",
+      "startUrl": "https://github.com",
+      "arrival": {
+        "finalUrl": "https://github.com/n8n-io/n8n/issues",
+        "productCheck": "pass",
+        "evidence": "model",
+        "stepOutcomes": [
+          null
+        ],
+        "doneProposed": true,
+        "expectAfterCount": 1,
+        "expectations": [
+          {
+            "via_ref": "e12",
+            "must_contain": {
+              "role": "link",
+              "name": "n8n-io/n8n"
+            }
+          }
+        ],
+        "reachedGoal": null
+      },
+      "result": {
+        "status": "active",
+        "hops": 5,
+        "modelCalls": 9,
+        "anomalies": []
+      },
+      "initialPlan": {
+        "table": {
+          "url": "https://github.com/",
+          "title": "GitHub",
+          "items": 59,
+          "truncated": false,
+          "degraded": false,
+          "modalScoped": false
+        },
+        "envelope": {
+          "intent": "guide",
+          "route": [
+            {
+              "at": "GitHub 首页",
+              "goal": "进入 n8n 项目的 Issues 列表，查看最近的 issue 及提出者"
+            }
+          ],
+          "steps": [
+            {
+              "ref": "e12",
+              "action": "click",
+              "value": null,
+              "why": "在 GitHub 首页无法直接搜索项目，需要通过仓库列表入口先找到 n8n 项目，再进入其 Issues 页面",
+              "expect_after": {
+                "via_ref": "e12",
+                "must_contain": {
+                  "role": "link",
+                  "name": "n8n-io/n8n"
+                }
+              }
+            }
+          ],
+          "question": null,
+          "options": null,
+          "why": null,
+          "via_ref": null,
+          "query": null
+        }
+      },
+      "hops": [
+        {
+          "hop": 1,
+          "executedStep": {
+            "title": "All repositories",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/repos",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/repos",
+                "title": "Repositories",
+                "items": 34,
+                "truncated": false
+              },
+              "usage": {
+                "prompt": 2132,
+                "completion": 142,
+                "total": 2274
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "n8n 项目的 Issues 列表页",
+                    "goal": "查看最近的 issue 及提出者"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e26",
+                    "action": "input",
+                    "value": "n8n",
+                    "why": "在仓库搜索框中输入 n8n，是为了定位到 n8n 这个项目，从而进入它的 issue 列表页查看最近的 issue。"
+                  },
+                  {
+                    "ref": "e28",
+                    "action": "click",
+                    "why": "点击搜索按钮确认搜索，进入搜索结果页面，之后才能打开 n8n 项目仓库。"
+                  }
+                ]
+              }
+            }
+          ],
+          "nextStepTitle": "Search repositories",
+          "repeatedStep": false,
+          "doneProposed": false
+        },
+        {
+          "hop": 2,
+          "executedStep": {
+            "title": "Search repositories",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/repos?q=n8n",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/repos?q=n8n",
+                "title": "Repositories",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 3559,
+                "completion": 127,
+                "total": 3686
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "在仓库列表页",
+                    "goal": "找到并进入 n8n-io/n8n 仓库的主页"
+                  },
+                  {
+                    "at": "在 n8n-io/n8n 仓库主页",
+                    "goal": "进入 Issues 列表页查看最近的 issue 及提出者"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e36",
+                    "action": "click",
+                    "why": "这是 n8n 官方仓库，进入其主页后即可从页面导航进入 Issues 列表"
+                  }
+                ]
+              }
+            },
+            {
+              "table": {
+                "url": "https://github.com/repos?q=n8n",
+                "title": "Repositories",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 3612,
+                "completion": 101,
+                "total": 3713
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "GitHub 仓库搜索结果页",
+                    "goal": "找到并进入 n8n 官方仓库 n8n-io/n8n"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e36",
+                    "action": "click",
+                    "why": "点击 n8n-io/n8n 仓库进入其主页，进而查看其 issues 列表"
+                  }
+                ]
+              }
+            }
+          ],
+          "nextStepTitle": "n8n-io/n8n",
+          "repeatedStep": false,
+          "doneProposed": false
+        },
+        {
+          "hop": 3,
+          "executedStep": {
+            "title": "n8n-io/n8n",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/n8n-io/n8n",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/n8n-io/n8n",
+                "title": "n8n-io/n8n: Fair-code workflow automation platform with native AI capabilities. Combine visual building with custom code, self-host or cloud, 400+ integrations.",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 3831,
+                "completion": 138,
+                "total": 3969
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "GitHub 仓库主页 n8n-io/n8n",
+                    "goal": "进入该仓库的 Issues 列表查看最近提出的 issue"
+                  },
+                  {
+                    "at": "Issues 列表页",
+                    "goal": "按最新排序浏览最近被提出的 issue，并查看提出者"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e19",
+                    "action": "click",
+                    "why": "Issues 链接（带 357 计数）指向该仓库的 issue 列表，点进去即可看到最近被提出的 issue 及其提出人。"
+                  }
+                ]
+              }
+            },
+            {
+              "table": {
+                "url": "https://github.com/n8n-io/n8n",
+                "title": "n8n-io/n8n: Fair-code workflow automation platform with native AI capabilities. Combine visual building with custom code, self-host or cloud, 400+ integrations.",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 3837,
+                "completion": 128,
+                "total": 3965
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "在这里的仓库主页",
+                    "goal": "进入 Issues 页面查看最近被提出的 issue"
+                  },
+                  {
+                    "at": "Issues 页面",
+                    "goal": "浏览 issue 列表，按创建时间排序查看最近提的 issue"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e19",
+                    "action": "click",
+                    "why": "Issues 链接显示有 357 个待处理 issue，点击可进入 issue 列表页面，所有最近提交的 issue 都会按时间排列在那里"
+                  }
+                ]
+              }
+            }
+          ],
+          "nextStepTitle": "Issues (357)",
+          "repeatedStep": false,
+          "doneProposed": false
+        },
+        {
+          "hop": 4,
+          "executedStep": {
+            "title": "Issues (357)",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/n8n-io/n8n/issues",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/n8n-io/n8n",
+                "title": "n8n-io/n8n: Fair-code workflow automation platform with native AI capabilities. Combine visual building with custom code, self-host or cloud, 400+ integrations.",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 5458,
+                "completion": 189,
+                "total": 5647
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "n8n 仓库主页",
+                    "goal": "进入 Issues 页面查看 issue 列表"
+                  },
+                  {
+                    "at": "Issues 页面",
+                    "goal": "浏览最近提交的 issue"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e3",
+                    "action": "click",
+                    "why": "当前页面仍是仓库主页，需要先进入 Issues 列表页面才能看到最近提交的 issue"
+                  }
+                ]
+              }
+            },
+            {
+              "table": {
+                "url": "https://github.com/n8n-io/n8n/issues",
+                "title": "Issues · n8n-io/n8n",
+                "items": 67,
+                "truncated": false
+              },
+              "usage": {
+                "prompt": 2724,
+                "completion": 111,
+                "total": 2835
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "Issues 页面",
+                    "goal": "查看最近提出并被处理的 issue"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e57",
+                    "action": "click",
+                    "why": "进入 issue 列表后，按默认的'Newest'（最新新建）排序即可看到最近提出的 issue，你正在目标页面上，这一步会确认列表以最新创建的 issue 排在最前。"
+                  }
+                ]
+              }
+            },
+            {
+              "table": {
+                "url": "https://github.com/n8n-io/n8n/issues",
+                "title": "Issues · n8n-io/n8n",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 6147,
+                "completion": 278,
+                "total": 6425
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "done",
+                "steps": [],
+                "why": "当前元素表中已展示 issue 列表及其作者与分页信息，且没有可操作控件能进一步推进用户对‘查看最近 issue’的诉求；用户只有后续澄清需求时才能继续规划。"
+              }
+            }
+          ],
+          "nextStepTitle": "Issues (357)",
+          "repeatedStep": true,
+          "doneProposed": true
+        },
+        {
+          "hop": 5,
+          "executedStep": {
+            "title": "Issues (357)",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/n8n-io/n8n/issues",
+          "replans": [],
+          "nextStepTitle": "Issues (357)",
+          "repeatedStep": true,
+          "doneProposed": false
+        }
+      ],
+      "journey": [
+        {
+          "step": "All repositories",
+          "from": "https://github.com/",
+          "landedAt": "https://github.com/repos",
+          "outcome": "confirmed"
+        },
+        {
+          "step": "Search repositories",
+          "from": "https://github.com/repos",
+          "landedAt": "https://github.com/repos?q=n8n",
+          "outcome": "confirmed"
+        },
+        {
+          "step": "n8n-io/n8n",
+          "from": "https://github.com/repos?q=n8n",
+          "landedAt": "https://github.com/n8n-io/n8n",
+          "outcome": "confirmed"
+        },
+        {
+          "step": "Issues (357)",
+          "from": "https://github.com/n8n-io/n8n",
+          "landedAt": "https://github.com/n8n-io/n8n",
+          "outcome": "confirmed"
+        }
+      ]
+    },
+    {
+      "round": 3,
+      "goal": "帮我找到 n8n 这个项目用的是什么开源许可证",
+      "startUrl": "https://github.com",
+      "arrival": {
+        "finalUrl": "https://github.com/",
+        "productCheck": "unknown",
+        "evidence": "model",
+        "stepOutcomes": [
+          null
+        ],
+        "doneProposed": false,
+        "expectAfterCount": 1,
+        "expectations": [
+          {
+            "via_ref": "e6",
+            "must_contain": {
+              "role": "textbox",
+              "name": "Search or jump to..."
+            }
+          }
+        ],
+        "reachedGoal": null
+      },
+      "result": {
+        "status": "active",
+        "hops": 2,
+        "modelCalls": 2,
+        "anomalies": [
+          "AGENT_ANSWER: 「Search or jump to」这一步看起来没有反应，可以再试一次，或者跳过它。"
+        ]
+      },
+      "initialPlan": {
+        "table": {
+          "url": "https://github.com/",
+          "title": "GitHub",
+          "items": 59,
+          "truncated": false,
+          "degraded": false,
+          "modalScoped": false
+        },
+        "envelope": {
+          "intent": "guide",
+          "route": [
+            {
+              "at": "GitHub 主页",
+              "goal": "找到 n8n 项目的仓库并查看其许可证信息"
+            }
+          ],
+          "steps": [
+            {
+              "ref": "e6",
+              "action": "click",
+              "value": null,
+              "why": "打开搜索对话框，输入 n8n 以定位其仓库。",
+              "expect_after": {
+                "via_ref": "e6",
+                "must_contain": {
+                  "role": "textbox",
+                  "name": "Search or jump to..."
+                }
+              }
+            }
+          ],
+          "question": null,
+          "options": null,
+          "why": null,
+          "via_ref": null,
+          "query": null
+        }
+      },
+      "hops": [
+        {
+          "hop": 1,
+          "executedStep": {
+            "title": "Open quick search dialog, type / to search",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/",
+                "title": "GitHub",
+                "items": 5,
+                "truncated": false
+              },
+              "usage": {
+                "prompt": 1825,
+                "completion": 89,
+                "total": 1914
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "GitHub 主页",
+                    "goal": "找到 n8n 项目仓库并查看许可证信息"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e1",
+                    "action": "click",
+                    "why": "点击搜索框以输入 n8n 仓库名称，从而找到项目页面"
+                  }
+                ]
+              }
+            }
+          ],
+          "nextStepTitle": "Search or jump to",
+          "repeatedStep": false,
+          "doneProposed": false
+        },
+        {
+          "hop": 2,
+          "executedStep": {
+            "title": "Search or jump to",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/",
+          "replans": [],
+          "nextStepTitle": "Search or jump to",
+          "repeatedStep": true,
+          "doneProposed": false
+        }
+      ],
+      "journey": [
+        {
+          "step": "Open quick search dialog, type / to search",
+          "from": "https://github.com/",
+          "landedAt": "https://github.com/",
+          "outcome": "confirmed"
+        },
+        {
+          "step": "Search or jump to",
+          "from": "https://github.com/",
+          "landedAt": null,
+          "outcome": "failed"
+        }
+      ]
+    },
+    {
+      "round": 4,
+      "goal": "带我去看 n8n 这个项目历次发布的版本",
+      "startUrl": "https://github.com",
+      "arrival": {
+        "finalUrl": "https://github.com/n8n-io/n8n",
+        "productCheck": "unknown",
+        "evidence": "model",
+        "stepOutcomes": [
+          null
+        ],
+        "doneProposed": true,
+        "expectAfterCount": 1,
+        "expectations": [
+          {
+            "via_ref": "e12",
+            "must_contain": {
+              "role": "link",
+              "name": "n8n-io/n8n"
+            }
+          }
+        ],
+        "reachedGoal": null
+      },
+      "result": {
+        "status": "abandoned",
+        "hops": 5,
+        "modelCalls": 12,
+        "anomalies": [
+          "status=abandoned(quota_exceeded)",
+          "模型调用配额用满",
+          "AGENT_ANSWER: 引导在原地打转，已经停下：模型又一次指向已经用过的「Code」，引导没有再往前走。",
+          "AGENT_ANSWER: 这条引导已用满模型调用上限（12 次），已停止。"
+        ]
+      },
+      "initialPlan": {
+        "table": {
+          "url": "https://github.com/",
+          "title": "GitHub",
+          "items": 59,
+          "truncated": false,
+          "degraded": false,
+          "modalScoped": false
+        },
+        "envelope": {
+          "intent": "guide",
+          "route": [
+            {
+              "at": "GitHub 首页",
+              "goal": "找到进入仓库页面的入口"
+            },
+            {
+              "at": "仓库页面",
+              "goal": "切换到 Releases 标签页查看历次发布版本"
+            }
+          ],
+          "steps": [
+            {
+              "ref": "e12",
+              "action": "click",
+              "value": null,
+              "why": "进入 All repositories 页面，那里能搜索并进入 n8n 项目仓库",
+              "expect_after": {
+                "via_ref": "e12",
+                "must_contain": {
+                  "role": "link",
+                  "name": "n8n-io/n8n"
+                }
+              }
+            }
+          ],
+          "question": null,
+          "options": null,
+          "why": null,
+          "via_ref": null,
+          "query": null
+        }
+      },
+      "hops": [
+        {
+          "hop": 1,
+          "executedStep": {
+            "title": "All repositories",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/repos",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/repos",
+                "title": "Repositories",
+                "items": 34,
+                "truncated": false
+              },
+              "usage": {
+                "prompt": 2129,
+                "completion": 130,
+                "total": 2259
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "GitHub 仓库列表页",
+                    "goal": "找到并进入 n8n 项目所在仓库的 Releases 页面"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e26",
+                    "action": "input",
+                    "value": "n8n",
+                    "why": "在搜索仓库的输入框中输入 n8n，以筛选出目标项目仓库。"
+                  },
+                  {
+                    "ref": "e28",
+                    "action": "click",
+                    "why": "点击搜索按钮，执行搜索以列出匹配 n8n 的仓库。"
+                  }
+                ]
+              }
+            }
+          ],
+          "nextStepTitle": "Search repositories",
+          "repeatedStep": false,
+          "doneProposed": false
+        },
+        {
+          "hop": 2,
+          "executedStep": {
+            "title": "Search repositories",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/repos?q=n8n",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/repos?q=n8n",
+                "title": "Repositories",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 3550,
+                "completion": 115,
+                "total": 3665
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "GitHub 仓库搜索结果页",
+                    "goal": "进入 n8n 官方仓库页面"
+                  },
+                  {
+                    "at": "n8n 官方仓库页面",
+                    "goal": "找到并打开 Releases 页面"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e36",
+                    "action": "click",
+                    "why": "点击 n8n-io/n8n 官方仓库链接，进入它的主页，这里才能找到 Releases 入口"
+                  }
+                ]
+              }
+            },
+            {
+              "table": {
+                "url": "https://github.com/repos?q=n8n",
+                "title": "Repositories",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 3578,
+                "completion": 152,
+                "total": 3730
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "GitHub 仓库列表页",
+                    "goal": "找到并进入 n8n 项目的主仓库"
+                  },
+                  {
+                    "at": "n8n 主仓库页",
+                    "goal": "进入该仓库的 Releases 页面查看历次发布"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e36",
+                    "action": "click",
+                    "why": "e36 是搜索结果中 n8n-io/n8n 主仓库的链接，是官方 n8n 项目本体。点击进入该仓库页后，可在其页面顶部找到指向 Releases 的入口，从而查看历次发布的版本。"
+                  }
+                ]
+              }
+            }
+          ],
+          "nextStepTitle": "n8n-io/n8n",
+          "repeatedStep": false,
+          "doneProposed": false
+        },
+        {
+          "hop": 3,
+          "executedStep": {
+            "title": "n8n-io/n8n",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/n8n-io/n8n",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/n8n-io/n8n",
+                "title": "n8n-io/n8n: Fair-code workflow automation platform with native AI capabilities. Combine visual building with custom code, self-host or cloud, 400+ integrations.",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 3846,
+                "completion": 111,
+                "total": 3957
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "n8n 主仓库页",
+                    "goal": "进入 Releases 页面查看历次发布版本"
+                  },
+                  {
+                    "at": "Releases 页面",
+                    "goal": "浏览历次发布的版本列表"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e20",
+                    "action": "click",
+                    "why": "Pull requests 旁边通常就是 Releases 标签页，点它进入该仓库的发布版本列表页"
+                  }
+                ]
+              }
+            },
+            {
+              "table": {
+                "url": "https://github.com/n8n-io/n8n",
+                "title": "n8n-io/n8n: Fair-code workflow automation platform with native AI capabilities. Combine visual building with custom code, self-host or cloud, 400+ integrations.",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 4231,
+                "completion": 181,
+                "total": 4412
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "n8n 主仓库页",
+                    "goal": "进入该仓库的 Releases 页面查看历次发布版本"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e20",
+                    "action": "click",
+                    "why": "这是仓库的 Pull requests 链接，但并非目标入口；应改为点击仓库标签栏中的 Releases 链接——不过当前元素表里没有直接显示 Releases 链接，因此需要先寻找包含该链接的标签区域。由于表中可见的仓库导航仅到 Insights，未列出 Releases，可能需通过页面滚动或点击省略的标签来找到它。当前最接近的可行入口是代码页顶部的标签栏，但表中没有明确列出 Releases 控件，因此无法直接给出精确 ref。"
+                  }
+                ]
+              }
+            }
+          ],
+          "nextStepTitle": "Pull requests (774)",
+          "repeatedStep": false,
+          "doneProposed": false
+        },
+        {
+          "hop": 4,
+          "executedStep": {
+            "title": "Pull requests (774)",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/n8n-io/n8n/pulls",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/n8n-io/n8n",
+                "title": "n8n-io/n8n: Fair-code workflow automation platform with native AI capabilities. Combine visual building with custom code, self-host or cloud, 400+ integrations.",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 4266,
+                "completion": 96,
+                "total": 4362
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "n8n 仓库主页",
+                    "goal": "进入 Releases 页面查看历次发布版本"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e33",
+                    "action": "click",
+                    "why": "点击 Tags 链接可以进入该仓库的标签/版本列表页面，那里能看到历次发布的版本号与发布时间。"
+                  }
+                ]
+              }
+            },
+            {
+              "table": {
+                "url": "https://github.com/n8n-io/n8n/pulls",
+                "title": "n8n-io/n8n: Fair-code workflow automation platform with native AI capabilities. Combine visual building with custom code, self-host or cloud, 400+ integrations.",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 5117,
+                "completion": 215,
+                "total": 5332
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "GitHub 仓库的 Pull requests 页面",
+                    "goal": "切换到仓库的 Releases 页面并查看所有发布版本"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e24",
+                    "action": "click",
+                    "why": "点击该元素进入仓库导航或了解更多入口，以找到 Releases 页面的链接"
+                  }
+                ]
+              }
+            },
+            {
+              "table": {
+                "url": "https://github.com/n8n-io/n8n/pulls",
+                "title": "Pull requests · n8n-io/n8n",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 3912,
+                "completion": 125,
+                "total": 4037
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "当前 n8n 仓库的 Pull requests 列表页",
+                    "goal": "退出 PR 列表，回到仓库主页找到 Releases 入口"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e18",
+                    "action": "click",
+                    "why": "页面当前停在 Pull requests 列表，但用户要找的是发布版本（Releases）。仓库顶部的 Code 标签页会带用户回到仓库主页，在那里才能找到 Releases 之类指向发布页面的链接。"
+                  }
+                ]
+              }
+            }
+          ],
+          "nextStepTitle": "Code",
+          "repeatedStep": false,
+          "doneProposed": false
+        },
+        {
+          "hop": 5,
+          "executedStep": {
+            "title": "Code",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/n8n-io/n8n",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/n8n-io/n8n/pulls",
+                "title": "Pull requests · n8n-io/n8n",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 3915,
+                "completion": 103,
+                "total": 4018
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "当前 Pull requests 列表页",
+                    "goal": "退出 PR 列表，回到仓库主页找到 Releases 入口"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e18",
+                    "action": "click",
+                    "why": "当前页面是 Pull requests 列表，不是发布记录页面。点击 Code 可以回到仓库主页，那里通常有 Releases 入口。"
+                  }
+                ]
+              }
+            },
+            {
+              "table": {
+                "url": "https://github.com/n8n-io/n8n/pulls",
+                "title": "Pull requests · n8n-io/n8n",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 3917,
+                "completion": 120,
+                "total": 4037
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "当前 n8n 仓库的 Pull requests 列表页",
+                    "goal": "退出 PR 列表，回到仓库主页找到 Releases 入口"
+                  },
+                  {
+                    "at": "n8n 仓库主页",
+                    "goal": "在右侧找到 Releases 链接并进入发布历史页"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e18",
+                    "action": "click",
+                    "why": "离开 PR 列表，回到仓库主页，去那里找 Releases 入口"
+                  }
+                ]
+              }
+            },
+            {
+              "table": {
+                "url": "https://github.com/n8n-io/n8n",
+                "title": "n8n-io/n8n: Fair-code workflow automation platform with native AI capabilities. Combine visual building with custom code, self-host or cloud, 400+ integrations.",
+                "items": 150,
+                "truncated": true
+              },
+              "usage": {
+                "prompt": 4374,
+                "completion": 113,
+                "total": 4487
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "当前 n8n 仓库主页",
+                    "goal": "点击左侧或顶部的 Releases 入口，进入发布版本列表页"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e265",
+                    "action": "click",
+                    "why": "在仓库主页的 About 区域点击 n8n.io 链接先离开当前页面，以便转到包含 Releases 入口的仓库导航结构，进而找到版本发布列表"
+                  }
+                ]
+              }
+            }
+          ],
+          "nextStepTitle": "Code",
+          "repeatedStep": true,
+          "doneProposed": true
+        }
+      ],
+      "journey": [
+        {
+          "step": "All repositories",
+          "from": "https://github.com/",
+          "landedAt": "https://github.com/repos",
+          "outcome": "confirmed"
+        },
+        {
+          "step": "Search repositories",
+          "from": "https://github.com/repos",
+          "landedAt": "https://github.com/repos?q=n8n",
+          "outcome": "confirmed"
+        },
+        {
+          "step": "n8n-io/n8n",
+          "from": "https://github.com/repos?q=n8n",
+          "landedAt": "https://github.com/n8n-io/n8n",
+          "outcome": "confirmed"
+        },
+        {
+          "step": "Pull requests (774)",
+          "from": "https://github.com/n8n-io/n8n",
+          "landedAt": "https://github.com/n8n-io/n8n",
+          "outcome": "confirmed"
+        },
+        {
+          "step": "1557Branches",
+          "from": "https://github.com/n8n-io/n8n",
+          "landedAt": null,
+          "outcome": "invalidated"
+        },
+        {
+          "step": "Code",
+          "from": "https://github.com/n8n-io/n8n/pulls",
+          "landedAt": "https://github.com/n8n-io/n8n/pulls",
+          "outcome": "confirmed"
+        }
+      ]
+    },
+    {
+      "round": 5,
+      "goal": "我想读 n8n 这个项目的贡献指南",
+      "startUrl": "https://github.com",
+      "arrival": {
+        "finalUrl": "https://github.com/",
+        "productCheck": "unknown",
+        "evidence": "model",
+        "stepOutcomes": [
+          null
+        ],
+        "doneProposed": false,
+        "expectAfterCount": 1,
+        "expectations": [
+          {
+            "via_ref": "e6",
+            "must_contain": {
+              "role": "textbox",
+              "name": "Search"
+            }
+          }
+        ],
+        "reachedGoal": null
+      },
+      "result": {
+        "status": "active",
+        "hops": 2,
+        "modelCalls": 2,
+        "anomalies": [
+          "AGENT_ANSWER: 「Search or jump to」这一步看起来没有反应，可以再试一次，或者跳过它。"
+        ]
+      },
+      "initialPlan": {
+        "table": {
+          "url": "https://github.com/",
+          "title": "GitHub",
+          "items": 59,
+          "truncated": false,
+          "degraded": false,
+          "modalScoped": false
+        },
+        "envelope": {
+          "intent": "guide",
+          "route": [
+            {
+              "at": "GitHub 首页",
+              "goal": "找到一个能搜索或导航到 n8n 项目的入口"
+            }
+          ],
+          "steps": [
+            {
+              "ref": "e6",
+              "action": "click",
+              "value": null,
+              "why": "打开全局快速搜索对话框，输入仓库名即可定位到 n8n 项目页面",
+              "expect_after": {
+                "via_ref": "e6",
+                "must_contain": {
+                  "role": "textbox",
+                  "name": "Search"
+                }
+              }
+            }
+          ],
+          "question": null,
+          "options": null,
+          "why": null,
+          "via_ref": null,
+          "query": null
+        }
+      },
+      "hops": [
+        {
+          "hop": 1,
+          "executedStep": {
+            "title": "Open quick search dialog, type / to search",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/",
+                "title": "GitHub",
+                "items": 5,
+                "truncated": false
+              },
+              "usage": {
+                "prompt": 1819,
+                "completion": 100,
+                "total": 1919
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "GitHub 首页",
+                    "goal": "找到搜索入口并输入 n8n 项目名"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e1",
+                    "action": "click",
+                    "why": "点击搜索框以弹出搜索建议列表，然后输入 n8n 项目名来找到其仓库。"
+                  }
+                ]
+              }
+            }
+          ],
+          "nextStepTitle": "Search or jump to",
+          "repeatedStep": false,
+          "doneProposed": false
+        },
+        {
+          "hop": 2,
+          "executedStep": {
+            "title": "Search or jump to",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/",
+          "replans": [],
+          "nextStepTitle": "Search or jump to",
+          "repeatedStep": true,
+          "doneProposed": false
+        }
+      ],
+      "journey": [
+        {
+          "step": "Open quick search dialog, type / to search",
+          "from": "https://github.com/",
+          "landedAt": "https://github.com/",
+          "outcome": "confirmed"
+        },
+        {
+          "step": "Search or jump to",
+          "from": "https://github.com/",
+          "landedAt": null,
+          "outcome": "failed"
+        }
+      ]
+    },
+    {
+      "round": 6,
+      "goal": "带我去看 n8n 的官方文档站",
+      "startUrl": "https://github.com",
+      "arrival": {
+        "finalUrl": null,
+        "productCheck": "skipped",
+        "evidence": "model",
+        "stepOutcomes": [
+          null
+        ],
+        "doneProposed": true,
+        "expectAfterCount": 1,
+        "expectations": [
+          {
+            "via_ref": "e20",
+            "must_contain": {
+              "role": "link",
+              "name": "n8n"
+            }
+          }
+        ],
+        "reachedGoal": null
+      },
+      "result": {
+        "status": "active",
+        "hops": 4,
+        "modelCalls": 6,
+        "anomalies": []
+      },
+      "initialPlan": {
+        "table": {
+          "url": "https://github.com/",
+          "title": "GitHub",
+          "items": 59,
+          "truncated": false,
+          "degraded": false,
+          "modalScoped": false
+        },
+        "envelope": {
+          "intent": "guide",
+          "route": [
+            {
+              "at": "GitHub 首页",
+              "goal": "离开当前首页，前往 n8n 官方文档站"
+            }
+          ],
+          "steps": [
+            {
+              "ref": "e20",
+              "action": "input",
+              "value": "n8n docs",
+              "why": "这是页面上的快捷搜索框，直接输入目标站点的名字可以快速找到对应入口。",
+              "expect_after": {
+                "via_ref": "e20",
+                "must_contain": {
+                  "role": "link",
+                  "name": "n8n"
+                }
+              }
+            }
+          ],
+          "question": null,
+          "options": null,
+          "why": null,
+          "via_ref": null,
+          "query": null
+        }
+      },
+      "hops": [
+        {
+          "hop": 1,
+          "executedStep": {
+            "title": "Ask anything or type @ to add context with Copilot",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/copilot/c/733a3240-045e-4f08-b4d2-829b3425fb50",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/",
+                "title": "GitHub",
+                "items": 12,
+                "truncated": false
+              },
+              "usage": {
+                "prompt": 1921,
+                "completion": 66,
+                "total": 1987
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "done",
+                "steps": [],
+                "why": "当前页面是 GitHub 首页，元素表中没有任何指向 n8n 官方文档站的入口；且用户已照之前的引导离开上一页，但当前页面并未进入 n8n 文档站，下一步需要用户自行搜索或导航，故在此页无法推进目标。"
+              }
+            },
+            {
+              "table": {
+                "url": "https://github.com/copilot/c/733a3240-045e-4f08-b4d2-829b3425fb50",
+                "title": "GitHub Copilot",
+                "items": 17,
+                "truncated": false
+              },
+              "usage": {
+                "prompt": 1988,
+                "completion": 100,
+                "total": 2088
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "GitHub Copilot 页面",
+                    "goal": "离开当前 Copilot 页面，前往 n8n 官方文档站"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e2",
+                    "action": "click",
+                    "why": "返回 GitHub 首页，再从那里通过浏览器地址栏或导航前往 n8n 官方文档站"
+                  }
+                ]
+              }
+            }
+          ],
+          "nextStepTitle": "GitHub homepage",
+          "repeatedStep": false,
+          "doneProposed": true
+        },
+        {
+          "hop": 2,
+          "executedStep": {
+            "title": "GitHub homepage",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/",
+                "title": "GitHub",
+                "items": 59,
+                "truncated": false
+              },
+              "usage": {
+                "prompt": 2517,
+                "completion": 101,
+                "total": 2618
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "GitHub 首页",
+                    "goal": "离开 GitHub，前往 n8n 官方文档站"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e11",
+                    "action": "click",
+                    "why": "这个链接指向“所有代码仓库”列表，是用户离开当前 Copilot 页面、开始前往目标站点的入口之一；但此页没有直接指向 n8n 的导航项，需要先离开本站才能访问 n8n 官方文档。"
+                  }
+                ]
+              }
+            }
+          ],
+          "nextStepTitle": "All pull requests (g then p)",
+          "repeatedStep": false,
+          "doneProposed": false
+        },
+        {
+          "hop": 3,
+          "executedStep": {
+            "title": "All pull requests (g then p)",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/pulls/inbox",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/pulls/inbox",
+                "title": "Pull requests",
+                "items": 50,
+                "truncated": false
+              },
+              "usage": {
+                "prompt": 2461,
+                "completion": 135,
+                "total": 2596
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "GitHub 全局导航栏",
+                    "goal": "离开 GitHub，前往 n8n 官方文档站"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e9",
+                    "action": "click",
+                    "why": "这是 GitHub 全局导航里通往所有 issues 的入口，但无法直接带用户去 n8n 文档站；对照目标来看，这一页上没有其他可用的外部导航控件。不过既然用户明确要去 n8n 官方文档，而当前页面没有任何链接能切换到该站，只能先通过浏览器地址栏输入网址，因此这里没有可操作项可指引。"
+                  }
+                ]
+              }
+            },
+            {
+              "table": {
+                "url": "https://github.com/pulls/inbox",
+                "title": "Pull requests",
+                "items": 43,
+                "truncated": false
+              },
+              "usage": null,
+              "ok": false,
+              "envelope": {
+                "unparsed": "ref「e0」不在本次快照内"
+              }
+            }
+          ],
+          "nextStepTitle": "All pull requests (g then p)",
+          "repeatedStep": true,
+          "doneProposed": false
+        },
+        {
+          "hop": 4,
+          "executedStep": {
+            "title": "All pull requests (g then p)",
+            "stopped": "等了 15 秒浮层仍没有矩形：{\"ok\":true,\"data\":null}"
+          },
+          "urlAfterClick": null,
+          "replans": [],
+          "nextStepTitle": null,
+          "repeatedStep": false,
+          "doneProposed": false
+        }
+      ],
+      "journey": [
+        {
+          "step": "Ask anything or type @ to add context with Copilot",
+          "from": "https://github.com/",
+          "landedAt": "https://github.com/",
+          "outcome": "confirmed"
+        },
+        {
+          "step": "GitHub homepage",
+          "from": "https://github.com/copilot/c/733a3240-045e-4f08-b4d2-829b3425fb50",
+          "landedAt": "https://github.com/",
+          "outcome": "confirmed"
+        },
+        {
+          "step": "All pull requests (g then p)",
+          "from": "https://github.com/",
+          "landedAt": "https://github.com/pulls/inbox",
+          "outcome": "confirmed"
+        }
+      ]
+    },
+    {
+      "round": 7,
+      "goal": "我想知道 n8n 这个仓库的 CI 是怎么配置的",
+      "startUrl": "https://github.com",
+      "arrival": {
+        "finalUrl": "https://github.com/",
+        "productCheck": "skipped",
+        "evidence": "model",
+        "stepOutcomes": [
+          null
+        ],
+        "doneProposed": false,
+        "expectAfterCount": 0,
+        "expectations": [],
+        "reachedGoal": null
+      },
+      "result": {
+        "status": "active",
+        "hops": 2,
+        "modelCalls": 2,
+        "anomalies": [
+          "AGENT_ANSWER: 「Search or jump to」这一步看起来没有反应，可以再试一次，或者跳过它。"
+        ]
+      },
+      "initialPlan": {
+        "table": {
+          "url": "https://github.com/",
+          "title": "GitHub",
+          "items": 59,
+          "truncated": false,
+          "degraded": false,
+          "modalScoped": false
+        },
+        "envelope": {
+          "intent": "guide",
+          "route": [
+            {
+              "at": "GitHub 首页",
+              "goal": "找到 n8n 仓库"
+            }
+          ],
+          "steps": [
+            {
+              "ref": "e6",
+              "action": "click",
+              "value": null,
+              "why": "打开 GitHub 的全局快速搜索对话框，输入仓库名可以直接跳转到 n8n 仓库页面。",
+              "expect_after": null
+            }
+          ],
+          "question": null,
+          "options": null,
+          "why": null,
+          "via_ref": null,
+          "query": null
+        }
+      },
+      "hops": [
+        {
+          "hop": 1,
+          "executedStep": {
+            "title": "Open quick search dialog, type / to search",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/",
+          "replans": [
+            {
+              "table": {
+                "url": "https://github.com/",
+                "title": "GitHub",
+                "items": 5,
+                "truncated": false
+              },
+              "usage": {
+                "prompt": 1821,
+                "completion": 118,
+                "total": 1939
+              },
+              "ok": true,
+              "envelope": {
+                "intent": "guide",
+                "route": [
+                  {
+                    "at": "GitHub 首页",
+                    "goal": "打开全局搜索并输入关键词找到 n8n 仓库"
+                  },
+                  {
+                    "at": "n8n 仓库主页",
+                    "goal": "找到并打开 CI 工作流配置文件"
+                  }
+                ],
+                "steps": [
+                  {
+                    "ref": "e1",
+                    "action": "click",
+                    "why": "这是 GitHub 的全局搜索入口，点击后可以输入搜索词来定位 n8n 仓库"
+                  }
+                ]
+              }
+            }
+          ],
+          "nextStepTitle": "Search or jump to",
+          "repeatedStep": false,
+          "doneProposed": false
+        },
+        {
+          "hop": 2,
+          "executedStep": {
+            "title": "Search or jump to",
+            "stopped": null
+          },
+          "urlAfterClick": "https://github.com/",
+          "replans": [],
+          "nextStepTitle": "Search or jump to",
+          "repeatedStep": true,
+          "doneProposed": false
+        }
+      ],
+      "journey": [
+        {
+          "step": "Open quick search dialog, type / to search",
+          "from": "https://github.com/",
+          "landedAt": "https://github.com/",
+          "outcome": "confirmed"
+        },
+        {
+          "step": "Search or jump to",
+          "from": "https://github.com/",
+          "landedAt": null,
+          "outcome": "failed"
+        }
+      ]
+    }
+  ]
+}

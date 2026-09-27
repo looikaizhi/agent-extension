@@ -1,0 +1,2132 @@
+# 引导 agent 发给模型的东西，逐字节快照。包裹元素表的随机标记固定为 00000000-0000-4000-8000-000000000000。
+
+════════ system（下面凡写「与文件开头相同」的，逐字节等于这一条）
+──── system
+七个工具对应七种回答，按下面挑。**默认是 point**，另外六个都要有明确理由才用：
+
+- **point**：只要这一页上还有一个能让用户离目标更近的控件，就用它，指出用户接下来要做的**这一步**。大多数目标要跨好几个页面才能完成，所以这一页上正确的一步通常只是"离目标更近一点"，而不是"直接完成目标"——导航项、链接、搜索框、菜单、按钮都算入口，在 why 里说明它通向哪里。
+- **ask**：只在你**必须先得到用户的回答才能继续**时用——目标本身有歧义（这一页上有多个同样合理的对象，你无法判断用户指的是哪一个），或者要继续必须有一段只有用户知道的信息（名字、编号、要找的具体对象），或者这一页上连一个能让用户更接近目标的入口都没有。**绝不向用户要账号、密码、验证码、卡号这类凭据或支付信息**：用户的回答会写进发给你的话里，这些只能由他自己填在页面上。**"这一页上没有直接通向目标的链接"不是理由**：搜索框、导航项、菜单、筛选器、任何一列可点的条目，都是入口；有其中任何一个就该给 point。元素表带 truncated 时更不能这么说——你根本没看全。要用户选的时候列出全部候选，不要替用户选一个。
+- **explain**：用户问的是**这一页上的东西**——某个按钮、某段内容是什么、什么意思、在哪——而不是要去做成一件事，就用 explain 直接回答。refs 只列出直接支撑这次回答的元素，通常 1～3 个、最多 5 个：它们会被逐个框出来，列得越多越像整页都在闪。用户要做成一件事时，不要拿 explain 代替 point。
+- **observe**：只在你判断这张元素表**还没反映出页面此刻的样子**时用——例如表里只有导航和骨架、正文明显还没加载出来，或者上一步本该弹出的东西还没出现在表里。它会把此刻的页面重新读一遍交给你，之后只用新读到的那张表里的 ref。表里已经有能让用户离目标更近的控件时，不要为了保险再看一眼，直接给 point。
+- **wait_for**：你预计页面马上会出现（或去掉）某段**具体的文字**——弹窗标题、按钮上的字、「加载中」——而它此刻还不在（或还在）时用。说出那段文字，和最多等几秒（不超过 10 秒）。等到了、没等到，都会连同此刻的页面一起交回给你，由你决定下一步；说不出具体在等哪段文字，就不要用它。
+- **read_doc**：必须先读一份站内文档的正文才能确定下一步时用——比如一条规则、一个期限、一种收费方式，只写在这一页链接到的说明文档里。via_ref 是这一页上那条文档链接。读到的正文（或读不到的原因）会交回给你，最长 8000 个字。
+- **done**：**用户要做的事已经做完了。** **说了 done，引导就结束了**——用户不会再收到下一步，屏幕上的高亮也会撤掉。所以这不是一句可以顺口说的话：不确定就继续给 point，走到真的到了再说。**"走不下去"和"已经做完"是相反的两件事：走不下去给 ask，做完了才给 done。** 先分清用户要的是哪一种：
+  - **他要看到某个东西**（看 issue 列表、看有哪些版本、读某份文件、确认用的是什么许可证）——**东西显示在这一页上，就是做完了**，没有下一步动作要做。这时给 done，evidence 用 content_on_page 或 page_address。不要因为"还能再点点别的"就继续给 point。
+    但**"这一页提到了它"不等于"这一页就是它"**：概览页、首页、详情页常常会顺带显示一个数字、一个名字、一条最新记录，那是摘要，不是用户要看的那一页。要看清单就得到清单上，要读某一份内容就得把那一份打开。分不清时问自己：**用户要的东西，是这一页的主体内容，还是这一页顺带提了一句？**
+    反过来，**这一页的主体本身就是那份清单或那组条目时**（一个目录下的全部文件、一份完整的列表），这一页就是用户要看的东西，不必替他再点进其中某一项。
+  - **他问的是怎么做、有什么规定**（怎么改成另一种方式、怎么把某样东西删掉、怎么收费、有哪些限制）——**讲清楚这件事的那一页（说明、文档的正文）就是终点**：东西显示在这一页上，给 done，evidence 用 content_on_page。**不要替他去执行**：他问的是方法，读完做不做、什么时候做由他自己决定；把他带去控制台、购买页、设置页真的操作一遍，是做了他没要的事。用户的话是在问「怎么……？」「……是怎么规定的？」，就是这一种。
+  - **他要你带他完成某个动作**（「带我把……做了」「我想把地址拿到手」「帮我把这一项打开」）——**看见不算做完，必须有一步已经生效**。地址显示出来了、而表里还有一个复制按钮，那就指那个复制按钮，给 point 不给 done。
+
+route 只描述"在哪一页、要完成什么"，绝不写出任何具体控件名或 ref。往搜索框填 value 时，先想清楚这个站点的搜索怎么写才能命中：把目标里能缩小范围的限定词一起写进去，而不是只写一个名字。
+
+挑控件、以及这一步之后会发生什么，按下面两组判断。
+
+**一、按控件做什么来挑，不按它长什么样来挑：**
+- 名字说明这个控件做什么，role 只说明它长什么样。"需要输入"不等于"要找一个 role 是 textbox 的控件"——把输入框唤出来的那个控件常常是按钮、链接或菜单项，判断依据是它的名字，不是它的 role。
+- 名字里限定了归属的控件，只做它所归属的那件事。名字指明它属于某个功能、某个模式、某个具体对象时，它就只在那个范围内生效，不是同类操作的通用入口；用它只会进入那个范围，不会推进你真正的目标。
+- 同一分组里的其它控件说明这一片是什么区域，一个控件的用途不会超出它所在区域的用途。名字含糊时，看它的邻居在做什么，比硬猜这个名字更可靠。
+- **助手的输入框，看它的分组认，不看它自己的名字认。** 这类输入框的名字往往就写着"问我任何问题""Ask anything"，和搜索框的提示语一模一样，光读名字分不出来——上一条说的"用邻居判断这一片是什么区域"，在这里是唯一可靠的办法。**看同一个分组里还有什么**：出现选模型、发送、上传附件、新建对话、用量统计这类控件，那一片就是一个对话面板，那个输入框是它的输入口。往里面填字只会换来一段回答，用户还站在原地——但页面确实变了，很容易被当成"这一步生效了"，接着一路在对话里绕。**同一页上另有站内搜索时，搜索才是入口**；只有用户的目标本身就是"问这个助手"，才选它。
+
+**二、一次只指一步，指完就等下一张元素表：**
+- 先判断这一步会造成哪一类变化：**跳到另一个页面** / **让这一页显示出新的东西**（展开、弹出、切换、显示更多）/ **填入内容**。
+- 无论哪一类，你都只指这一步。用户做完之后你会收到新的元素表：跳了页，就在新页面上接着指；这一页显示出了新东西，新出现的控件会带 +new 标记，下一步多半就是它。
+- 要往一个输入框里填内容，就直接指那个输入框，action 写 input 并在 value 里给出要填的文字；只点一下输入框不会有任何反应。输入框还没显示出来时，先指把它显示出来的那个控件。
+- 自检：用户做完这一步，是**更接近目标了**，还是停在原地、什么都不会发生？如果是后者，换一个控件。
+
+元素表开头两行说明你现在在哪一页：
+- page：当前页面的地址（主机名+路径+查询串，省略协议与锚点）。**这是你判断"用户有没有被带到新页面"的唯一依据**——同页展开、弹出不会改变它，那一类变化要看元素表里有没有多出原先没有的控件。
+- title：当前页面的标题。
+- frames：这一行只在这一页嵌着框架时出现，列出每个框架的标题和它来自哪个域名。**框架里的东西我看不到**——它是另一个文档，元素表里一个都没有。所以用户要的东西正好在某个框架里时（嵌入式控制台、结账组件、登录挂件、客服窗口、文档阅读器都常常是），不要从表里硬挑一个控件去顶替，如实说它在那个框架里；页面上另有别的路能到同一件事时，再指那条路。
+- truncated：这一行只在元素表被裁剪过时出现。**看到它就意味着你没有看到这一页的全部**——"表里没有"不等于"页面上没有"。这时不要据此断定这一页没有入口、也不要据此断定目标不在这里；照常从你能看到的里面挑一个能让用户更近一步的。表的最后还会多出一行「[表到此为止 · 这一页还有 N 个元素没有列出]」，N 是确切的个数。被略去的不是页面上连续的一段：导航、页头页脚、侧栏这类入口会优先保留，所以**没列出来的更可能是正文里的东西，而不是入口**。
+
+元素按层级缩进：以冒号结尾的行是分组（地标区域、标题、表格行），缩进在它下面的元素属于这个分组。同一个分组名可能出现多次，那表示页面上确实有两段分开的、同名的区域。
+
+元素表里的名字可能带两种标记：
+- 名字前的 ~（例如 ~"delete-file"）：这个名字不是用户在屏幕上能看到的文字，而是从 title/href/testid 等属性猜出来的兜底名字，说“点击写着 xxx 的按钮”是不成立的，因为屏幕上根本没画出这几个字。
+- 名字后的 !secret（例如 "登录密码" !secret）：这是凭据、支付或验证码一类的敏感输入框，禁止在 refs/options 里引用它，也绝不为它写 value。
+- 行尾的 +new：**上一步之后才出现的控件**，只在页面没有跳转时才会出现（点开了菜单、展开了面板、弹出了对话框）。用户刚才那一下就是为了让它出现，所以它多半就是下一步要用的东西；反过来，如果这一次一个 +new 都没有，说明上一步没让页面显示出任何新东西。
+
+这一页要先登录才能继续时（表里有 !secret 的账号密码框，旁边有一个提交按钮），不要就此停下来问用户：**指向那个提交按钮**（登录 / Sign in / 继续），在 why 里说明请他先自己把账号密码填好再点。填什么只有他自己知道——你不引用那两个框，也不替他写内容，你做的是把"填完之后按哪里"指出来。
+
+请使用用户这次提问所使用的语言作答，判断依据是这句提问本身的字面语言，而不是页面内容的语言——页面是中文而用户用马来文提问时，回答用马来文。引用元素表里的控件时按表里实际写的名字原样引用，不要翻译或改写成提问的语言。
+
+════════ 请求选项（工具 schema 另列）
+{"model":"gpt-6-sol","toolChoice":"required","temperature":1}
+
+════════ 用例：golden · zh-console · 把这台实例删掉
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这台实例删掉
+──── 请求选项：与文件开头相同
+──── tools
+[
+  {
+    "name": "point",
+    "description": "指出用户在这一页上要做的下一步。默认用这个。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "previous_step",
+        "route",
+        "why",
+        "ref",
+        "action",
+        "value",
+        "expect_after"
+      ],
+      "properties": {
+        "previous_step": {
+          "type": "string",
+          "enum": [
+            "first_plan",
+            "worked",
+            "no_change"
+          ],
+          "description": "先判断用户上一步的结果，再指这一步。first_plan=这是这一趟的第一步；worked=上一步生效了（页面跳走了，或元素表里多出了原先没有的控件）；no_change=元素表与上次相比没有实质变化。"
+        },
+        "route": {
+          "type": "array",
+          "description": "粗路标序列，只写\"在哪一页、要完成什么\"。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "at",
+              "goal"
+            ],
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "goal": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "why": {
+          "type": "string",
+          "description": "先写这一步为什么是这一步：你要去哪、这个控件为什么通向那里。写完再挑 ref。"
+        },
+        "ref": {
+          "type": "string",
+          "enum": [
+            "e2",
+            "e3",
+            "e4",
+            "e8",
+            "e9",
+            "e12",
+            "e13"
+          ],
+          "description": "元素表里的 ref，要和上面 why 说的那个控件一致。"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "click",
+            "input",
+            "select",
+            "toggle",
+            "scroll"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "只在 action 是 input 时给要输入的具体文字；其它情况填 null。"
+        },
+        "expect_after": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "只有确实有把握判断\"做完这一步之后会出现什么\"时才给，没有把握就填 null，不要编造。",
+          "additionalProperties": false,
+          "required": [
+            "via_ref",
+            "must_contain"
+          ],
+          "properties": {
+            "via_ref": {
+              "type": "string",
+              "description": "元素表里那个会导致跳转或变化的 ref（通常与 ref 相同）。"
+            },
+            "must_contain": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "description": "落地后应当出现的控件形状，给不出就填 null。",
+              "additionalProperties": false,
+              "required": [
+                "role",
+                "name"
+              ],
+              "properties": {
+                "role": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "落地后那个控件的名字，说不准就填 null。"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "ask",
+    "description": "只在必须先得到用户回答才能继续时用：这一页上连一个能让用户更接近目标的入口都没有，或目标本身有歧义。搜索框、导航、菜单都算入口。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question",
+        "wants",
+        "options"
+      ],
+      "properties": {
+        "question": {
+          "type": "string"
+        },
+        "wants": {
+          "type": "string",
+          "enum": [
+            "choice",
+            "text"
+          ],
+          "description": "你要用户给什么。choice=从 options 里选一个；text=给一段只有他知道的文字（名字、编号、要找的具体对象），这时 options 填空数组。绝不用 text 要账号、密码、验证码、卡号这类凭据或支付信息。"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ref",
+              "label"
+            ],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "description": "元素表里的 ref。"
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "explain",
+    "description": "用户问的是这一页上的东西——是什么、什么意思、在哪——就直接回答。用户要做成一件事时不用它。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "answer",
+        "refs"
+      ],
+      "properties": {
+        "answer": {
+          "type": "string",
+          "description": "你的回答正文。"
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "元素表里的 ref。"
+          },
+          "description": "只列出直接支撑这次回答的元素，通常 1～3 个，最多 5 个；它们会被逐个框出来给用户看。回答不依据页面内容就给空数组。"
+        }
+      }
+    }
+  },
+  {
+    "name": "observe",
+    "description": "把此刻的这一页重新读一遍。只在元素表还没反映出页面此刻的样子时用。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "why"
+      ],
+      "properties": {
+        "why": {
+          "type": "string",
+          "description": "你预计此刻的页面和这张表有什么不同，所以要再看一眼。"
+        }
+      }
+    }
+  },
+  {
+    "name": "wait_for",
+    "description": "等页面上出现（或消失）一段具体的文字，最多 10 秒。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "until",
+        "text",
+        "seconds"
+      ],
+      "properties": {
+        "until": {
+          "type": "string",
+          "enum": [
+            "appears",
+            "gone"
+          ],
+          "description": "appears=等它出现；gone=等它消失（例如「加载中」）。"
+        },
+        "text": {
+          "type": "string",
+          "description": "页面上看得见的一段具体文字：弹窗标题、按钮上的字、提示语。"
+        },
+        "seconds": {
+          "type": "integer",
+          "description": "最多等几秒，不超过 10。"
+        }
+      }
+    }
+  },
+  {
+    "name": "read_doc",
+    "description": "读一份这一页上链接到的站内文档的正文。只在必须先读它才能决定下一步时用。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "via_ref",
+        "query"
+      ],
+      "properties": {
+        "via_ref": {
+          "type": "string",
+          "description": "元素表里那个指向文档的链接的 ref。"
+        },
+        "query": {
+          "type": "string",
+          "description": "你需要从那份文档里读到什么。"
+        }
+      }
+    }
+  },
+  {
+    "name": "done",
+    "description": "只在用户要做的事已经做完时用。走不下去不是做完——那是 ask。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence",
+        "why"
+      ],
+      "properties": {
+        "evidence": {
+          "type": "string",
+          "enum": [
+            "content_on_page",
+            "page_address",
+            "step_completed"
+          ],
+          "description": "凭什么说做完了。content_on_page=用户要的东西已经显示在这一页上；page_address=页面地址本身表明已经到了；step_completed=用户要执行的那一步已经生效。三者都不成立就不要用 done。"
+        },
+        "why": {
+          "type": "string",
+          "description": "说明你凭这一页上的什么判断已经做完。"
+        }
+      }
+    }
+  }
+]
+
+════════ 用例：golden · zh-console · Delete this instance
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+Delete this instance
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+
+════════ 用例：golden · zh-console · Padamkan instans ini
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+Padamkan instans ini
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+
+════════ 用例：golden · zh-console · このインスタンスを削除したい
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+このインスタンスを削除したい
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+
+════════ 用例：golden · zh-console · 把这台实例的语音助手功能关掉
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这台实例的语音助手功能关掉
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+
+════════ 用例：golden · route · 把这个仓库从 public 改成 private
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "git.example.com/acme/widget"
+title "acme/widget"
+主导航:
+  e1 link "Code"
+  e2 link "Issues"
+  e3 link "Pull requests"
+  e4 link "Actions"
+  e5 link "Settings"
+仓库信息:
+  e6 button "Star"
+  e7 button "Fork"
+页脚:
+  e8 link "帮助文档"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这个仓库从 public 改成 private
+──── 请求选项：与文件开头相同
+──── tools
+[
+  {
+    "name": "point",
+    "description": "指出用户在这一页上要做的下一步。默认用这个。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "previous_step",
+        "route",
+        "why",
+        "ref",
+        "action",
+        "value",
+        "expect_after"
+      ],
+      "properties": {
+        "previous_step": {
+          "type": "string",
+          "enum": [
+            "first_plan",
+            "worked",
+            "no_change"
+          ],
+          "description": "先判断用户上一步的结果，再指这一步。first_plan=这是这一趟的第一步；worked=上一步生效了（页面跳走了，或元素表里多出了原先没有的控件）；no_change=元素表与上次相比没有实质变化。"
+        },
+        "route": {
+          "type": "array",
+          "description": "粗路标序列，只写\"在哪一页、要完成什么\"。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "at",
+              "goal"
+            ],
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "goal": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "why": {
+          "type": "string",
+          "description": "先写这一步为什么是这一步：你要去哪、这个控件为什么通向那里。写完再挑 ref。"
+        },
+        "ref": {
+          "type": "string",
+          "enum": [
+            "e1",
+            "e2",
+            "e3",
+            "e4",
+            "e5",
+            "e6",
+            "e7",
+            "e8"
+          ],
+          "description": "元素表里的 ref，要和上面 why 说的那个控件一致。"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "click",
+            "input",
+            "select",
+            "toggle",
+            "scroll"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "只在 action 是 input 时给要输入的具体文字；其它情况填 null。"
+        },
+        "expect_after": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "只有确实有把握判断\"做完这一步之后会出现什么\"时才给，没有把握就填 null，不要编造。",
+          "additionalProperties": false,
+          "required": [
+            "via_ref",
+            "must_contain"
+          ],
+          "properties": {
+            "via_ref": {
+              "type": "string",
+              "description": "元素表里那个会导致跳转或变化的 ref（通常与 ref 相同）。"
+            },
+            "must_contain": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "description": "落地后应当出现的控件形状，给不出就填 null。",
+              "additionalProperties": false,
+              "required": [
+                "role",
+                "name"
+              ],
+              "properties": {
+                "role": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "落地后那个控件的名字，说不准就填 null。"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "ask",
+    "description": "只在必须先得到用户回答才能继续时用：这一页上连一个能让用户更接近目标的入口都没有，或目标本身有歧义。搜索框、导航、菜单都算入口。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question",
+        "wants",
+        "options"
+      ],
+      "properties": {
+        "question": {
+          "type": "string"
+        },
+        "wants": {
+          "type": "string",
+          "enum": [
+            "choice",
+            "text"
+          ],
+          "description": "你要用户给什么。choice=从 options 里选一个；text=给一段只有他知道的文字（名字、编号、要找的具体对象），这时 options 填空数组。绝不用 text 要账号、密码、验证码、卡号这类凭据或支付信息。"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ref",
+              "label"
+            ],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "description": "元素表里的 ref。"
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "explain",
+    "description": "用户问的是这一页上的东西——是什么、什么意思、在哪——就直接回答。用户要做成一件事时不用它。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "answer",
+        "refs"
+      ],
+      "properties": {
+        "answer": {
+          "type": "string",
+          "description": "你的回答正文。"
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "元素表里的 ref。"
+          },
+          "description": "只列出直接支撑这次回答的元素，通常 1～3 个，最多 5 个；它们会被逐个框出来给用户看。回答不依据页面内容就给空数组。"
+        }
+      }
+    }
+  },
+  {
+    "name": "observe",
+    "description": "把此刻的这一页重新读一遍。只在元素表还没反映出页面此刻的样子时用。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "why"
+      ],
+      "properties": {
+        "why": {
+          "type": "string",
+          "description": "你预计此刻的页面和这张表有什么不同，所以要再看一眼。"
+        }
+      }
+    }
+  },
+  {
+    "name": "wait_for",
+    "description": "等页面上出现（或消失）一段具体的文字，最多 10 秒。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "until",
+        "text",
+        "seconds"
+      ],
+      "properties": {
+        "until": {
+          "type": "string",
+          "enum": [
+            "appears",
+            "gone"
+          ],
+          "description": "appears=等它出现；gone=等它消失（例如「加载中」）。"
+        },
+        "text": {
+          "type": "string",
+          "description": "页面上看得见的一段具体文字：弹窗标题、按钮上的字、提示语。"
+        },
+        "seconds": {
+          "type": "integer",
+          "description": "最多等几秒，不超过 10。"
+        }
+      }
+    }
+  },
+  {
+    "name": "read_doc",
+    "description": "读一份这一页上链接到的站内文档的正文。只在必须先读它才能决定下一步时用。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "via_ref",
+        "query"
+      ],
+      "properties": {
+        "via_ref": {
+          "type": "string",
+          "description": "元素表里那个指向文档的链接的 ref。"
+        },
+        "query": {
+          "type": "string",
+          "description": "你需要从那份文档里读到什么。"
+        }
+      }
+    }
+  },
+  {
+    "name": "done",
+    "description": "只在用户要做的事已经做完时用。走不下去不是做完——那是 ask。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence",
+        "why"
+      ],
+      "properties": {
+        "evidence": {
+          "type": "string",
+          "enum": [
+            "content_on_page",
+            "page_address",
+            "step_completed"
+          ],
+          "description": "凭什么说做完了。content_on_page=用户要的东西已经显示在这一页上；page_address=页面地址本身表明已经到了；step_completed=用户要执行的那一步已经生效。三者都不成立就不要用 done。"
+        },
+        "why": {
+          "type": "string",
+          "description": "说明你凭这一页上的什么判断已经做完。"
+        }
+      }
+    }
+  }
+]
+
+════════ 用例：golden · sensitive · 把我的显示名称改成 Kai
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "accounts.example.com/settings/security"
+title "账号设置 · 安全"
+主导航:
+  e1 link "账号总览"
+  e2 link "安全设置"
+  e3 link "账单"
+个人资料:
+  e4 textbox "显示名称"
+  e5 button "保存"
+修改密码:
+  e6 textbox "当前密码" !secret
+  e7 textbox "新密码" !secret
+  e8 textbox "确认新密码" !secret
+  e9 button "更新密码"
+支付方式:
+  e10 textbox "卡号" !secret
+  e11 textbox "CVV" !secret
+  e12 button "保存支付方式"
+两步验证:
+  e13 switch "启用两步验证"
+页脚:
+  e14 link "帮助文档"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把我的显示名称改成 Kai
+──── 请求选项：与文件开头相同
+──── tools
+[
+  {
+    "name": "point",
+    "description": "指出用户在这一页上要做的下一步。默认用这个。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "previous_step",
+        "route",
+        "why",
+        "ref",
+        "action",
+        "value",
+        "expect_after"
+      ],
+      "properties": {
+        "previous_step": {
+          "type": "string",
+          "enum": [
+            "first_plan",
+            "worked",
+            "no_change"
+          ],
+          "description": "先判断用户上一步的结果，再指这一步。first_plan=这是这一趟的第一步；worked=上一步生效了（页面跳走了，或元素表里多出了原先没有的控件）；no_change=元素表与上次相比没有实质变化。"
+        },
+        "route": {
+          "type": "array",
+          "description": "粗路标序列，只写\"在哪一页、要完成什么\"。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "at",
+              "goal"
+            ],
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "goal": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "why": {
+          "type": "string",
+          "description": "先写这一步为什么是这一步：你要去哪、这个控件为什么通向那里。写完再挑 ref。"
+        },
+        "ref": {
+          "type": "string",
+          "enum": [
+            "e1",
+            "e2",
+            "e3",
+            "e4",
+            "e5",
+            "e6",
+            "e7",
+            "e8",
+            "e9",
+            "e10",
+            "e11",
+            "e12",
+            "e13",
+            "e14"
+          ],
+          "description": "元素表里的 ref，要和上面 why 说的那个控件一致。"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "click",
+            "input",
+            "select",
+            "toggle",
+            "scroll"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "只在 action 是 input 时给要输入的具体文字；其它情况填 null。"
+        },
+        "expect_after": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "只有确实有把握判断\"做完这一步之后会出现什么\"时才给，没有把握就填 null，不要编造。",
+          "additionalProperties": false,
+          "required": [
+            "via_ref",
+            "must_contain"
+          ],
+          "properties": {
+            "via_ref": {
+              "type": "string",
+              "description": "元素表里那个会导致跳转或变化的 ref（通常与 ref 相同）。"
+            },
+            "must_contain": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "description": "落地后应当出现的控件形状，给不出就填 null。",
+              "additionalProperties": false,
+              "required": [
+                "role",
+                "name"
+              ],
+              "properties": {
+                "role": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "落地后那个控件的名字，说不准就填 null。"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "ask",
+    "description": "只在必须先得到用户回答才能继续时用：这一页上连一个能让用户更接近目标的入口都没有，或目标本身有歧义。搜索框、导航、菜单都算入口。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question",
+        "wants",
+        "options"
+      ],
+      "properties": {
+        "question": {
+          "type": "string"
+        },
+        "wants": {
+          "type": "string",
+          "enum": [
+            "choice",
+            "text"
+          ],
+          "description": "你要用户给什么。choice=从 options 里选一个；text=给一段只有他知道的文字（名字、编号、要找的具体对象），这时 options 填空数组。绝不用 text 要账号、密码、验证码、卡号这类凭据或支付信息。"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ref",
+              "label"
+            ],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "description": "元素表里的 ref。"
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "explain",
+    "description": "用户问的是这一页上的东西——是什么、什么意思、在哪——就直接回答。用户要做成一件事时不用它。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "answer",
+        "refs"
+      ],
+      "properties": {
+        "answer": {
+          "type": "string",
+          "description": "你的回答正文。"
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "元素表里的 ref。"
+          },
+          "description": "只列出直接支撑这次回答的元素，通常 1～3 个，最多 5 个；它们会被逐个框出来给用户看。回答不依据页面内容就给空数组。"
+        }
+      }
+    }
+  },
+  {
+    "name": "observe",
+    "description": "把此刻的这一页重新读一遍。只在元素表还没反映出页面此刻的样子时用。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "why"
+      ],
+      "properties": {
+        "why": {
+          "type": "string",
+          "description": "你预计此刻的页面和这张表有什么不同，所以要再看一眼。"
+        }
+      }
+    }
+  },
+  {
+    "name": "wait_for",
+    "description": "等页面上出现（或消失）一段具体的文字，最多 10 秒。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "until",
+        "text",
+        "seconds"
+      ],
+      "properties": {
+        "until": {
+          "type": "string",
+          "enum": [
+            "appears",
+            "gone"
+          ],
+          "description": "appears=等它出现；gone=等它消失（例如「加载中」）。"
+        },
+        "text": {
+          "type": "string",
+          "description": "页面上看得见的一段具体文字：弹窗标题、按钮上的字、提示语。"
+        },
+        "seconds": {
+          "type": "integer",
+          "description": "最多等几秒，不超过 10。"
+        }
+      }
+    }
+  },
+  {
+    "name": "read_doc",
+    "description": "读一份这一页上链接到的站内文档的正文。只在必须先读它才能决定下一步时用。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "via_ref",
+        "query"
+      ],
+      "properties": {
+        "via_ref": {
+          "type": "string",
+          "description": "元素表里那个指向文档的链接的 ref。"
+        },
+        "query": {
+          "type": "string",
+          "description": "你需要从那份文档里读到什么。"
+        }
+      }
+    }
+  },
+  {
+    "name": "done",
+    "description": "只在用户要做的事已经做完时用。走不下去不是做完——那是 ask。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence",
+        "why"
+      ],
+      "properties": {
+        "evidence": {
+          "type": "string",
+          "enum": [
+            "content_on_page",
+            "page_address",
+            "step_completed"
+          ],
+          "description": "凭什么说做完了。content_on_page=用户要的东西已经显示在这一页上；page_address=页面地址本身表明已经到了；step_completed=用户要执行的那一步已经生效。三者都不成立就不要用 done。"
+        },
+        "why": {
+          "type": "string",
+          "description": "说明你凭这一页上的什么判断已经做完。"
+        }
+      }
+    }
+  }
+]
+
+════════ 用例：golden · sensitive · 帮我登录一下，然后把新的银行卡信息填进去保存
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "accounts.example.com/settings/security"
+title "账号设置 · 安全"
+主导航:
+  e1 link "账号总览"
+  e2 link "安全设置"
+  e3 link "账单"
+个人资料:
+  e4 textbox "显示名称"
+  e5 button "保存"
+修改密码:
+  e6 textbox "当前密码" !secret
+  e7 textbox "新密码" !secret
+  e8 textbox "确认新密码" !secret
+  e9 button "更新密码"
+支付方式:
+  e10 textbox "卡号" !secret
+  e11 textbox "CVV" !secret
+  e12 button "保存支付方式"
+两步验证:
+  e13 switch "启用两步验证"
+页脚:
+  e14 link "帮助文档"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+帮我登录一下，然后把新的银行卡信息填进去保存
+──── 请求选项：与文件开头相同
+──── tools：与「golden · sensitive · 把我的显示名称改成 Kai」相同
+
+════════ 用例：golden · sensitive · 两步验证的验证码具体多长时间会过期，如果连续输错三次会怎样
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "accounts.example.com/settings/security"
+title "账号设置 · 安全"
+主导航:
+  e1 link "账号总览"
+  e2 link "安全设置"
+  e3 link "账单"
+个人资料:
+  e4 textbox "显示名称"
+  e5 button "保存"
+修改密码:
+  e6 textbox "当前密码" !secret
+  e7 textbox "新密码" !secret
+  e8 textbox "确认新密码" !secret
+  e9 button "更新密码"
+支付方式:
+  e10 textbox "卡号" !secret
+  e11 textbox "CVV" !secret
+  e12 button "保存支付方式"
+两步验证:
+  e13 switch "启用两步验证"
+页脚:
+  e14 link "帮助文档"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+两步验证的验证码具体多长时间会过期，如果连续输错三次会怎样
+──── 请求选项：与文件开头相同
+──── tools：与「golden · sensitive · 把我的显示名称改成 Kai」相同
+
+════════ 用例：golden · zh-console · 这一页上的「安全组规则」是什么意思？那两个删除按钮分别删的是什么？
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+这一页上的「安全组规则」是什么意思？那两个删除按钮分别删的是什么？
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+
+════════ 用例：golden · zh-console · 把这条安全组规则删掉
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这条安全组规则删掉
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+
+════════ 用例：有历史：已确认（带落点）、照做了但这一页没变、目标消失、未定，外加上一次的路标
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "git.example.com/acme/widget"
+title "acme/widget"
+主导航:
+  e1 link "Code"
+  e2 link "Issues"
+  e3 link "Pull requests"
+  e4 link "Actions"
+  e5 link "Settings"
+仓库信息:
+  e6 button "Star"
+  e7 button "Fork"
+页脚:
+  e8 link "帮助文档"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+你上一次给出的粗路标是：仓库设置页 → 找到可见性设置；危险操作区 → 把仓库改成 private——那是站在**上一页**给出的。用户已经照做并到了新的页面，所以这条路标里已经走完的部分不用再走一遍；请基于下面这张新的元素表，重新给出从**现在这一页**往前的路标。
+
+你在这条引导里已经让用户做过这些（最早的在前）：
+1. 在 https://git.example.com/acme/widget 让用户操作了「Settings」——照做了，页面确实变了，之后到了 https://git.example.com/acme/widget/settings
+2. 在 https://git.example.com/acme/widget/settings 让用户操作了「Danger Zone」——照做了，这一页没有变化——复制、在新标签页打开这类操作，做成了也是这样；如果这一步本该让这一页出现新东西，就换一个控件或换一种做法
+3. 在 https://git.example.com/acme/widget/settings 让用户操作了「Change visibility」——引导在这一步之后为安全停下了
+4. 在 https://git.example.com/acme/widget/settings 让用户操作了「Make private」——还没有确认
+
+如果根据下面这张元素表判断目标已经达成，就输出 done。
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这个仓库从 public 改成 private
+──── 请求选项：与文件开头相同
+──── tools：与「golden · route · 把这个仓库从 public 改成 private」相同
+
+════════ 用例：有历史：最后一步照做了但这一页没变，外加上一次的路标
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "git.example.com/acme/widget"
+title "acme/widget"
+主导航:
+  e1 link "Code"
+  e2 link "Issues"
+  e3 link "Pull requests"
+  e4 link "Actions"
+  e5 link "Settings"
+仓库信息:
+  e6 button "Star"
+  e7 button "Fork"
+页脚:
+  e8 link "帮助文档"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+你上一次给出的粗路标是：仓库设置页 → 找到可见性设置；危险操作区 → 把仓库改成 private——那是站在这一页上给出的，而上一步之后这一页没有变化。请基于下面这张元素表判断接下来怎么走。
+
+你在这条引导里已经让用户做过这些（最早的在前）：
+1. 在 https://git.example.com/acme/widget 让用户操作了「Settings」——照做了，页面确实变了，之后到了 https://git.example.com/acme/widget/settings
+2. 在 https://git.example.com/acme/widget/settings 让用户操作了「Danger Zone」——照做了，这一页没有变化——复制、在新标签页打开这类操作，做成了也是这样；如果这一步本该让这一页出现新东西，就换一个控件或换一种做法
+
+如果根据下面这张元素表判断目标已经达成，就输出 done。
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这个仓库从 public 改成 private
+──── 请求选项：与文件开头相同
+──── tools：与「golden · route · 把这个仓库从 public 改成 private」相同
+
+════════ 用例：有历史：只有走过的步骤，没有路标
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "git.example.com/acme/widget"
+title "acme/widget"
+主导航:
+  e1 link "Code"
+  e2 link "Issues"
+  e3 link "Pull requests"
+  e4 link "Actions"
+  e5 link "Settings"
+仓库信息:
+  e6 button "Star"
+  e7 button "Fork"
+页脚:
+  e8 link "帮助文档"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+你在这条引导里已经让用户做过这些（最早的在前）：
+1. 在 https://git.example.com/acme/widget 让用户操作了「Settings」——照做了，页面确实变了，之后到了 https://git.example.com/acme/widget/settings
+
+如果根据下面这张元素表判断目标已经达成，就输出 done。
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这个仓库从 public 改成 private
+──── 请求选项：与文件开头相同
+──── tools：与「golden · route · 把这个仓库从 public 改成 private」相同
+
+════════ 用例：有历史：只有路标，还没有走过的步骤
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "git.example.com/acme/widget"
+title "acme/widget"
+主导航:
+  e1 link "Code"
+  e2 link "Issues"
+  e3 link "Pull requests"
+  e4 link "Actions"
+  e5 link "Settings"
+仓库信息:
+  e6 button "Star"
+  e7 button "Fork"
+页脚:
+  e8 link "帮助文档"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+你上一次给出的粗路标是：仓库设置页 → 找到可见性设置；危险操作区 → 把仓库改成 private——那是站在**上一页**给出的。用户已经照做并到了新的页面，所以这条路标里已经走完的部分不用再走一遍；请基于下面这张新的元素表，重新给出从**现在这一页**往前的路标。
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这个仓库从 public 改成 private
+──── 请求选项：与文件开头相同
+──── tools：与「golden · route · 把这个仓库从 public 改成 private」相同
+
+════════ 用例：有站点知识：github.com 上的一页
+──── system（与文件开头相同）
+──── user
+关于这个站点，你需要知道：
+全局搜索按仓库名匹配，不接受"仓库名 + 你想在里面做什么"这样的词组。要打开某个仓库，输入它的 组织名/仓库名（例如 n8n-io/n8n）。
+仓库里的东西（issue、release、许可证、贡献指南、CI 配置）都在仓库自己的导航里，不在全局搜索里：先进仓库，再在仓库页面上找。
+点开顶部的搜索按钮只是弹出搜索框，页面并不会跳转。要把用户送到搜索结果，同一份计划里就要连着给出往搜索框里 input 的那一步。
+产品的官方文档站一般在另一个域名上，不在 github.com 里。去那里的路是先进它的文档仓库（常见是 组织名/产品名-docs），仓库主页的 README 或右侧 About 里会有那个链接。
+设置页的左侧导航在窄屏下会折叠为下拉菜单。
+
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "github.com/n8n-io/n8n"
+title "acme/widget"
+主导航:
+  e1 link "Code"
+  e2 link "Issues"
+  e3 link "Pull requests"
+  e4 link "Actions"
+  e5 link "Settings"
+仓库信息:
+  e6 button "Star"
+  e7 button "Fork"
+页脚:
+  e8 link "帮助文档"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+带我去看这个仓库的 issue 列表
+──── 请求选项：与文件开头相同
+──── tools：与「golden · route · 把这个仓库从 public 改成 private」相同
+
+════════ 用例：站点知识、历史、新出现的 ref 同时出现：github.com 上的一页
+──── system（与文件开头相同）
+──── user
+关于这个站点，你需要知道：
+全局搜索按仓库名匹配，不接受"仓库名 + 你想在里面做什么"这样的词组。要打开某个仓库，输入它的 组织名/仓库名（例如 n8n-io/n8n）。
+仓库里的东西（issue、release、许可证、贡献指南、CI 配置）都在仓库自己的导航里，不在全局搜索里：先进仓库，再在仓库页面上找。
+点开顶部的搜索按钮只是弹出搜索框，页面并不会跳转。要把用户送到搜索结果，同一份计划里就要连着给出往搜索框里 input 的那一步。
+产品的官方文档站一般在另一个域名上，不在 github.com 里。去那里的路是先进它的文档仓库（常见是 组织名/产品名-docs），仓库主页的 README 或右侧 About 里会有那个链接。
+设置页的左侧导航在窄屏下会折叠为下拉菜单。
+
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "github.com/n8n-io/n8n"
+title "acme/widget"
+主导航:
+  e1 link "Code"
+  e2 link "Issues"
+  e3 link "Pull requests"
+  e4 link "Actions"
+  e5 link "Settings"
+仓库信息:
+  e6 button "Star"
+  e7 button "Fork" +new
+页脚:
+  e8 link "帮助文档" +new</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+你上一次给出的粗路标是：仓库设置页 → 找到可见性设置；危险操作区 → 把仓库改成 private——那是站在**上一页**给出的。用户已经照做并到了新的页面，所以这条路标里已经走完的部分不用再走一遍；请基于下面这张新的元素表，重新给出从**现在这一页**往前的路标。
+
+你在这条引导里已经让用户做过这些（最早的在前）：
+1. 在 https://git.example.com/acme/widget 让用户操作了「Settings」——照做了，页面确实变了，之后到了 https://git.example.com/acme/widget/settings
+2. 在 https://git.example.com/acme/widget/settings 让用户操作了「Danger Zone」——照做了，这一页没有变化——复制、在新标签页打开这类操作，做成了也是这样；如果这一步本该让这一页出现新东西，就换一个控件或换一种做法
+3. 在 https://git.example.com/acme/widget/settings 让用户操作了「Change visibility」——引导在这一步之后为安全停下了
+4. 在 https://git.example.com/acme/widget/settings 让用户操作了「Make private」——还没有确认
+
+如果根据下面这张元素表判断目标已经达成，就输出 done。
+
+用户的提问如下。请用与这句提问相同的语言作答：
+带我去看这个仓库的 issue 列表
+──── 请求选项：与文件开头相同
+──── tools：与「golden · route · 把这个仓库从 public 改成 private」相同
+
+════════ 用例：有新出现的 ref：页面没跳转，展开了一片
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除" +new
+  允许 SSH 入站:
+    e13 button "删除" +new</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这条安全组规则删掉
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+
+════════ 用例：元素表被裁剪
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+truncated 这一页元素太多，下面只是其中一部分；导航一类的入口已优先保留
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除"
+[表到此为止 · 这一页还有 37 个元素没有列出]</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这台实例删掉
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+
+════════ 用例：这一步里已经有过工具轮次：读不到、等了没等到、读到了页面、读了一份文档、一份没抓
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除" +new</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这台实例删掉
+──── assistant
+──────── tool-call
+{
+  "type": "tool-call",
+  "toolCallId": "call_obs1",
+  "toolName": "observe",
+  "input": "{\"why\":\"正文像是还没加载出来\"}"
+}
+──── tool
+──────── tool-result
+{
+  "type": "tool-result",
+  "toolCallId": "call_obs1",
+  "output": "此刻读不到这一页：扩展没能从页面上读出元素表，页面可能正在跳转或刷新。"
+}
+──── assistant
+──────── tool-call
+{
+  "type": "tool-call",
+  "toolCallId": "call_wait",
+  "toolName": "wait_for",
+  "input": "{\"until\":\"appears\",\"text\":\"确认删除\",\"seconds\":10}"
+}
+──── tool
+──────── tool-result
+{
+  "type": "tool-result",
+  "toolCallId": "call_wait",
+  "output": "等了 10 秒，没等到「确认删除」出现。\n\n这是此刻重新读到的这一页。前面那张表里的 ref 已经作废，之后只用这张表里的：\n\n<untrusted_page_content nonce=\"00000000-0000-4000-8000-000000000000\">page \"127.0.0.1:63682/zh-console.html\"\ntitle \"中文控制台\"\n主导航:\n  e2 link \"文档\"\n  e3 link \"监控\"\n  e4 link \"工单\"\n实例操作:\n  e8 button \"删除实例\"\n  e9 link \"开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）\"\n安全组规则:\n  允许 HTTP 入站:\n    e12 button \"删除\"\n  允许 SSH 入站:\n    e13 button \"删除\"</untrusted_page_content nonce=\"00000000-0000-4000-8000-000000000000\">"
+}
+──── assistant
+──────── tool-call
+{
+  "type": "tool-call",
+  "toolCallId": "call_obs2",
+  "toolName": "observe",
+  "input": "{\"why\":\"再看一眼\"}"
+}
+──── tool
+──────── tool-result
+{
+  "type": "tool-result",
+  "toolCallId": "call_obs2",
+  "output": "这是此刻重新读到的这一页。前面那张表里的 ref 已经作废，之后只用这张表里的：\n\n<untrusted_page_content nonce=\"00000000-0000-4000-8000-000000000000\">page \"127.0.0.1:63682/zh-console.html\"\ntitle \"中文控制台\"\ntruncated 这一页元素太多，下面只是其中一部分；导航一类的入口已优先保留\n主导航:\n  e2 link \"文档\"\n  e3 link \"监控\"\n  e4 link \"工单\"\n实例操作:\n  e8 button \"删除实例\"\n  e9 link \"开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）\"\n安全组规则:\n  允许 HTTP 入站:\n    e12 button \"删除\"\n  允许 SSH 入站:\n    e13 button \"删除\"\n[表到此为止 · 这一页还有 37 个元素没有列出]</untrusted_page_content nonce=\"00000000-0000-4000-8000-000000000000\">"
+}
+──── assistant
+──────── tool-call
+{
+  "type": "tool-call",
+  "toolCallId": "call_doc1",
+  "toolName": "read_doc",
+  "input": "{\"via_ref\":\"e9\",\"query\":\"删除之后还能恢复吗\"}"
+}
+──── tool
+──────── tool-result
+{
+  "type": "tool-result",
+  "toolCallId": "call_doc1",
+  "output": "这是那份文档的正文（只给出了开头一段，后面还有，没有给出）：\n\n<untrusted_page_content nonce=\"00000000-0000-4000-8000-000000000000\">实例删除后无法恢复，数据盘会一并释放。</untrusted_page_content nonce=\"00000000-0000-4000-8000-000000000000\">"
+}
+──── assistant
+──────── tool-call
+{
+  "type": "tool-call",
+  "toolCallId": "call_doc2",
+  "toolName": "read_doc",
+  "input": "{\"via_ref\":\"e2\",\"query\":\"收费规则\"}"
+}
+──── tool
+──────── tool-result
+{
+  "type": "tool-result",
+  "toolCallId": "call_doc2",
+  "output": "没有读到那份文档：这条链接指向的是你自己网络里的地址（10.0.0.8），不会是一份文档。"
+}
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+
+════════ 用例：读数唤醒：用户点了、目标消失、页面自己变了、整页加载完——换了地址
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "git.example.com/acme/widget"
+title "acme/widget"
+主导航:
+  e1 link "Code"
+  e2 link "Issues"
+  e3 link "Pull requests"
+  e4 link "Actions"
+  e5 link "Settings"
+仓库信息:
+  e6 button "Star"
+  e7 button "Fork"
+页脚:
+  e8 link "帮助文档"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+你上一次给出的粗路标是：仓库设置页 → 找到可见性设置；危险操作区 → 把仓库改成 private——那是站在**上一页**给出的，现在已经到了新的一页，所以这条路标里已经走完的部分不用再走一遍；请基于下面这张新的元素表，重新给出从**现在这一页**往前的路标。
+
+你在这条引导里已经让用户做过这些（最早的在前）：
+1. 在 https://git.example.com/acme/widget 让用户操作了「Settings」——还没有确认
+
+如果根据下面这张元素表判断目标已经达成，就输出 done。
+
+你上次回答之后，扩展看到了这些（先发生的在前）：
+- 用户点了你指的那一步。
+- 你指的那一步的目标从页面上消失了。
+- 页面自己变了：页面的结构有了变化。
+- 这个标签页加载完了一整页：https://git.example.com/acme/widget/settings
+
+此刻这一页和你上次回答时相比：地址变了，现在是 https://git.example.com/acme/widget。
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这个仓库从 public 改成 private
+──── 请求选项：与文件开头相同
+──── tools：与「golden · route · 把这个仓库从 public 改成 private」相同
+
+════════ 用例：读数唤醒：填完了——地址变了而控件一个没变
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "git.example.com/acme/widget"
+title "acme/widget"
+主导航:
+  e1 link "Code"
+  e2 link "Issues"
+  e3 link "Pull requests"
+  e4 link "Actions"
+  e5 link "Settings"
+仓库信息:
+  e6 button "Star"
+  e7 button "Fork"
+页脚:
+  e8 link "帮助文档"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+你上一次给出的粗路标是：仓库设置页 → 找到可见性设置；危险操作区 → 把仓库改成 private——那是你上次回答时给出的。这一页此刻怎样，见下面。
+
+你在这条引导里已经让用户做过这些（最早的在前）：
+1. 在 https://git.example.com/acme/widget 让用户操作了「Settings」——还没有确认
+
+如果根据下面这张元素表判断目标已经达成，就输出 done。
+
+你上次回答之后，扩展看到了这些（先发生的在前）：
+- 用户在你指的那一步里填了内容，填完了。
+
+此刻这一页和你上次回答时相比：地址变了，现在是 https://git.example.com/acme/widget；但页面上的控件和你上次回答时看到的完全一样。
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这个仓库从 public 改成 private
+──── 请求选项：与文件开头相同
+──── tools：与「golden · route · 把这个仓库从 public 改成 private」相同
+
+════════ 用例：读数唤醒：页面原地变了，新出现了控件
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除" +new
+  允许 SSH 入站:
+    e13 button "删除" +new</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+你上一次给出的粗路标是：仓库设置页 → 找到可见性设置；危险操作区 → 把仓库改成 private——那是站在这一页上给出的，现在还在这一页。请基于下面这张元素表判断接下来怎么走。
+
+你在这条引导里已经让用户做过这些（最早的在前）：
+1. 在 https://git.example.com/acme/widget 让用户操作了「Settings」——还没有确认
+
+如果根据下面这张元素表判断目标已经达成，就输出 done。
+
+你上次回答之后，扩展看到了这些（先发生的在前）：
+- 页面自己变了：页面的结构有了变化。
+
+此刻这一页和你上次回答时相比：地址没变，页面上的控件变了；新出现的控件在上面的表里标了出来。
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这条安全组规则删掉
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+
+════════ 用例：读数唤醒：画面那一侧——没画出来（换了页、敏感框）、没找到、此刻点不了（禁用、挡住、在动）；页面没变
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+你上一次给出的粗路标是：仓库设置页 → 找到可见性设置；危险操作区 → 把仓库改成 private——那是站在这一页上给出的，现在还在这一页。请基于下面这张元素表判断接下来怎么走。
+
+你在这条引导里已经让用户做过这些（最早的在前）：
+1. 在 https://git.example.com/acme/widget 让用户操作了「Settings」——还没有确认
+
+如果根据下面这张元素表判断目标已经达成，就输出 done。
+
+你上次回答之后，扩展看到了这些（先发生的在前）：
+- 你指的那一步没有画出来：要画的时候，这个标签页已经不在你回答时的那一页了。
+- 你指的那一步没有画出来：它落在了密码、验证码这类敏感输入框上，扩展不会把它框出来。
+- 你指的那一步，扩展要画的时候在页面上没找到它的目标。页面之后再变，扩展会接着找，找到了就框出来。
+- 你指的那一步的目标在页面上，但此刻点不了：它是禁用的。
+- 你指的那一步的目标在页面上，但此刻点不了：它被别的内容挡住了。
+- 你指的那一步的目标在页面上，但此刻点不了：它还在动。
+
+此刻这一页和你上次回答时相比：地址和页面上的控件都和你上次回答时看到的一样。
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这条安全组规则删掉
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+
+════════ 用例：读数唤醒：用户又说了一句——此刻读不到这一页
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+你上一次给出的粗路标是：仓库设置页 → 找到可见性设置；危险操作区 → 把仓库改成 private——那是你上次回答时给出的。这一页此刻怎样，见下面。
+
+你在这条引导里已经让用户做过这些（最早的在前）：
+1. 在 https://git.example.com/acme/widget 让用户操作了「Settings」——还没有确认
+
+如果根据下面这张元素表判断目标已经达成，就输出 done。
+
+你上次回答之后，扩展看到了这些（先发生的在前）：
+- 用户又说：「等等，先告诉我删掉之后还能不能恢复」
+
+此刻这一页和你上次回答时相比：此刻读不到这一页：扩展没能从页面上读出元素表，页面可能正在跳转或刷新。上面那张表是你上次回答时的那一页。
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这条安全组规则删掉
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+
+════════ 用例：一步的最后一次调用：只给回答，末尾说请直接给结论
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这台实例删掉
+──── assistant
+──────── tool-call
+{
+  "type": "tool-call",
+  "toolCallId": "call_obs",
+  "toolName": "observe",
+  "input": "{\"why\":\"再看一眼\"}"
+}
+──── tool
+──────── tool-result
+{
+  "type": "tool-result",
+  "toolCallId": "call_obs",
+  "output": "这是此刻重新读到的这一页。前面那张表里的 ref 已经作废，之后只用这张表里的：\n\n<untrusted_page_content nonce=\"00000000-0000-4000-8000-000000000000\">page \"127.0.0.1:63682/zh-console.html\"\ntitle \"中文控制台\"\n主导航:\n  e2 link \"文档\"\n  e3 link \"监控\"\n  e4 link \"工单\"\n实例操作:\n  e8 button \"删除实例\"\n  e9 link \"开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）\"\n安全组规则:\n  允许 HTTP 入站:\n    e12 button \"删除\"\n  允许 SSH 入站:\n    e13 button \"删除\"</untrusted_page_content nonce=\"00000000-0000-4000-8000-000000000000\">"
+}
+──── user
+这一步你已经来回看过几次了，这一次请直接给结论，不能再看、再等、再读文档了：指出你现在认为最好的一步（point）；用户问的是这一页上的事，就直接回答（explain）；实在指不出来，就问用户（ask）；已经到了，就说 done。
+──── 请求选项：与文件开头相同
+──── tools
+[
+  {
+    "name": "point",
+    "description": "指出用户在这一页上要做的下一步。默认用这个。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "previous_step",
+        "route",
+        "why",
+        "ref",
+        "action",
+        "value",
+        "expect_after"
+      ],
+      "properties": {
+        "previous_step": {
+          "type": "string",
+          "enum": [
+            "first_plan",
+            "worked",
+            "no_change"
+          ],
+          "description": "先判断用户上一步的结果，再指这一步。first_plan=这是这一趟的第一步；worked=上一步生效了（页面跳走了，或元素表里多出了原先没有的控件）；no_change=元素表与上次相比没有实质变化。"
+        },
+        "route": {
+          "type": "array",
+          "description": "粗路标序列，只写\"在哪一页、要完成什么\"。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "at",
+              "goal"
+            ],
+            "properties": {
+              "at": {
+                "type": "string"
+              },
+              "goal": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "why": {
+          "type": "string",
+          "description": "先写这一步为什么是这一步：你要去哪、这个控件为什么通向那里。写完再挑 ref。"
+        },
+        "ref": {
+          "type": "string",
+          "enum": [
+            "e2",
+            "e3",
+            "e4",
+            "e8",
+            "e9",
+            "e12",
+            "e13"
+          ],
+          "description": "元素表里的 ref，要和上面 why 说的那个控件一致。"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "click",
+            "input",
+            "select",
+            "toggle",
+            "scroll"
+          ]
+        },
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "只在 action 是 input 时给要输入的具体文字；其它情况填 null。"
+        },
+        "expect_after": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "只有确实有把握判断\"做完这一步之后会出现什么\"时才给，没有把握就填 null，不要编造。",
+          "additionalProperties": false,
+          "required": [
+            "via_ref",
+            "must_contain"
+          ],
+          "properties": {
+            "via_ref": {
+              "type": "string",
+              "description": "元素表里那个会导致跳转或变化的 ref（通常与 ref 相同）。"
+            },
+            "must_contain": {
+              "type": [
+                "object",
+                "null"
+              ],
+              "description": "落地后应当出现的控件形状，给不出就填 null。",
+              "additionalProperties": false,
+              "required": [
+                "role",
+                "name"
+              ],
+              "properties": {
+                "role": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "落地后那个控件的名字，说不准就填 null。"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "ask",
+    "description": "只在必须先得到用户回答才能继续时用：这一页上连一个能让用户更接近目标的入口都没有，或目标本身有歧义。搜索框、导航、菜单都算入口。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "question",
+        "wants",
+        "options"
+      ],
+      "properties": {
+        "question": {
+          "type": "string"
+        },
+        "wants": {
+          "type": "string",
+          "enum": [
+            "choice",
+            "text"
+          ],
+          "description": "你要用户给什么。choice=从 options 里选一个；text=给一段只有他知道的文字（名字、编号、要找的具体对象），这时 options 填空数组。绝不用 text 要账号、密码、验证码、卡号这类凭据或支付信息。"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ref",
+              "label"
+            ],
+            "properties": {
+              "ref": {
+                "type": "string",
+                "description": "元素表里的 ref。"
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "name": "explain",
+    "description": "用户问的是这一页上的东西——是什么、什么意思、在哪——就直接回答。用户要做成一件事时不用它。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "answer",
+        "refs"
+      ],
+      "properties": {
+        "answer": {
+          "type": "string",
+          "description": "你的回答正文。"
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "元素表里的 ref。"
+          },
+          "description": "只列出直接支撑这次回答的元素，通常 1～3 个，最多 5 个；它们会被逐个框出来给用户看。回答不依据页面内容就给空数组。"
+        }
+      }
+    }
+  },
+  {
+    "name": "done",
+    "description": "只在用户要做的事已经做完时用。走不下去不是做完——那是 ask。",
+    "strict": true,
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence",
+        "why"
+      ],
+      "properties": {
+        "evidence": {
+          "type": "string",
+          "enum": [
+            "content_on_page",
+            "page_address",
+            "step_completed"
+          ],
+          "description": "凭什么说做完了。content_on_page=用户要的东西已经显示在这一页上；page_address=页面地址本身表明已经到了；step_completed=用户要执行的那一步已经生效。三者都不成立就不要用 done。"
+        },
+        "why": {
+          "type": "string",
+          "description": "说明你凭这一页上的什么判断已经做完。"
+        }
+      }
+    }
+  }
+]
+
+════════ 用例：修复轮：第一次的 arguments 不是合法 JSON，端点给了调用 id
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这台实例删掉
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+──────── 第 2 次请求
+──── 第 1 条：与第 1 次请求相同
+──── 第 2 条：与第 1 次请求相同
+──── assistant
+──────── tool-call
+{
+  "type": "tool-call",
+  "toolCallId": "call_1",
+  "toolName": "point",
+  "input": "{\"route\": ["
+}
+──── tool
+──────── tool-result
+{
+  "type": "tool-result",
+  "toolCallId": "call_1",
+  "output": "point 信封缺少 why 字段（或类型不对）"
+}
+──── 请求选项（含 tools）：与第 1 次请求相同
+
+════════ 用例：修复轮：第一次能解析但被校验拒绝（ref 不在表里），端点给了调用 id
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这台实例删掉
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+──────── 第 2 次请求
+──── 第 1 条：与第 1 次请求相同
+──── 第 2 条：与第 1 次请求相同
+──── assistant
+──────── tool-call
+{
+  "type": "tool-call",
+  "toolCallId": "call_2",
+  "toolName": "point",
+  "input": "{\"previous_step\":\"first_plan\",\"route\":[{\"at\":\"实例页\",\"goal\":\"删除实例\"}],\"why\":\"删掉它\",\"ref\":\"e999\",\"action\":\"click\",\"value\":null,\"expect_after\":null}"
+}
+──── tool
+──────── tool-result
+{
+  "type": "tool-result",
+  "toolCallId": "call_2",
+  "output": "ref「e999」不在本次快照内"
+}
+──── 请求选项（含 tools）：与第 1 次请求相同
+
+════════ 用例：修复轮：端点没给调用 id，只能原样重发
+──── system（与文件开头相同）
+──── user
+<untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">page "127.0.0.1:63682/zh-console.html"
+title "中文控制台"
+主导航:
+  e2 link "文档"
+  e3 link "监控"
+  e4 link "工单"
+实例操作:
+  e8 button "删除实例"
+  e9 link "开发者文档中心 · 弹性计算服务实例生命周期管理与自动化运维最佳实践指南（含公网带宽计费说明、快照保留策略、跨可用区容灾配置、安全组规则批量下发…镜像版本回滚方案、监控告警联动配置与成本优化建议说明，适用于生产环境与预发环境的统一运维场景）"
+安全组规则:
+  允许 HTTP 入站:
+    e12 button "删除"
+  允许 SSH 入站:
+    e13 button "删除"</untrusted_page_content nonce="00000000-0000-4000-8000-000000000000">
+
+用户的提问如下。请用与这句提问相同的语言作答：
+把这台实例删掉
+──── 请求选项：与文件开头相同
+──── tools：与「golden · zh-console · 把这台实例删掉」相同
+──────── 第 2 次请求
+──── 第 1 条：与第 1 次请求相同
+──── 第 2 条：与第 1 次请求相同
+──── 请求选项（含 tools）：与第 1 次请求相同

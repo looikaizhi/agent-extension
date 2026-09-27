@@ -1,0 +1,95 @@
+{
+  "what": "文本信封版（当前实现）在 github.com 7 目标上的冻结基线，供 tool calling 版对照。",
+  "frozen_on": "2026-09-04",
+  "measured_with": "tests/spike/score-run.mjs（两侧必须用同一段代码打分）",
+  "code_under_test": {
+    "prompt": "CHOICE_GUIDE v3，系统消息 3353 字符（GUIDE_SYSTEM）",
+    "model": "deepseek-chat, temperature 1, 非流式由 provider.ts 决定",
+    "refactor": "含 guide/agent.ts + guide/runner.ts + guide/trace.ts 三步重构"
+  },
+  "passes": [
+    {
+      "log": "live-github-run-log.pre-refactor.ndjson",
+      "note": "重构前",
+      "rounds": 7,
+      "calls": 49,
+      "parse_failure_rate": 0,
+      "parse_failures": 0,
+      "validation_failures": 0,
+      "failure_reasons": [],
+      "multi_step_share": 50,
+      "multi_step": 19,
+      "guides": 38,
+      "intents": {
+        "guide": 38,
+        "done": 9,
+        "clarify": 1,
+        "need_docs": 1
+      },
+      "prompt_tokens": 165511,
+      "completion_tokens": 6996,
+      "total_tokens": 172507,
+      "tokens_per_call": 3521
+    },
+    {
+      "log": "live-github-run-log.ndjson",
+      "note": "重构后，trace 打开",
+      "rounds": 7,
+      "calls": 44,
+      "parse_failure_rate": 0,
+      "parse_failures": 0,
+      "validation_failures": 1,
+      "failure_reasons": [
+        "action「read」不在 UserAction 枚举内"
+      ],
+      "multi_step_share": 30,
+      "multi_step": 12,
+      "guides": 40,
+      "intents": {
+        "guide": 40,
+        "done": 3
+      },
+      "prompt_tokens": 138326,
+      "completion_tokens": 5469,
+      "total_tokens": 143795,
+      "tokens_per_call": 3268
+    }
+  ],
+  "measured": {
+    "passes": 2,
+    "rounds": 14,
+    "calls": 93,
+    "guides": 78,
+    "multi_step": 4,
+    "parse_failures": 0,
+    "parse_failure_rate": 0,
+    "validation_failures": 1,
+    "multi_step_share": 36.4,
+    "prompt_tokens": 303837,
+    "completion_tokens": 12465,
+    "total_tokens": 316302,
+    "tokens_per_call": 3401,
+    "clarify_share": 1.1,
+    "clarifies": 1,
+    "hops": 61,
+    "hops_per_round": 4.7,
+    "unfinishable": 11,
+    "validation_failure_rate": 1.1,
+    "first_draw_failure_rate": 0,
+    "first_draw_failures": 0,
+    "first_draws": 39,
+    "task_success_rate": 43,
+    "arrived": 6,
+    "judged": 14
+  },
+  "caveats": [
+    "两遍合并，不是一遍。单遍的多步占比在这两次里是 50% 与 30%——提示词逐字节相同（语料漂移检测 29/30 保证），重构不碰提示词，所以那 20 个百分点是 temperature 1 的抽样噪声。单遍样本量不足以给多步占比设「≥ 基线」的门槛。",
+    "multi_step_share 的门槛因此带上基线自身的 95% 置信区间余量。在余量边界上通过，含义是「没被证明更差」，不是「一样好」。",
+    "成本门槛按均次 token，不按总量：一次运行的总量取决于它碰巧走了几跳。",
+    "validation_failures 的门槛是绝对的 0，基线自己达不到——两遍里出过 1 次（action「read」不在 UserAction 枚举内）。这是有意的不对称：拿基线去撞自己的门槛会红，而这正是 tool calling 的立项理由。按表生成的 schema 把 ref 做成 enum、action 做成枚举，这一类违规在结构上就不可能发生；既然如此，从它这里收 1 次也不该放行。",
+    "本基线只覆盖 github.com 的 7 个导航类目标，且账号已登录。它不代表其它站点。",
+    "门槛的甄别力验证过：v3 自己较差的那一遍（多步 30%）通过，v1 提示词那一遍（多步 6.3%）被拦下——它区分得开抽样噪声与真实退化。",
+    "冻结之后又补了两道门槛：hops_per_round 与 clarify_share。原来的四道全都只看单次调用，于是一个候选可以四项全过、却把用户少带了一半的路——实测就这么发生了（多步占比 +12pp，总跳数 61 → 30）。",
+    "指标审计（2026-09-05）之后重算：multi_step_share 换了分母（只算最后一步不离开本页的计划），validation_failures 改成比率，新增 first_draw_failure_rate 与 task_success_rate。task_success_rate 是拿同一套 URL oracle 对两遍基线日志离线重算的——判据确定性，与重跑等价。"
+  ]
+}
