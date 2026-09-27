@@ -1,0 +1,310 @@
+{
+  "run": "2026-09-22T16-26-08",
+  "startedAt": "2026-09-22T16:26:08.762Z",
+  "finishedAt": "2026-09-22T16:26:11.241Z",
+  "plugins": [
+    "skill",
+    "memory"
+  ],
+  "model": {
+    "baseURL": "https://api.deepseek.com/v1",
+    "model": "deepseek-flash"
+  },
+  "fingerprint": "3b8dfa64353b10a5",
+  "passes": 1,
+  "corpus": {
+    "source": "evals/decision/batch-1.ndjson + evals/decision/batch-2.ndjson",
+    "states": 4,
+    "fingerprints": [
+      "4da37ec4e7575086"
+    ],
+    "hash": "064570e405144e04"
+  },
+  "annotations": {
+    "file": "evals/decision/annotations.json + evals/decision/annotations-batch-2.json",
+    "count": 126,
+    "hash": "594265e583f89b55"
+  },
+  "report": {
+    "summary": {
+      "states": 4,
+      "annotated": 4,
+      "runs": 4,
+      "transport": 0,
+      "parseFailures": 0,
+      "violations": 0,
+      "parseFailureRate": 0,
+      "violationRate": 0,
+      "offTable": 0,
+      "sensitive": 0,
+      "intent": {
+        "rate": 0.75,
+        "se": 0.25,
+        "interval": {
+          "lo": 0.2560926803174621,
+          "hi": 0.9631588038050152
+        },
+        "states": 4
+      },
+      "firstStep": {
+        "rate": 1,
+        "se": 0,
+        "interval": {
+          "lo": 0.34238022750665303,
+          "hi": 1
+        },
+        "states": 2
+      },
+      "passK": [
+        {
+          "value": 0.75,
+          "clusters": 4,
+          "skipped": 0
+        }
+      ],
+      "stability": {
+        "alwaysRight": 3,
+        "alwaysWrong": 1,
+        "mixed": 0
+      }
+    },
+    "intents": {
+      "point": 3,
+      "done": 1
+    },
+    "tokens": {
+      "prompt": 26993,
+      "completion": 1003,
+      "cached": 12288
+    },
+    "cost": null,
+    "latency": {
+      "medianMs": 2353,
+      "p90Ms": 2463
+    },
+    "retried": 0,
+    "unknownAnnotations": [
+      "t11/aliyun-ecs-regions/P2/2",
+      "t11/aliyun-ecs-regions/P2/3",
+      "t11/aliyun-rds-billing/P1/1",
+      "t11/aliyun-rds-billing/P1/2",
+      "t11/aliyun-rds-billing/P1/3",
+      "t11/aliyun-rds-billing/P2/1",
+      "t11/aliyun-rds-billing/P2/2",
+      "t11/aliyun-sls-query/P1/1",
+      "t11/aliyun-sls-query/P1/2",
+      "t11/aliyun-sls-query/P1/3",
+      "t11/gh-branches/P2/1",
+      "t11/gh-branches/P2/2",
+      "t11/gh-branches/P2/3",
+      "t11/gh-branches/P2/4",
+      "t11/gh-branches/P2/5",
+      "t11/gh-branches/P2/6",
+      "t11/gh-branches/P2/7",
+      "t11/gh-branches/P2/8",
+      "t11/gh-commits/P2/1",
+      "t11/gh-commits/P2/2",
+      "t11/gh-commits/P2/3",
+      "t11/gh-commits/P2/4",
+      "t11/gh-commits/P2/5",
+      "t11/gh-commits/P2/6",
+      "t11/gh-contributing/P1/1",
+      "t11/gh-contributing/P1/2",
+      "t11/gh-contributing/P1/3",
+      "t11/gh-contributing/P1/4",
+      "t11/gh-contributing/P1/5",
+      "t11/gh-contributing/P1/6",
+      "t11/gh-contributing/P1/7",
+      "t11/gh-docs-site/P2/1",
+      "t11/gh-docs-site/P2/2",
+      "t11/gh-docs-site/P2/3",
+      "t11/gh-docs-site/P2/4",
+      "t11/gh-docs-site/P2/5",
+      "t11/gh-docs-site/P2/6",
+      "t11/gh-docs-site/P2/7",
+      "t11/gh-issues/P1/1",
+      "t11/gh-issues/P1/2",
+      "t11/gh-issues/P1/3",
+      "t11/gh-issues/P1/4",
+      "t11/gh-issues/P1/5",
+      "t11/gh-issues/P1/6",
+      "t11/gh-issues/P1/7",
+      "t11/gh-issues/P2/1",
+      "t11/gh-issues/P2/2",
+      "t11/gh-issues/P2/3",
+      "t11/gh-issues/P2/4",
+      "t11/gh-issues/P2/5",
+      "t11/gh-issues/P2/6",
+      "t11/gh-issues/P2/7",
+      "t11/gh-issues/P2/8",
+      "t11/gh-issues/P2/9",
+      "t11/gh-license/P1/1",
+      "t11/gh-license/P1/2",
+      "t11/gh-license/P1/3",
+      "t11/gh-license/P1/4",
+      "t11/gh-license/P1/5",
+      "t11/gh-license/P2/1",
+      "t11/gh-license/P2/2",
+      "t11/gh-license/P2/3",
+      "t11/gh-license/P2/4",
+      "t11/gh-pulls/P1/1",
+      "t11/gh-pulls/P1/2",
+      "t11/gh-pulls/P1/3",
+      "t11/gh-pulls/P1/4",
+      "t11/gh-pulls/P1/5",
+      "t11/gh-pulls/P1/6",
+      "t11/gh-pulls/P1/7",
+      "t11/gh-pulls/P1/8",
+      "t11/gh-pulls/P2/1",
+      "t11/gh-pulls/P2/2",
+      "t11/gh-pulls/P2/3",
+      "t11/gh-pulls/P2/4",
+      "t11/gh-pulls/P2/5",
+      "t11/gh-pulls/P2/6",
+      "t11/gh-pulls/P2/7",
+      "t11/gh-pulls/P2/8",
+      "t11/gh-releases/P1/1",
+      "t11/gh-releases/P1/2",
+      "t11/gh-releases/P1/3",
+      "t11/gh-releases/P1/4",
+      "t11/gh-releases/P1/5",
+      "t11/gh-releases/P1/6",
+      "t11/gh-releases/P1/7",
+      "t11/gh-releases/P2/1",
+      "t11/gh-releases/P2/2",
+      "t11/gh-releases/P2/3",
+      "t11/gh-releases/P2/4",
+      "t11/gh-releases/P2/5",
+      "t11/gh-releases/P2/6",
+      "t11/gh-releases/P2/7",
+      "t11/gh-releases/P2/8",
+      "t11/gh-releases/P2/9",
+      "t11/gh-repo-address/P1/1",
+      "t11/gh-repo-address/P1/2",
+      "t11/gh-repo-address/P1/3",
+      "t11/gh-repo-address/P1/4",
+      "t11/gh-repo-address/P1/5",
+      "t11/gh-repo-address/P1/6",
+      "t11/gh-repo-address/P1/7",
+      "t11/gitee-closed-issues/P2/1",
+      "t11/gitee-closed-issues/P2/2",
+      "t11/gitee-closed-issues/P2/3",
+      "t11/gitee-core-pom/P2/1",
+      "t11/gitee-core-pom/P2/2",
+      "t11/gitee-core-pom/P2/3",
+      "t11/gitee-core-pom/P2/4",
+      "t11/gitee-merged-pulls/P1/1",
+      "t11/gitee-merged-pulls/P1/2",
+      "t11/gitee-merged-pulls/P1/3",
+      "t11/gitee-org/P1/1",
+      "t11/gitee-org/P1/2",
+      "t11/gitee-org/P1/3",
+      "t11/gitee-org/P1/4",
+      "t11/gitee-org/P2/1",
+      "t11/gitee-org/P2/2",
+      "t11/gitee-org/P2/3",
+      "rec-20260922T062409-brightdata-open-products/brightdata-open-products/P1/1",
+      "rec-20260922T062542-bd-what-is-pay-per-success/bd-what-is-pay-per-success/P1/1",
+      "rec-20260922T063107-bd-contact-sales/bd-contact-sales/P1/1"
+    ]
+  },
+  "gate": {
+    "baseline": "t13-baseline",
+    "baselineStates": 123,
+    "pass": true,
+    "checks": [
+      {
+        "name": "解析失败率不高于基线",
+        "pass": true,
+        "detail": "本次 0.0%，基线 50.0%"
+      },
+      {
+        "name": "校验失败率不高于基线",
+        "pass": true,
+        "detail": "本次 0.0%，基线 0.0%"
+      },
+      {
+        "name": "指向表外或敏感控件为 0",
+        "pass": true,
+        "detail": "指向表外 0 次，指向敏感控件 0 次"
+      },
+      {
+        "name": "意图准确率没有显著变差",
+        "pass": true,
+        "detail": "按 4 个状态配对，差 +25.0pp，95% 区间 −68.8pp 到 +118.8pp"
+      },
+      {
+        "name": "第一步准确率没有显著变差",
+        "pass": true,
+        "detail": "按 2 个状态配对，差 +100.0pp，95% 区间 +100.0pp 到 +100.0pp"
+      }
+    ],
+    "states": {
+      "baseline": 4,
+      "candidate": 4,
+      "common": 4
+    }
+  },
+  "replays": [
+    {
+      "state": "t11/aliyun-ecs-regions/P1/1",
+      "pass": 1,
+      "raw": "{\"previous_step\": \"first_plan\", \"route\": [{\"at\": \"云服务器 ECS 帮助文档首页\", \"goal\": \"找到 ECS 支持的地域和可用区清单\"}], \"why\": \"你要查的是 ECS 能在哪些地域和可用区购买，这属于产品的地域覆盖说明，在文档里叫「地域和可用区」。它不在当前这一页的正文里，只是一个导航链接，点它会跳转并根据地区筛选按钮加载出该区域的名称、可用区编号和所在地域列表，正是你要的清单。\", \"ref\": \"e34\", \"action\": \"click\", \"value\": null, \"expect_after\": {\"via_ref\": \"e34\", \"must_contain\": {\"role\": \"heading\", \"name\": \"地域和可用区\"}}}",
+      "tool": "point",
+      "usage": {
+        "prompt": 7216,
+        "completion": 260,
+        "total": 7476,
+        "cachedPrompt": 3072
+      },
+      "providerCalls": 1,
+      "ms": 2463,
+      "attempts": 1
+    },
+    {
+      "state": "t11/aliyun-ecs-regions/P1/2",
+      "pass": 1,
+      "raw": "{\"previous_step\": \"worked\", \"route\": [{\"at\": \"云服务器 ECS 帮助文档首页\", \"goal\": \"找到「地域和可用区」说明文档\"}, {\"at\": \"地域和可用区文档\", \"goal\": \"查看 ECS 支持的地域与可用区清单\"}], \"why\": \"你上次点的「地域和可用区」已经把你带到这一页了，现在要做的是把这份文档的正文打开——左侧「用户指南」目录里的 e34「地域和可用区」正是这份说明文档的入口，点它会显示 ECS 支持的地域、可用区以及购买时可选的部署位置清单，也就是你要的答案。\", \"ref\": \"e34\", \"action\": \"click\", \"value\": null, \"expect_after\": {\"via_ref\": \"e34\", \"must_contain\": {\"role\": \"heading\", \"name\": \"地域和可用区\"}}}",
+      "tool": "point",
+      "usage": {
+        "prompt": 6087,
+        "completion": 283,
+        "total": 6370,
+        "cachedPrompt": 3072
+      },
+      "providerCalls": 1,
+      "ms": 2441,
+      "attempts": 1
+    },
+    {
+      "state": "t11/aliyun-ecs-regions/P1/3",
+      "pass": 1,
+      "raw": "{\"evidence\": \"content_on_page\", \"why\": \"用户问的是「ECS 在哪些地域和可用区可以买」，而他已经在阿里云帮助中心的《地域和可用区》文档页上（page 为 help.aliyun.com/zh/ecs/user-guide/regions-and-zones，标题「公有云ECS支持购买的地域和可用区」）。这一页的主体内容就是该文档，页面里明确给出了「地域和可用区」产品详情、阿里云全球基础设施、如何选择地域、如何选择可用区等说明入口，以及查询开服地域（DescribeRegions）、查询可用区资源列表（DescribeZones）、ECS 实例可购买地域这些查询方式。也就是说，回答这个问题的文档已经在用户眼前打开，不需要再到别处操作，事情已经做完。\"}",
+      "tool": "done",
+      "usage": {
+        "prompt": 6472,
+        "completion": 204,
+        "total": 6676,
+        "cachedPrompt": 3072
+      },
+      "providerCalls": 1,
+      "ms": 2353,
+      "attempts": 1
+    },
+    {
+      "state": "t11/aliyun-ecs-regions/P2/1",
+      "pass": 1,
+      "raw": "{\"previous_step\": \"first_plan\", \"route\": [{\"at\": \"ECS 帮助文档首页\", \"goal\": \"打开「地域和可用区」文档页\"}, {\"at\": \"地域和可用区文档页\", \"goal\": \"查看 ECS 支持的地域与可用区清单\"}], \"why\": \"用户想知道 ECS 能在哪些地域和可用区购买，这个信息在「地域和可用区」的说明文档里。左侧文档目录里的这个链接就是那份文档的入口，点开后再看具体清单。\", \"ref\": \"e34\", \"action\": \"click\", \"value\": null, \"expect_after\": {\"via_ref\": \"e34\", \"must_contain\": {\"role\": \"link\", \"name\": \"地域和可用区\"}}}",
+      "tool": "point",
+      "usage": {
+        "prompt": 7218,
+        "completion": 256,
+        "total": 7474,
+        "cachedPrompt": 3072
+      },
+      "providerCalls": 1,
+      "ms": 1867,
+      "attempts": 1
+    }
+  ]
+}

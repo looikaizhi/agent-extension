@@ -1,0 +1,268 @@
+{
+  "run": "2026-09-22T07-04-00",
+  "startedAt": "2026-09-22T07:04:00.332Z",
+  "finishedAt": "2026-09-22T07:04:05.631Z",
+  "plugins": [
+    "skill"
+  ],
+  "model": {
+    "baseURL": "https://api.deepseek.com/v1",
+    "model": "deepseek-flash"
+  },
+  "fingerprint": "b62a1f0a5f6b368e",
+  "passes": 3,
+  "corpus": {
+    "source": "evals/decision/batch-2.ndjson",
+    "states": 3,
+    "fingerprints": [
+      "b62a1f0a5f6b368e"
+    ],
+    "hash": "8c9e6542fa107759"
+  },
+  "annotations": {
+    "file": "evals/decision/annotations-batch-2.json",
+    "count": 3,
+    "hash": "5a9adce0f46a95a1"
+  },
+  "report": {
+    "summary": {
+      "states": 3,
+      "annotated": 3,
+      "runs": 9,
+      "transport": 0,
+      "parseFailures": 0,
+      "violations": 0,
+      "parseFailureRate": 0,
+      "violationRate": 0,
+      "offTable": 0,
+      "sensitive": 0,
+      "intent": {
+        "rate": 0.8888888888888888,
+        "se": 0.11111111111111113,
+        "interval": {
+          "lo": 0.5437413054002257,
+          "hi": 0.9817194774678674
+        },
+        "states": 3
+      },
+      "firstStep": {
+        "rate": 0.3333333333333333,
+        "se": null,
+        "interval": null,
+        "states": 1
+      },
+      "passK": [
+        {
+          "value": 0.6666666666666666,
+          "clusters": 3,
+          "skipped": 0
+        },
+        {
+          "value": 0.4444444444444444,
+          "clusters": 3,
+          "skipped": 0
+        },
+        {
+          "value": 0.3333333333333333,
+          "clusters": 3,
+          "skipped": 0
+        }
+      ],
+      "stability": {
+        "alwaysRight": 1,
+        "alwaysWrong": 0,
+        "mixed": 2
+      }
+    },
+    "intents": {
+      "explain": 5,
+      "point": 4
+    },
+    "tokens": {
+      "prompt": 47821,
+      "completion": 2403,
+      "cached": 38016
+    },
+    "cost": null,
+    "latency": {
+      "medianMs": 1918,
+      "p90Ms": 2701
+    },
+    "retried": 0,
+    "unknownAnnotations": []
+  },
+  "gate": {
+    "baseline": "t13-baseline",
+    "baselineStates": 123,
+    "pass": true,
+    "checks": [
+      {
+        "name": "解析失败率不高于基线",
+        "pass": true,
+        "detail": "本次 —，基线 —"
+      },
+      {
+        "name": "校验失败率不高于基线",
+        "pass": true,
+        "detail": "本次 —，基线 —"
+      },
+      {
+        "name": "指向表外或敏感控件为 0",
+        "pass": true,
+        "detail": "指向表外 0 次，指向敏感控件 0 次"
+      },
+      {
+        "name": "意图准确率没有显著变差",
+        "pass": true,
+        "detail": "两边没有共同的、有标注的状态，这一道判不了"
+      },
+      {
+        "name": "第一步准确率没有显著变差",
+        "pass": true,
+        "detail": "两边没有共同的、有标注的状态，这一道判不了"
+      }
+    ],
+    "states": {
+      "baseline": 0,
+      "candidate": 3,
+      "common": 0
+    }
+  },
+  "replays": [
+    {
+      "state": "rec-20260922T062409-brightdata-open-products/brightdata-open-products/P1/1",
+      "pass": 1,
+      "raw": "{\"answer\": \"你现在就在\\\"网络解锁器\\\"这一页。想打开看到这些产品，从页面底部那栏着手：\\n\\n1. 页面下方的「产品」分组里列的就是全部产品清单，每个都是一条可以点进去的链接：网页抓取工具 API（e38）、定制抓取工具（e39）、免服务器功能（e40）、爬虫浏览器（e41）、搜索引擎结果页 API（e42）、亮数据洞察（e43）、网络解锁器（e44）。\\n2. 「产品」下面还有几组并列的内容：「数据集」（e36 附近的「数据集」，以及 LinkedIn 数据集 e62、电子商务数据集 e63 等）、「代理类型」（e53，下面有动态住宅 e54、数据中心代理 e55、机房代理 e56、动态代理 e57、代理服务器 e58 等）。\\n3. 想回到网络解锁器本身，就点「网络解锁器」（e44）；想直接开始用，就点页面顶部的「免费试用」（e5）或「马上开始」（e8）。\\n\\n所以\\\"打开看到产品\\\"不需要另外的入口，这一页往下滚到底部，点「产品」那组里任意一个名称就能进入对应产品页。\", \"refs\": [\"e36\", \"e44\", \"e38\", \"e53\", \"e5\"]}",
+      "tool": "explain",
+      "usage": {
+        "prompt": 5310,
+        "completion": 317,
+        "total": 5627,
+        "cachedPrompt": 4224
+      },
+      "providerCalls": 1,
+      "ms": 2107,
+      "attempts": 1
+    },
+    {
+      "state": "rec-20260922T062409-brightdata-open-products/brightdata-open-products/P1/1",
+      "pass": 2,
+      "raw": "{\"previous_step\": \"first_plan\", \"route\": [{\"at\": \"网络解锁器定价页\", \"goal\": \"查看 Bright Data 各产品/服务的入口\"}], \"why\": \"你问的是\\\"怎么打开看到这些产品\\\"。这一页底部的导航里有一个「产品」链接，点它会展开/进入 Bright Data 的产品总览，从那里就能看到网络解锁器、网页抓取工具 API、爬虫浏览器、代理类型等各类产品，是通往产品目录的第一步。\", \"ref\": \"e36\", \"action\": \"click\", \"value\": null, \"expect_after\": null}",
+      "tool": "point",
+      "usage": {
+        "prompt": 5310,
+        "completion": 220,
+        "total": 5530,
+        "cachedPrompt": 4224
+      },
+      "providerCalls": 1,
+      "ms": 1883,
+      "attempts": 1
+    },
+    {
+      "state": "rec-20260922T062409-brightdata-open-products/brightdata-open-products/P1/1",
+      "pass": 3,
+      "raw": "{\"answer\": \"你现在就在 Bright Data 的产品定价页上。要「打开看到这些产品」，有两个入口：\\n\\n1. **页面顶部的导航条**——\\\"产品\\\"、\\\"数据集\\\"、\\\"代理类型\\\"这些栏目是整站的产品目录，点开后会列出各个产品线（网页抓取工具 API、爬虫浏览器、网络解锁器、动态住宅代理、数据中心代理……），从那里可以逐个进入每个产品的介绍页。\\n2. **页面底部的页脚**——同样有\\\"产品\\\"\\\"数据集\\\"\\\"代理类型\\\"\\\"项目\\\"等分组，里面把具体产品一条条列了出来，比如\\\"网络解锁器\\\"(e44)、\\\"网页抓取工具 API\\\"(e38)、\\\"爬虫浏览器\\\"(e41)、\\\"动态住宅\\\"(e54)、\\\"数据中心代理\\\"(e55) 等，直接点某一条就进入那个产品的页面。\\n\\n想真正用起来（而不只是看介绍），还需要点右上角的\\\"登录\\\"或\\\"免费试用\\\"注册账号。当前这一页本身是网络解锁器的定价说明，左侧的套餐滑块和 \\\"Start free\\\" 按钮是直接开通网络解锁器的入口。\", \"refs\": [\"e36\", \"e53\", \"e37\", \"e44\"]}",
+      "tool": "explain",
+      "usage": {
+        "prompt": 5312,
+        "completion": 293,
+        "total": 5605,
+        "cachedPrompt": 4224
+      },
+      "providerCalls": 1,
+      "ms": 2332,
+      "attempts": 1
+    },
+    {
+      "state": "rec-20260922T062542-bd-what-is-pay-per-success/bd-what-is-pay-per-success/P1/1",
+      "pass": 1,
+      "raw": "{\"answer\": \"我在这一页上找不到「仅按成功计费」这句话，页面里也没有这段说明文字。\\n\\n这一页是「网络解锁器定价」页，与计费相关的可见内容主要有：\\n- 定价区（e9）里写的是按请求量计费，例如「免费试用 5K 请求」「包含 383K 次请求」「¥ /1K additional」，也就是按每 1K 次请求的单价来算，并给出了不同档位的用量滑块。\\n- 页面下方的常见问题里有几个相关条目：e24「网络解锁器有哪些优势？」、e26「网络解锁器是代理吗？」、e28「我可以使用网络解锁器与浏览器交互或进行浏览器导航吗？」、e30「我可以在没有月度承诺的情况下使用网络解锁器吗？」——关于计费规则（是否只对成功请求收费、有无最低消费）的说明通常就在这类问答或产品文档里。\\n\\n需要说明的是，我并没有把握断言这页绝对没有这句话：这份元素表是被裁剪过的，只列出了部分元素，正文中可能还有未列出的文字。所以更稳妥的做法是展开上面的常见问题，或到「帮助文档」（e2）里查一下计费细则，那里一般会明确写出「只对成功请求计费（successful requests only）」的规则。\\n\\n如果你希望我直接帮你把说明文档翻出来看，告诉我一声，我就去读「帮助文档」里关于计费的正文。\", \"refs\": [\"e9\", \"e24\", \"e30\", \"e2\"]}",
+      "tool": "explain",
+      "usage": {
+        "prompt": 5318,
+        "completion": 368,
+        "total": 5686,
+        "cachedPrompt": 4224
+      },
+      "providerCalls": 1,
+      "ms": 2701,
+      "attempts": 1
+    },
+    {
+      "state": "rec-20260922T062542-bd-what-is-pay-per-success/bd-what-is-pay-per-success/P1/1",
+      "pass": 2,
+      "raw": "{\"answer\": \"这一页上并没有出现「仅按成功计费」这几个字——我在元素表里没有找到这个词。你当前所在的页面是「网络解锁器定价」页，上面能看到的内容主要有：套餐/价格区域（含 ¥ CNY / $ USD 等货币切换、请求量档位、Start free 入口）、「网络解锁器有哪些优势？」等常见问题链接、以及页脚的产品与项目链接。如果你说的「仅按成功计费」是页面某处的一句话或某个图例，可以告诉我它大概在什么位置（比如价格卡片附近还是常见问题里），我再去对应的区域帮你确认它的含义。\", \"refs\": [\"e9\", \"e24\"]}",
+      "tool": "explain",
+      "usage": {
+        "prompt": 5314,
+        "completion": 186,
+        "total": 5500,
+        "cachedPrompt": 4224
+      },
+      "providerCalls": 1,
+      "ms": 1654,
+      "attempts": 1
+    },
+    {
+      "state": "rec-20260922T062542-bd-what-is-pay-per-success/bd-what-is-pay-per-success/P1/1",
+      "pass": 3,
+      "raw": "{\"answer\": \"我在这一页上没有找到「仅按成功计费」这几个字。当前页面「网络解锁器定价」上可见的定价相关内容只有：套餐切换区（e9，含 \\\"Start free 5K 请求\\\"、\\\"383K 次请求\\\"、\\\"¥ /1K additional\\\" 这类字样）、币种切换按钮 e11，以及三个 \\\"Start free\\\" 套餐入口（e12、e13、e14）和一个「联系销售」（e15）。页面上没有任何文字解释「仅按成功计费」。\\n\\n如果你指的是 Bright Data 网络解锁器通常宣传的「只为成功请求付费」这类计费口径，那属于产品计费规则，需要看官方说明文档或常见问题，价格页本身没有写。建议从页面底部的「常见问题」（e80）或「帮助文档」（e2）里找计费相关条目；也可以在「网络解锁器有哪些优势？」（e24）等折叠问答里确认。\", \"refs\": [\"e9\", \"e15\", \"e80\"]}",
+      "tool": "explain",
+      "usage": {
+        "prompt": 5312,
+        "completion": 258,
+        "total": 5570,
+        "cachedPrompt": 4224
+      },
+      "providerCalls": 1,
+      "ms": 1971,
+      "attempts": 1
+    },
+    {
+      "state": "rec-20260922T063107-bd-contact-sales/bd-contact-sales/P1/1",
+      "pass": 1,
+      "raw": "{\"previous_step\": \"first_plan\", \"route\": [{\"at\": \"网络解锁器定价页\", \"goal\": \"找到企业级/定制套餐的联系渠道并进入联系销售\"}], \"why\": \"这一页是网络解锁器定价页，标准套餐用 Start free 自助开通，企业级想要定制报价只能走销售。页面上明确写着「不确定您需要什么？」并给出「联系销售团队」入口，点它就能进入销售咨询表单/联系方式，是这一步最直接的入口。页头另有一个「联系销售」，效果相同，但如果想从定价场景直接问询，用底部这个更贴近「不确定要哪档、要定制」的情形。\", \"ref\": \"e33\", \"action\": \"click\", \"value\": null, \"expect_after\": {\"via_ref\": \"e33\", \"must_contain\": {\"role\": \"textbox\", \"name\": null}}}",
+      "tool": "point",
+      "usage": {
+        "prompt": 5317,
+        "completion": 280,
+        "total": 5597,
+        "cachedPrompt": 4224
+      },
+      "providerCalls": 1,
+      "ms": 1918,
+      "attempts": 1
+    },
+    {
+      "state": "rec-20260922T063107-bd-contact-sales/bd-contact-sales/P1/1",
+      "pass": 2,
+      "raw": "{\"previous_step\": \"first_plan\", \"route\": [{\"at\": \"网络解锁器定价页\", \"goal\": \"找到企业级/定制套餐的联系渠道并进入联系表单\"}], \"why\": \"企业级套餐需要联系销售团队洽谈，这一页顶部的“联系销售”按钮就是通向销售咨询入口的，点它会进入联系销售的页面/表单，之后就能留下需求让销售跟进。\", \"ref\": \"e4\", \"action\": \"click\", \"value\": null, \"expect_after\": {\"via_ref\": \"e4\", \"must_contain\": {\"role\": \"link\", \"name\": null}}}",
+      "tool": "point",
+      "usage": {
+        "prompt": 5317,
+        "completion": 223,
+        "total": 5540,
+        "cachedPrompt": 4224
+      },
+      "providerCalls": 1,
+      "ms": 1596,
+      "attempts": 1
+    },
+    {
+      "state": "rec-20260922T063107-bd-contact-sales/bd-contact-sales/P1/1",
+      "pass": 3,
+      "raw": "{\"previous_step\": \"first_plan\", \"route\": [{\"at\": \"网络解锁器定价页\", \"goal\": \"找到企业级/定制套餐的联系方式\"}], \"why\": \"用户想要的是「企业级套餐怎么联系销售」。这一页的定价区里带「联系销售」的入口就是通往销售咨询的通道——点击后会打开联系销售的洽谈流程（表单/联系方式），比自己去找邮箱更直接。页脚的「联系数据专家」「联系我们」是更泛的兜底入口，而定价区里的这个才是针对企业级/定制套餐的。\", \"ref\": \"e15\", \"action\": \"click\", \"value\": null, \"expect_after\": {\"via_ref\": \"e15\", \"must_contain\": {\"role\": \"textbox\", \"name\": null}}}",
+      "tool": "point",
+      "usage": {
+        "prompt": 5311,
+        "completion": 258,
+        "total": 5569,
+        "cachedPrompt": 4224
+      },
+      "providerCalls": 1,
+      "ms": 1747,
+      "attempts": 1
+    }
+  ]
+}

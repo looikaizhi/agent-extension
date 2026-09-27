@@ -1,0 +1,110 @@
+[
+  {
+    "state": "rec-20260922T062409-brightdata-open-products/brightdata-open-products/P1/1",
+    "intents": [
+      "explain"
+    ]
+  },
+  {
+    "state": "rec-20260922T062542-bd-what-is-pay-per-success/bd-what-is-pay-per-success/P1/1",
+    "intents": [
+      "read_doc",
+      "explain"
+    ]
+  },
+  {
+    "state": "rec-20260922T063107-bd-contact-sales/bd-contact-sales/P1/1",
+    "intents": [
+      "point"
+    ],
+    "acceptable": [
+      {
+        "ref": "e15",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "rec-20260922T162710-mdn-how-to-flexbox/mdn-how-to-flexbox/P1/1",
+    "intents": [
+      "done",
+      "point"
+    ],
+    "acceptable": [
+      {
+        "ref": "e154",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "rec-20260922T162746-npm-where-deps/npm-where-deps/P1/1",
+    "intents": [
+      "done"
+    ]
+  },
+  {
+    "state": "rec-20260922T162824-py-how-to-stdlib/py-how-to-stdlib/P1/1",
+    "intents": [
+      "point"
+    ],
+    "acceptable": [
+      {
+        "ref": "e18",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "rec-20260922T162902-gh-where-contributing/gh-where-contributing/P1/1",
+    "intents": [
+      "point"
+    ],
+    "acceptable": [
+      {
+        "ref": "e155",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  },
+  {
+    "state": "rec-20260922T162927-mdn-what-is-baseline/mdn-what-is-baseline/P1/1",
+    "intents": [
+      "explain"
+    ]
+  },
+  {
+    "state": "rec-20260922T162953-npm-what-is-unpacked/npm-what-is-unpacked/P1/1",
+    "intents": [
+      "explain"
+    ]
+  },
+  {
+    "state": "rec-20260922T163023-gh-watch-vs-star/gh-watch-vs-star/P1/1",
+    "intents": [
+      "explain"
+    ]
+  },
+  {
+    "state": "rec-20260922T163045-py-take-me-json/py-take-me-json/P1/1",
+    "intents": [
+      "point"
+    ],
+    "acceptable": [
+      {
+        "ref": "e18",
+        "actions": [
+          "click"
+        ]
+      }
+    ]
+  }
+]

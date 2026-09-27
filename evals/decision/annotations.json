@@ -1,7 +1,9 @@
 [
   {
     "state": "t11/aliyun-ecs-regions/P1/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e34",
@@ -13,15 +15,21 @@
   },
   {
     "state": "t11/aliyun-ecs-regions/P1/2",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/aliyun-ecs-regions/P1/3",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/aliyun-ecs-regions/P2/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e34",
@@ -33,15 +41,21 @@
   },
   {
     "state": "t11/aliyun-ecs-regions/P2/2",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/aliyun-ecs-regions/P2/3",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/aliyun-rds-billing/P1/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e59",
@@ -53,15 +67,21 @@
   },
   {
     "state": "t11/aliyun-rds-billing/P1/2",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/aliyun-rds-billing/P1/3",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/aliyun-rds-billing/P2/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e59",
@@ -73,11 +93,15 @@
   },
   {
     "state": "t11/aliyun-rds-billing/P2/2",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/aliyun-sls-query/P1/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e115",
@@ -89,7 +113,9 @@
   },
   {
     "state": "t11/aliyun-sls-query/P1/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e43",
@@ -101,11 +127,15 @@
   },
   {
     "state": "t11/aliyun-sls-query/P1/3",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-branches/P2/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e6",
@@ -117,7 +147,9 @@
   },
   {
     "state": "t11/gh-branches/P2/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e1",
@@ -129,7 +161,9 @@
   },
   {
     "state": "t11/gh-branches/P2/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e53",
@@ -141,7 +175,9 @@
   },
   {
     "state": "t11/gh-branches/P2/4",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e33",
@@ -153,7 +189,9 @@
   },
   {
     "state": "t11/gh-branches/P2/5",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e33",
@@ -165,19 +203,27 @@
   },
   {
     "state": "t11/gh-branches/P2/6",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-branches/P2/7",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-branches/P2/8",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-commits/P2/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e6",
@@ -189,7 +235,9 @@
   },
   {
     "state": "t11/gh-commits/P2/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e1",
@@ -201,7 +249,9 @@
   },
   {
     "state": "t11/gh-commits/P2/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e53",
@@ -213,7 +263,9 @@
   },
   {
     "state": "t11/gh-commits/P2/4",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e38",
@@ -225,7 +277,9 @@
   },
   {
     "state": "t11/gh-commits/P2/5",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e38",
@@ -237,11 +291,15 @@
   },
   {
     "state": "t11/gh-commits/P2/6",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-contributing/P1/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e6",
@@ -253,7 +311,9 @@
   },
   {
     "state": "t11/gh-contributing/P1/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e1",
@@ -265,7 +325,9 @@
   },
   {
     "state": "t11/gh-contributing/P1/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e53",
@@ -277,7 +339,9 @@
   },
   {
     "state": "t11/gh-contributing/P1/4",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e97",
@@ -289,7 +353,9 @@
   },
   {
     "state": "t11/gh-contributing/P1/5",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e79",
@@ -301,15 +367,21 @@
   },
   {
     "state": "t11/gh-contributing/P1/6",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-contributing/P1/7",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-docs-site/P2/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e6",
@@ -321,7 +393,9 @@
   },
   {
     "state": "t11/gh-docs-site/P2/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e1",
@@ -333,7 +407,9 @@
   },
   {
     "state": "t11/gh-docs-site/P2/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e47",
@@ -345,7 +421,9 @@
   },
   {
     "state": "t11/gh-docs-site/P2/4",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e47",
@@ -357,7 +435,9 @@
   },
   {
     "state": "t11/gh-docs-site/P2/5",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e78",
@@ -369,15 +449,21 @@
   },
   {
     "state": "t11/gh-docs-site/P2/6",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-docs-site/P2/7",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-issues/P1/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e6",
@@ -389,7 +475,9 @@
   },
   {
     "state": "t11/gh-issues/P1/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e1",
@@ -401,7 +489,9 @@
   },
   {
     "state": "t11/gh-issues/P1/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e53",
@@ -413,7 +503,9 @@
   },
   {
     "state": "t11/gh-issues/P1/4",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e19",
@@ -425,7 +517,9 @@
   },
   {
     "state": "t11/gh-issues/P1/5",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e98",
@@ -437,15 +531,21 @@
   },
   {
     "state": "t11/gh-issues/P1/6",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-issues/P1/7",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-issues/P2/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e6",
@@ -457,7 +557,9 @@
   },
   {
     "state": "t11/gh-issues/P2/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e1",
@@ -469,7 +571,9 @@
   },
   {
     "state": "t11/gh-issues/P2/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e53",
@@ -481,7 +585,9 @@
   },
   {
     "state": "t11/gh-issues/P2/4",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e53",
@@ -493,7 +599,9 @@
   },
   {
     "state": "t11/gh-issues/P2/5",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e19",
@@ -505,7 +613,9 @@
   },
   {
     "state": "t11/gh-issues/P2/6",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e19",
@@ -517,7 +627,9 @@
   },
   {
     "state": "t11/gh-issues/P2/7",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e19",
@@ -529,15 +641,21 @@
   },
   {
     "state": "t11/gh-issues/P2/8",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-issues/P2/9",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-license/P1/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e6",
@@ -549,7 +667,9 @@
   },
   {
     "state": "t11/gh-license/P1/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e1",
@@ -561,7 +681,9 @@
   },
   {
     "state": "t11/gh-license/P1/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e53",
@@ -573,15 +695,21 @@
   },
   {
     "state": "t11/gh-license/P1/4",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-license/P1/5",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-license/P2/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e6",
@@ -593,7 +721,9 @@
   },
   {
     "state": "t11/gh-license/P2/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e1",
@@ -605,7 +735,9 @@
   },
   {
     "state": "t11/gh-license/P2/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e53",
@@ -617,11 +749,15 @@
   },
   {
     "state": "t11/gh-license/P2/4",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-pulls/P1/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e6",
@@ -633,7 +769,9 @@
   },
   {
     "state": "t11/gh-pulls/P1/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e1",
@@ -645,7 +783,9 @@
   },
   {
     "state": "t11/gh-pulls/P1/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e53",
@@ -657,7 +797,9 @@
   },
   {
     "state": "t11/gh-pulls/P1/4",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e20",
@@ -669,7 +811,9 @@
   },
   {
     "state": "t11/gh-pulls/P1/5",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e20",
@@ -681,7 +825,9 @@
   },
   {
     "state": "t11/gh-pulls/P1/6",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e30",
@@ -693,15 +839,21 @@
   },
   {
     "state": "t11/gh-pulls/P1/7",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-pulls/P1/8",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-pulls/P2/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e6",
@@ -713,7 +865,9 @@
   },
   {
     "state": "t11/gh-pulls/P2/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e1",
@@ -725,7 +879,9 @@
   },
   {
     "state": "t11/gh-pulls/P2/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e53",
@@ -737,7 +893,9 @@
   },
   {
     "state": "t11/gh-pulls/P2/4",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e20",
@@ -749,7 +907,9 @@
   },
   {
     "state": "t11/gh-pulls/P2/5",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e18",
@@ -761,11 +921,15 @@
   },
   {
     "state": "t11/gh-pulls/P2/6",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-pulls/P2/7",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e42",
@@ -777,11 +941,15 @@
   },
   {
     "state": "t11/gh-pulls/P2/8",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-releases/P1/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e6",
@@ -793,7 +961,9 @@
   },
   {
     "state": "t11/gh-releases/P1/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e1",
@@ -805,7 +975,9 @@
   },
   {
     "state": "t11/gh-releases/P1/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e53",
@@ -817,7 +989,9 @@
   },
   {
     "state": "t11/gh-releases/P1/4",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e53",
@@ -829,7 +1003,9 @@
   },
   {
     "state": "t11/gh-releases/P1/5",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e24",
@@ -841,15 +1017,21 @@
   },
   {
     "state": "t11/gh-releases/P1/6",
-    "intent": "ask"
+    "intents": [
+      "ask"
+    ]
   },
   {
     "state": "t11/gh-releases/P1/7",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-releases/P2/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e6",
@@ -861,7 +1043,9 @@
   },
   {
     "state": "t11/gh-releases/P2/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e1",
@@ -873,7 +1057,9 @@
   },
   {
     "state": "t11/gh-releases/P2/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e53",
@@ -885,7 +1071,9 @@
   },
   {
     "state": "t11/gh-releases/P2/4",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e34",
@@ -897,7 +1085,9 @@
   },
   {
     "state": "t11/gh-releases/P2/5",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e34",
@@ -909,11 +1099,15 @@
   },
   {
     "state": "t11/gh-releases/P2/6",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-releases/P2/7",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e26",
@@ -925,15 +1119,21 @@
   },
   {
     "state": "t11/gh-releases/P2/8",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-releases/P2/9",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gh-repo-address/P1/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e6",
@@ -945,7 +1145,9 @@
   },
   {
     "state": "t11/gh-repo-address/P1/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e1",
@@ -957,7 +1159,9 @@
   },
   {
     "state": "t11/gh-repo-address/P1/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e53",
@@ -969,7 +1173,9 @@
   },
   {
     "state": "t11/gh-repo-address/P1/4",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e37",
@@ -981,7 +1187,9 @@
   },
   {
     "state": "t11/gh-repo-address/P1/5",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e11",
@@ -993,7 +1201,9 @@
   },
   {
     "state": "t11/gh-repo-address/P1/6",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e6",
@@ -1005,11 +1215,15 @@
   },
   {
     "state": "t11/gh-repo-address/P1/7",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gitee-closed-issues/P2/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e32",
@@ -1021,7 +1235,9 @@
   },
   {
     "state": "t11/gitee-closed-issues/P2/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e47",
@@ -1033,11 +1249,15 @@
   },
   {
     "state": "t11/gitee-closed-issues/P2/3",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gitee-core-pom/P2/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e67",
@@ -1049,11 +1269,15 @@
   },
   {
     "state": "t11/gitee-core-pom/P2/2",
-    "intent": "read_doc"
+    "intents": [
+      "read_doc"
+    ]
   },
   {
     "state": "t11/gitee-core-pom/P2/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e55",
@@ -1065,11 +1289,15 @@
   },
   {
     "state": "t11/gitee-core-pom/P2/4",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gitee-merged-pulls/P1/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e33",
@@ -1081,7 +1309,9 @@
   },
   {
     "state": "t11/gitee-merged-pulls/P1/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e44",
@@ -1093,11 +1323,15 @@
   },
   {
     "state": "t11/gitee-merged-pulls/P1/3",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gitee-org/P1/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e29",
@@ -1109,7 +1343,9 @@
   },
   {
     "state": "t11/gitee-org/P1/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e27",
@@ -1121,7 +1357,9 @@
   },
   {
     "state": "t11/gitee-org/P1/3",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e29",
@@ -1133,11 +1371,15 @@
   },
   {
     "state": "t11/gitee-org/P1/4",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   },
   {
     "state": "t11/gitee-org/P2/1",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e29",
@@ -1149,7 +1391,9 @@
   },
   {
     "state": "t11/gitee-org/P2/2",
-    "intent": "point",
+    "intents": [
+      "point"
+    ],
     "acceptable": [
       {
         "ref": "e27",
@@ -1161,6 +1405,8 @@
   },
   {
     "state": "t11/gitee-org/P2/3",
-    "intent": "done"
+    "intents": [
+      "done"
+    ]
   }
 ]
