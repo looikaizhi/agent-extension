@@ -4087,7 +4087,7 @@ const costShown = async () => {
     withSkill.slice(0, 160),
   );
 
-  await sw.evaluate(async () => await chrome.storage.local.set({ 'plugin:skill': false, 'plugin:memory': false }));
+  await sw.evaluate(async () => await chrome.storage.local.set({ 'plugin:skill': false }));
   const withoutSkill = userMessageOf(await startGuide('再看看这个仓库的 release'));
   check(
     '设置里关掉 Skill，下一趟的调用就不带那一段',
@@ -4108,11 +4108,11 @@ const costShown = async () => {
   const plugins = records.map((r) => r.plugins);
   check(
     '每一趟的 Run record 记下了它开始时开着哪些 Plugin',
-    JSON.stringify(plugins) === JSON.stringify([['skill', 'memory'], []]),
+    JSON.stringify(plugins) === JSON.stringify([['skill'], []]),
     JSON.stringify(records),
   );
   // 这一段动过全局开关，走之前放回去：后面的段落默认它们是开着的。
-  await sw.evaluate(async () => await chrome.storage.local.remove(['plugin:skill', 'plugin:memory']));
+  await sw.evaluate(async () => await chrome.storage.local.remove(['plugin:skill']));
 
   await sw.evaluate(async () => await chrome.storage.local.remove(['plugin:skill', 'run:records']));
   await ctx.unroute('https://github.com/**');
@@ -4649,66 +4649,9 @@ await qaPanel.close();
   await ctxPanel.close();
 }
 
-// 记忆（票 04 第四层）：这一整套里已经走通过好几趟，每一趟都留下了一条 Run
-// record。以前那份记录只写不读——同一个站点上问第二次，产品什么都不记得。
-{
-  const memPanel = await ctx.newPage();
-  await memPanel.goto(`chrome-extension://${extId}/sidepanel.html`, { waitUntil: 'domcontentloaded' });
-  const ask = async (m) => await memPanel.evaluate(async (x) => await chrome.runtime.sendMessage(x), m);
-  const remembered = async () => ((await ask({ type: 'GET_MEMORY' }))?.paths ?? []);
-
-  const paths = await remembered();
-  check(
-    '走通过的路被记住了：目标、站点、走过哪几步',
-    paths.length > 0 && paths.every((p) => p.host && p.goal && p.steps.length > 0),
-    JSON.stringify(paths.slice(0, 2)),
-  );
-
-  await page.bringToFront();
-  await page.waitForTimeout(200);
-  modelHandler = async (route, body) =>
-    await fulfillEnvelope(route, {
-      intent: 'point', route: [{ at: '这一页', goal: '随便走一步' }], ref: otherRef(body, ''), action: 'click', why: '看提示词里有没有那段',
-    });
-  const beforeMem = requestLog.length;
-  await ask({ type: 'SAID', tabId, text: '再问一次，看它记不记得' });
-  await waitUntil(() => requestLog.length > beforeMem, 8000);
-  const withMemory = userText(requestLog.at(-1).body);
-  check(
-    '下一趟的提示词里带上了这些线索，并说明页面可能已经变了',
-    withMemory.includes('这个站点上，以前在这台浏览器上走通过这些') && withMemory.includes('页面可能已经变了'),
-    JSON.stringify(withMemory.match(/这个站点上，以前[^]*?(?=\n\n)/)?.[0]?.slice(0, 120) ?? null),
-  );
-  await ask({ type: 'END_GUIDE', tabId });
-
-  // 看得见，也拿得回去——从界面上，不是从消息上：用户能做到的才算做到。
-  await memPanel.bringToFront();
-  await memPanel.locator('.tools > summary').click();
-  await memPanel.locator('details.memory > summary').click();
-  const shown = await pollTexts(() => memPanel.locator('.walked li .walked-goal'), 6000);
-  check(
-    '侧栏「它记住的路」列出了每一条：目标、站点、走过哪几步',
-    shown.length === (await remembered()).length && shown.length > 0,
-    JSON.stringify(shown.slice(0, 3)),
-  );
-
-  const before = await remembered();
-  await memPanel.locator('.walked li button').first().click();
-  const afterOne = await waitUntil(async () => (await remembered()).length === before.length - 1, 6000);
-  check('点「忘掉这条」就真的少一条', afterOne, JSON.stringify({ 原来: before.length, 现在: (await remembered()).length }));
-
-  await ask({ type: 'FORGET_MEMORY' });
-  const beforeBlank = requestLog.length;
-  await ask({ type: 'SAID', tabId, text: '全忘了之后再问一次' });
-  await waitUntil(() => requestLog.length > beforeBlank, 8000);
-  check(
-    '全部忘掉之后，提示词里那一段也跟着没了',
-    (await remembered()).length === 0 && !userText(requestLog.at(-1).body).includes('这个站点上，以前在这台浏览器上走通过这些'),
-    JSON.stringify({ 还记得几条: (await remembered()).length }),
-  );
-  await ask({ type: 'END_GUIDE', tabId });
-  await memPanel.close();
-}
+// 记忆那一整段随 Memory 一起删了（CONTEXT.md 的词条写了为什么）：它的入库判据是
+// 「模型说 done」而不是「用户说到了」，实测只有 71% 准；取的是这个站最近三条、
+// 不看目标；默认开着；而它的效果一次都没被量过。
 
 // 上限（票 04）：这一整套跑下来，这条对话已经很长了。侧栏在有事情进行时每两秒
 // 拉一次整个视图，所以一次拉取带多少，是「对话长度 × 用户看了多久」。不删东西，

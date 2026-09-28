@@ -1,6 +1,4 @@
 import { isFlagOn, type FlagStore } from '@/agent/flags';
-import { memory } from '@/agent/context/memory';
-import type { RunRecord } from '@/agent/thread/record';
 import { skill } from '@/agent/skills';
 
 /**
@@ -29,18 +27,17 @@ export interface Plugin {
    * Its paragraph for the guide's user message on a page at `url`, or
    * `undefined` when it has nothing for this page.
    *
-   * `past` is every run this browser has recorded. A Plugin that only knows
-   * what a human wrote about a site (`Skill`) ignores it; one that knows what
-   * was actually walked here (`Memory`) is made of it. Handed in rather than
-   * read, because reading it is a storage call and this layer may not make one
-   * (N-1). Optional, so a Plugin that has no use for it need not be handed
-   * one — and a test of such a Plugin need not invent one.
+   * It used to be handed every run this browser had recorded, for `Memory` to
+   * be made of. Memory was deleted (CONTEXT.md `Memory` says why), and with it
+   * the only reader — so the parameter went too, and so did the storage read
+   * that filled it on every model call. A Plugin that needs it again brings it
+   * back along with whatever uses it.
    */
-  contextFor(url: string, past?: readonly RunRecord[]): string | undefined;
+  contextFor(url: string): string | undefined;
 }
 
 /** Every Plugin, in the order their paragraphs appear. */
-export const PLUGINS: readonly Plugin[] = [skill, memory];
+export const PLUGINS: readonly Plugin[] = [skill];
 
 /** Where a Plugin's switch lives — `storage.local`, beside the trace switch,
  *  so a harness can set it before a run. */
@@ -63,8 +60,7 @@ export function pluginsNamed(names: readonly string[]): readonly Plugin[] {
   return PLUGINS.filter((p) => names.includes(p.name));
 }
 
-/** What the given Plugins add to the Context of a call on a page at `url`,
- *  given everything this browser has already walked. */
-export function contributionsFor(plugins: readonly Plugin[], url: string, past: readonly RunRecord[] = []): string[] {
-  return plugins.map((p) => p.contextFor(url, past)).filter((t): t is string => t !== undefined);
+/** What the given Plugins add to the Context of a call on a page at `url`. */
+export function contributionsFor(plugins: readonly Plugin[], url: string): string[] {
+  return plugins.map((p) => p.contextFor(url)).filter((t): t is string => t !== undefined);
 }

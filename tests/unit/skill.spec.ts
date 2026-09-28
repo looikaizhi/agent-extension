@@ -61,10 +61,11 @@ describe('Skill：站点技能只在有它的站点上出现，且不进系统�
 
 describe('Plugin 开关', () => {
   it('没写就按默认——Skill 默认开；写了 false 就关；读失败也按默认', async () => {
-    expect((await enabledPlugins(flagStore({}))).map((p) => p.name)).toEqual(['skill', 'memory']);
-    expect((await enabledPlugins(flagStore({ [pluginKey('skill')]: false }))).map((p) => p.name)).toEqual(['memory']);
+    // 登记表里现在只剩 Skill 一个：Memory 删掉了（CONTEXT.md 的词条写了为什么）。
+    expect((await enabledPlugins(flagStore({}))).map((p) => p.name)).toEqual(['skill']);
+    expect((await enabledPlugins(flagStore({ [pluginKey('skill')]: false }))).map((p) => p.name)).toEqual([]);
     const broken: FlagStore = { get: async () => { throw new Error('storage unavailable'); } };
-    expect((await enabledPlugins(broken)).map((p) => p.name)).toEqual(['skill', 'memory']);
+    expect((await enabledPlugins(broken)).map((p) => p.name)).toEqual(['skill']);
   });
 
   it('只有开着的 Plugin 贡献它那一段', async () => {

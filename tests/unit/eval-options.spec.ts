@@ -4,7 +4,7 @@ import { costOf, modelFrom, pluginsFrom, priceFrom, runIdFrom } from '../../eval
 /** The options `eval:task` and `eval:decision` share, read one way. */
 describe('eval 命令共用的参数', () => {
   it('Plugin：不写是产品默认开的，none 是全关，没登记的报错', () => {
-    expect(pluginsFrom(undefined)).toEqual(['skill', 'memory']);
+    expect(pluginsFrom(undefined)).toEqual(['skill']);
     expect(pluginsFrom('none')).toEqual([]);
     expect(pluginsFrom('skill')).toEqual(['skill']);
     expect(() => pluginsFrom('skill,nosuch')).toThrow(/nosuch/);

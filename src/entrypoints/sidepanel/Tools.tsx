@@ -21,7 +21,6 @@ import { PROTOCOLS } from '@/agent/provider/protocols';
 import { actionForRole, type ElementDescriptor } from '@/shared/protocol';
 import { NodeTable } from './components/NodeTable';
 import { StatsBar } from './components/StatsBar';
-import type { WalkedPath } from '@/agent/context/memory';
 import { summarizeCost, type CallRecord } from './view-model';
 
 /**
@@ -267,20 +266,6 @@ export function Tools({
     setKeyState({ kind: 'idle', text: '已按「未知」保存：引导会照常发出「必须调用工具」。' });
   }, [cfg]);
 
-  // 它记住的路：本来就写在 Run record 里，这里只是让用户看得见、也拿得回去。
-  const [walked, setWalked] = useState<WalkedPath[] | null>(null);
-  const loadMemory = useCallback(async () => {
-    const r = (await chrome.runtime.sendMessage({ type: 'GET_MEMORY' })) as { paths?: WalkedPath[] } | undefined;
-    setWalked(r?.paths ?? []);
-  }, []);
-  const forget = useCallback(
-    async (runId?: string) => {
-      await chrome.runtime.sendMessage({ type: 'FORGET_MEMORY', ...(runId ? { runId } : {}) });
-      await loadMemory();
-    },
-    [loadMemory],
-  );
-
   const preset = PRESETS.find((p) => p.id === cfg.preset) ?? PRESETS[PRESETS.length - 1]!;
   /** Verified models, the ones that work first — `unknown` is not a
    *  measurement and has nothing to show. */
@@ -517,32 +502,6 @@ export function Tools({
         </label>
       </details>
 
-      {/* 走通过的路会被记下来，下次在同一个站点上当线索用。能看见，也能拿回去。 */}
-      <details className="memory" onToggle={(e) => e.currentTarget.open && walked === null && void loadMemory()}>
-        <summary>它记住的路</summary>
-        {walked === null ? (
-          <p className="note">正在读…</p>
-        ) : walked.length === 0 ? (
-          <p className="note">还没有记住任何一条——走通一趟之后才会有。</p>
-        ) : (
-          <>
-            <ul className="walked">
-              {walked.map((p) => (
-                <li key={p.runId}>
-                  <div className="walked-goal">{p.goal}</div>
-                  <div className="walked-where">
-                    {p.host} · {p.steps.join(' → ')}
-                  </div>
-                  <button onClick={() => void forget(p.runId)}>忘掉这条</button>
-                </li>
-              ))}
-            </ul>
-            <div className="row">
-              <button onClick={() => void forget()}>全部忘掉（{walked.length} 条）</button>
-            </div>
-          </>
-        )}
-      </details>
     </details>
   );
 }

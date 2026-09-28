@@ -750,12 +750,11 @@ describe('agent/thread/writer.ts · Plugin 的贡献在发出模型调用时收�
     await pointedAtOneStep(on.store);
     on.flags['plugin:skill'] = false;
     await endGuide(on.deps, THREAD_ID, 'user_ended');
-    expect(on.records[0]?.plugins).toEqual(['skill', 'memory']);
+    expect(on.records[0]?.plugins).toEqual(['skill']);
     expect(await on.store.get(`plugins:${THREAD_ID}`)).toEqual({});
 
     const off = harness();
     off.flags['plugin:skill'] = false;
-    off.flags['plugin:memory'] = false;
     await applyGuideInput(off.deps, THREAD_ID, { kind: 'start', goal: 'g', table: GH, effectId: 'fx-1' });
     await pointedAtOneStep(off.store);
     off.flags['plugin:skill'] = true;

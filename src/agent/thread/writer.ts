@@ -35,18 +35,6 @@ const effectKeyFor = (id: ThreadId) => `effect:${id}`;
 const toolKeyFor = (id: ThreadId) => `tool:${id}`;
 const pluginsKeyFor = (id: ThreadId) => `plugins:${id}`;
 
-/** Every run this browser has recorded — `[]` when there are none, and on a
- *  store that cannot be read: a Plugin missing its material is a paragraph
- *  that does not appear, never a call that does not go out. */
-async function loadRunRecords(records: RecordStore): Promise<readonly RunRecord[]> {
-  try {
-    const stored = (await records.get(RUN_RECORDS_KEY))[RUN_RECORDS_KEY];
-    return Array.isArray(stored) ? (stored as RunRecord[]) : [];
-  } catch {
-    return [];
-  }
-}
-
 /** The names of the Plugins a run started with — `[]` when none were on. */
 async function loadRunPlugins(store: ThreadStore, id: ThreadId): Promise<readonly string[]> {
   const k = pluginsKeyFor(id);
@@ -261,16 +249,9 @@ async function applyGuideInputInner(
   // Read here for the same reason the Plugins are: the conversation belongs to
   // the host, and the reducer may not go looking for it.
   const recent = dispatched?.kind === 'callModel' ? await deps.recent(threadId) : [];
-  // What this browser has already walked, for the Plugins that are made of it
-  // (`Memory`). Read here rather than in the Plugin: it is a storage call, and
-  // that layer may not make one.
   const contributions =
     dispatched?.kind === 'callModel'
-      ? contributionsFor(
-          pluginsNamed(startedWith ?? (await loadRunPlugins(deps.store, threadId))),
-          dispatched.table.url,
-          await loadRunRecords(deps.records),
-        )
+      ? contributionsFor(pluginsNamed(startedWith ?? (await loadRunPlugins(deps.store, threadId))), dispatched.table.url)
       : [];
   const req =
     dispatched && result.state.inflight

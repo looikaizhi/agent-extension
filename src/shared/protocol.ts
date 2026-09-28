@@ -342,12 +342,6 @@ export type HostRequest =
   /** The user's answer to P-2's card. Declining is not an error: the guide
    *  stays where it is with the step unshown, and spends nothing. */
   | { type: 'CROSS_SITE_DECISION'; tabId: number; confirmed: boolean }
-  /** What this browser has walked and still remembers (CONTEXT.md `Memory`),
-   *  newest first — for the one place the user can see it and take it back. */
-  | { type: 'GET_MEMORY' }
-  /** Forget one walked path, or all of them when `runId` is absent. The user
-   *  asked; nothing else ever removes them. */
-  | { type: 'FORGET_MEMORY'; runId?: string }
   /** 「再试一次」 after a call that never got through. The same run asks
    *  again — goal, steps and everything read so far stay where they are —
    *  which is the whole point: retyping the goal would start a different one

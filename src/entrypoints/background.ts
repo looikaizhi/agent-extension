@@ -1,4 +1,3 @@
-import { walkedPaths } from '@/agent/context/memory';
 import { RUN_RECORDS_KEY } from '@/agent/thread/record-store';
 import { recentTalk } from '@/agent/conversation/entries';
 import type { ThreadId, ThreadStore } from '@/agent/thread/ports';
@@ -1073,30 +1072,6 @@ export default defineBackground(() => {
         });
         await renderGuideOutcome(tabId, sessionIdForTab(tabId), outcome);
         sendResponse({ ok: true });
-      })();
-      return true;
-    }
-
-    // The panel's pinned card offers 跳过 for a fixed plan, the same gesture
-    // the overlay's own button makes.
-    if (m.type === 'GET_MEMORY') {
-      void (async () => {
-        const stored = (await chrome.storage.local.get(RUN_RECORDS_KEY))[RUN_RECORDS_KEY];
-        sendResponse({ paths: walkedPaths(Array.isArray(stored) ? stored : []) });
-      })();
-      return true;
-    }
-
-    if (m.type === 'FORGET_MEMORY') {
-      const { runId } = m as Extract<HostRequest, { type: 'FORGET_MEMORY' }>;
-      void (async () => {
-        const stored = (await chrome.storage.local.get(RUN_RECORDS_KEY))[RUN_RECORDS_KEY];
-        const records = (Array.isArray(stored) ? stored : []) as { runId: string }[];
-        // 忘掉的是那一趟的记录本身，不是给它加一个「别看这条」的标记：用户说
-        // 删，留着一份影子副本就是没删。
-        const kept = runId ? records.filter((r) => r.runId !== runId) : [];
-        await chrome.storage.local.set({ [RUN_RECORDS_KEY]: kept });
-        sendResponse({ ok: true, left: kept.length });
       })();
       return true;
     }
