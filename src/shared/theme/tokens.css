@@ -1,0 +1,386 @@
+/*
+ * 四套主题：夜航 / 景深 × 白天 / 黑夜（CONTEXT.md `Appearance`）。
+ *
+ * 侧栏和网页上的引导层共用这一份：侧栏直接引入，引导层以 `?inline` 读成字符串放进
+ * 自己的 shadow root。两边都只看元素上的 `data-style` 与 `data-shade`
+ * （`applyAppearance` 写的），所以换主题永远是换这两个属性，不是换样式表。
+ *
+ * 引导层跑在别人的页面里，只能用系统字体：shadow root 里声明的 @font-face 不生效，
+ * 页面的 CSP 也可能拦外部字体。下面的字体栈在两边都成立——Geist 装了就用，
+ * 没装落回系统字体。
+ */
+
+/* ───────── 风格：字体、圆角、标注写法 ───────── */
+
+[data-style='hud'] {
+  --font: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'Geist Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+  --font-label: var(--font-mono);
+  --ls-label: 0.06em;
+  --r-card: 12px;
+  --r-entry: 10px;
+  --r-ctl: 8px;
+  --r-field: 8px;
+  --r-bubble: 12px 12px 4px 12px;
+  --r-icon: 4px;
+  --r-tile: 10px;
+  --r-card-o: 12px;
+  /* 引导层卡片背后：夜航的卡片不透明，不用虚化。 */
+  --o-blur: none;
+}
+
+[data-style='depth'] {
+  --font: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-label: var(--font);
+  --ls-label: 0;
+  --r-card: 22px;
+  --r-entry: 18px;
+  --r-ctl: 999px;
+  --r-field: 14px;
+  --r-bubble: 20px 20px 6px 20px;
+  --r-icon: 50%;
+  --r-tile: 18px;
+  --r-card-o: 20px;
+  /* 景深的卡片是半透明的：背后不虚化，页面上的字会透过来。 */
+  --o-blur: blur(24px) saturate(1.4);
+}
+
+[data-shade='day'] {
+  color-scheme: light;
+}
+[data-shade='night'] {
+  color-scheme: dark;
+}
+
+/* ───────── 夜航 · 白天 ───────── */
+
+[data-style='hud'][data-shade='day'] {
+  --bg: #f4f6f9;
+  --surf: #ffffff;
+  --surf-b: #dde2ea;
+  --surf-2: #f8f9fb;
+  --line: #e4e8ee;
+  --fg: #0b0e13;
+  --fg-2: #3a4353;
+  --muted: #586273;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --ent-bg: transparent;
+  --ent-b: #e4e8ee;
+  --cur-bg: #ffffff;
+  --cur-b: #4d6618;
+  --cur-halo: 0 0 0 3px rgba(184, 242, 58, 0.2);
+  --w-b: #c9d0da;
+  --f-bg: #ffffff;
+  --f-b: #dde2ea;
+  --f-focus: #0b0e13;
+  --f-halo: 0 0 0 3px rgba(184, 242, 58, 0.55);
+  --p-bg: #0b0e13;
+  --p-fg: #b8f23a;
+  --p-shadow: none;
+  --g-bg: #eef1f5;
+  --g-b: #dde2ea;
+  --g-fg: #0b0e13;
+  --acc: #b8f23a;
+  --acc-t: #4d6618;
+  --acc-soft: rgba(184, 242, 58, 0.22);
+  --acc-line: rgba(77, 102, 24, 0.25);
+  --pg-done: #0b0e13;
+  --pg-cur: #0b0e13;
+  --pg-todo: #dde2ea;
+  --ub-bg: #ffffff;
+  --ub-fg: #0b0e13;
+  --ub-b: #dde2ea;
+  --ub-shadow: none;
+  --comp-bg: #ffffff;
+  --comp-b: #dde2ea;
+  --comp-sh: none;
+  --code-bg: rgba(184, 242, 58, 0.22);
+  --code-fg: #4d6618;
+  --code-b: rgba(77, 102, 24, 0.25);
+  --warn: #b45309;
+  --warn-soft: #fff7ea;
+  --warn-b: #f3cd8e;
+  --err: #b42318;
+  --err-soft: #fef1f0;
+  --err-b: #f4b4ae;
+  --ok: #4d6618;
+  --ok-soft: rgba(184, 242, 58, 0.22);
+  --ok-b: rgba(77, 102, 24, 0.25);
+  --badge: #0b0e13;
+  --badge-icon: #b8f23a;
+  --seg-track: #eef1f5;
+  --seg-on: #0b0e13;
+  --seg-on-t: #b8f23a;
+  --seg-on-sh: none;
+  --tile: #f8f9fb;
+  --tile-b: #dde2ea;
+  --sel-ring: #0b0e13;
+  --sel-bg: #ffffff;
+  --sel-halo: 0 0 0 3px rgba(184, 242, 58, 0.6);
+  --st-bg: rgba(184, 242, 58, 0.22);
+  --st-fg: #4d6618;
+  --st-b: rgba(77, 102, 24, 0.25);
+  --veil: rgba(244, 246, 249, 0.76);
+  --v-blur: none;
+  --o-bg: #ffffff;
+  --o-b: #dde2ea;
+  --o-sh: 0 24px 60px rgba(15, 23, 42, 0.16), 0 2px 6px rgba(15, 23, 42, 0.06);
+  --o-fg: #0b0e13;
+  --o-fg-2: #3a4353;
+  --o-muted: #586273;
+  --o-val-bg: #f3f5f8;
+  --ring: #0b0e13;
+  --ring-halo: rgba(184, 242, 58, 0.7);
+  --tag-bg: #0b0e13;
+  --tag-fg: #b8f23a;
+}
+
+/* ───────── 夜航 · 黑夜 ───────── */
+
+[data-style='hud'][data-shade='night'] {
+  --bg: #0b0e13;
+  --surf: #12161d;
+  --surf-b: #252c38;
+  --surf-2: #1a1f29;
+  --line: #1c222c;
+  --fg: #e7ebf3;
+  --fg-2: #b7c0cf;
+  --muted: #8d97a8;
+  --shadow: none;
+  --ent-bg: transparent;
+  --ent-b: #1c222c;
+  --cur-bg: #12161d;
+  --cur-b: rgba(184, 242, 58, 0.33);
+  --cur-halo: 0 0 0 3px rgba(184, 242, 58, 0.1);
+  --w-b: #2e3644;
+  --f-bg: #12161d;
+  --f-b: #252c38;
+  --f-focus: #b8f23a;
+  --f-halo: 0 0 0 3px rgba(184, 242, 58, 0.15);
+  --p-bg: #b8f23a;
+  --p-fg: #0b0e13;
+  --p-shadow: none;
+  --g-bg: #1a1f29;
+  --g-b: #252c38;
+  --g-fg: #e7ebf3;
+  --acc: #b8f23a;
+  --acc-t: #b8f23a;
+  --acc-soft: rgba(184, 242, 58, 0.1);
+  --acc-line: rgba(184, 242, 58, 0.33);
+  --pg-done: #b8f23a;
+  --pg-cur: #b8f23a;
+  --pg-todo: #252c38;
+  --ub-bg: #1a1f29;
+  --ub-fg: #e7ebf3;
+  --ub-b: #252c38;
+  --ub-shadow: none;
+  --comp-bg: #12161d;
+  --comp-b: #252c38;
+  --comp-sh: none;
+  --code-bg: #1a1f29;
+  --code-fg: #b8f23a;
+  --code-b: #252c38;
+  --warn: #ffca6b;
+  --warn-soft: rgba(255, 202, 107, 0.08);
+  --warn-b: rgba(255, 202, 107, 0.32);
+  --err: #ff8a80;
+  --err-soft: rgba(255, 138, 128, 0.08);
+  --err-b: rgba(255, 138, 128, 0.32);
+  --ok: #b8f23a;
+  --ok-soft: rgba(184, 242, 58, 0.1);
+  --ok-b: rgba(184, 242, 58, 0.33);
+  --badge: #b8f23a;
+  --badge-icon: #0b0e13;
+  --seg-track: #1a1f29;
+  --seg-on: #b8f23a;
+  --seg-on-t: #0b0e13;
+  --seg-on-sh: none;
+  --tile: #0f131a;
+  --tile-b: #252c38;
+  --sel-ring: #b8f23a;
+  --sel-bg: #161b24;
+  --sel-halo: 0 0 0 3px rgba(184, 242, 58, 0.12);
+  --st-bg: rgba(184, 242, 58, 0.1);
+  --st-fg: #b8f23a;
+  --st-b: rgba(184, 242, 58, 0.33);
+  --veil: rgba(4, 6, 10, 0.68);
+  --v-blur: none;
+  --o-bg: #0f131a;
+  --o-b: #2a3240;
+  --o-sh: 0 24px 60px rgba(0, 0, 0, 0.55);
+  --o-fg: #e7ebf3;
+  --o-fg-2: #b7c0cf;
+  --o-muted: #8d97a8;
+  --o-val-bg: #1a1f29;
+  --ring: #b8f23a;
+  --ring-halo: rgba(184, 242, 58, 0.12);
+  --tag-bg: #b8f23a;
+  --tag-fg: #0b0e13;
+}
+
+/* ───────── 景深 · 白天 ───────── */
+
+[data-style='depth'][data-shade='day'] {
+  --bg: #eceef3;
+  --surf: rgba(255, 255, 255, 0.78);
+  --surf-b: rgba(255, 255, 255, 0.95);
+  --surf-2: rgba(15, 23, 42, 0.05);
+  --line: rgba(15, 23, 42, 0.07);
+  --fg: #0f172a;
+  --fg-2: #334155;
+  --muted: #556070;
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 10px 28px rgba(15, 23, 42, 0.07);
+  --ent-bg: rgba(255, 255, 255, 0.72);
+  --ent-b: rgba(255, 255, 255, 0.95);
+  --cur-bg: rgba(255, 255, 255, 0.86);
+  --cur-b: rgba(61, 90, 254, 0.3);
+  --cur-halo: 0 10px 28px rgba(15, 23, 42, 0.07);
+  --w-b: rgba(15, 23, 42, 0.14);
+  --f-bg: #ffffff;
+  --f-b: rgba(15, 23, 42, 0.1);
+  --f-focus: #3d5afe;
+  --f-halo: 0 0 0 4px rgba(61, 90, 254, 0.14);
+  --p-bg: #3d5afe;
+  --p-fg: #ffffff;
+  --p-shadow: 0 6px 16px rgba(61, 90, 254, 0.28);
+  --g-bg: rgba(15, 23, 42, 0.06);
+  --g-b: transparent;
+  --g-fg: #0f172a;
+  --acc: #3d5afe;
+  --acc-t: #3d5afe;
+  --acc-soft: rgba(61, 90, 254, 0.12);
+  --acc-line: rgba(61, 90, 254, 0.3);
+  --pg-done: #3d5afe;
+  --pg-cur: #3d5afe;
+  --pg-todo: #d5dae3;
+  --ub-bg: #3d5afe;
+  --ub-fg: #ffffff;
+  --ub-b: transparent;
+  --ub-shadow: 0 6px 16px rgba(61, 90, 254, 0.28);
+  --comp-bg: #ffffff;
+  --comp-b: transparent;
+  --comp-sh: 0 10px 30px rgba(15, 23, 42, 0.1), 0 1px 2px rgba(15, 23, 42, 0.06);
+  --code-bg: #eef1f7;
+  --code-fg: #0f172a;
+  --code-b: transparent;
+  --warn: #b45309;
+  --warn-soft: #fff6e8;
+  --warn-b: rgba(180, 83, 9, 0.2);
+  --err: #c4231a;
+  --err-soft: #fdeeec;
+  --err-b: rgba(196, 35, 26, 0.2);
+  --ok: #0f7b5f;
+  --ok-soft: #e3f5ee;
+  --ok-b: rgba(15, 123, 95, 0.2);
+  --badge: #3d5afe;
+  --badge-icon: #ffffff;
+  --seg-track: rgba(15, 23, 42, 0.06);
+  --seg-on: #ffffff;
+  --seg-on-t: #0f172a;
+  --seg-on-sh: 0 1px 3px rgba(15, 23, 42, 0.12);
+  --tile: rgba(255, 255, 255, 0.55);
+  --tile-b: rgba(15, 23, 42, 0.08);
+  --sel-ring: #3d5afe;
+  --sel-bg: #ffffff;
+  --sel-halo: 0 0 0 4px rgba(61, 90, 254, 0.14);
+  --st-bg: transparent;
+  --st-fg: #3d5afe;
+  --st-b: transparent;
+  --veil: rgba(226, 231, 240, 0.42);
+  --v-blur: blur(3.5px) saturate(0.8);
+  --o-bg: rgba(255, 255, 255, 0.86);
+  --o-b: rgba(255, 255, 255, 0.9);
+  --o-sh: 0 24px 60px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.06);
+  --o-fg: #0f172a;
+  --o-fg-2: #475063;
+  --o-muted: #556070;
+  --o-val-bg: rgba(15, 23, 42, 0.05);
+  --ring: #3d5afe;
+  --ring-halo: rgba(61, 90, 254, 0.12);
+  --tag-bg: #3d5afe;
+  --tag-fg: #ffffff;
+}
+
+/* ───────── 景深 · 黑夜 ───────── */
+
+[data-style='depth'][data-shade='night'] {
+  --bg: #0e1116;
+  --surf: rgba(255, 255, 255, 0.05);
+  --surf-b: rgba(255, 255, 255, 0.08);
+  --surf-2: rgba(255, 255, 255, 0.06);
+  --line: rgba(255, 255, 255, 0.08);
+  --fg: #e8ecf4;
+  --fg-2: #c3cad6;
+  --muted: #98a2b3;
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --ent-bg: rgba(255, 255, 255, 0.04);
+  --ent-b: rgba(255, 255, 255, 0.07);
+  --cur-bg: rgba(255, 255, 255, 0.07);
+  --cur-b: rgba(158, 167, 255, 0.35);
+  --cur-halo: 0 10px 28px rgba(0, 0, 0, 0.35);
+  --w-b: rgba(255, 255, 255, 0.14);
+  --f-bg: rgba(255, 255, 255, 0.06);
+  --f-b: rgba(255, 255, 255, 0.1);
+  --f-focus: #9ea7ff;
+  --f-halo: 0 0 0 4px rgba(79, 95, 255, 0.22);
+  --p-bg: #4f5fff;
+  --p-fg: #ffffff;
+  --p-shadow: 0 6px 16px rgba(79, 95, 255, 0.4);
+  --g-bg: rgba(255, 255, 255, 0.08);
+  --g-b: transparent;
+  --g-fg: #e8ecf4;
+  --acc: #4f5fff;
+  --acc-t: #9ea7ff;
+  --acc-soft: rgba(79, 95, 255, 0.2);
+  --acc-line: rgba(158, 167, 255, 0.35);
+  --pg-done: #4f5fff;
+  --pg-cur: #9ea7ff;
+  --pg-todo: rgba(255, 255, 255, 0.14);
+  --ub-bg: #4f5fff;
+  --ub-fg: #ffffff;
+  --ub-b: transparent;
+  --ub-shadow: 0 6px 16px rgba(79, 95, 255, 0.4);
+  --comp-bg: #1a1e27;
+  --comp-b: rgba(255, 255, 255, 0.08);
+  --comp-sh: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --code-bg: rgba(255, 255, 255, 0.08);
+  --code-fg: #9ea7ff;
+  --code-b: transparent;
+  --warn: #ffc56b;
+  --warn-soft: rgba(255, 197, 107, 0.08);
+  --warn-b: rgba(255, 197, 107, 0.28);
+  --err: #ff8f87;
+  --err-soft: rgba(255, 143, 135, 0.08);
+  --err-b: rgba(255, 143, 135, 0.28);
+  --ok: #5ee0b5;
+  --ok-soft: rgba(94, 224, 181, 0.1);
+  --ok-b: rgba(94, 224, 181, 0.28);
+  --badge: #4f5fff;
+  --badge-icon: #ffffff;
+  --seg-track: rgba(255, 255, 255, 0.06);
+  --seg-on: rgba(255, 255, 255, 0.14);
+  --seg-on-t: #e8ecf4;
+  --seg-on-sh: none;
+  --tile: rgba(255, 255, 255, 0.03);
+  --tile-b: rgba(255, 255, 255, 0.08);
+  --sel-ring: #9ea7ff;
+  --sel-bg: rgba(255, 255, 255, 0.08);
+  --sel-halo: 0 0 0 4px rgba(79, 95, 255, 0.22);
+  --st-bg: transparent;
+  --st-fg: #9ea7ff;
+  --st-b: transparent;
+  --veil: rgba(8, 10, 16, 0.52);
+  --v-blur: blur(3.5px) saturate(0.8);
+  --o-bg: rgba(22, 26, 36, 0.9);
+  --o-b: rgba(255, 255, 255, 0.12);
+  --o-sh: 0 24px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --o-fg: #e8ecf4;
+  --o-fg-2: #c3cad6;
+  --o-muted: #98a2b3;
+  --o-val-bg: rgba(255, 255, 255, 0.08);
+  --ring: #9ea7ff;
+  --ring-halo: rgba(79, 95, 255, 0.2);
+  --tag-bg: #4f5fff;
+  --tag-fg: #ffffff;
+}

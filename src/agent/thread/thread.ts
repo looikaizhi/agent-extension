@@ -2,7 +2,7 @@ import type { GuideHistory } from '@/agent/context/user-message';
 import type { Reading, Since, ToolCall, ToolResult, TurnOnWire } from '@/agent/context/turn';
 import type { PromptTable } from '@/core/extractor/types';
 import type { GuideStep } from '@/shared/protocol';
-import type { AskOption, AskWants, GuideExpectAfter, GuideRouteHop, Ref, WaitUntil } from '@/shared/types';
+import type { AskOption, AskWants, Fix, GuideExpectAfter, GuideRouteHop, Ref, WaitUntil } from '@/shared/types';
 import type { EffectOutcome } from './effect';
 
 /**
@@ -402,6 +402,8 @@ export type MachineEffect =
       /** This was a trip that failed, not an answer the user has to live with:
        *  the same call can be made again, and the panel offers it. */
       canRetry?: true;
+      /** The user's to put right, and where (the panel offers the way there). */
+      fix?: Fix;
     };
 
 /**

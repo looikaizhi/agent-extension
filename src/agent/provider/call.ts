@@ -23,7 +23,7 @@ import type { ModelDelta, ModelMessage, ModelRequest, ModelUsage, ToolChoice, To
  *  throws it, and the host says it before a run starts rather than reading a
  *  page it would have nothing to plan with. */
 export const MODEL_NOT_CONFIGURED =
-  '还没有配置模型：请先在下方「模型配置（BYOK）」里填好端点和 API Key，点「连接」拿到模型列表，选一个之后点「验收并保存」。';
+  '还没有配置模型：请先在「工具与设置 › 模型配置」里填好端点和 API Key，点「连接」拿到模型列表，选一个之后点「验收并保存」。';
 
 /**
  * `http://localhost*` / `http://127.0.0.1*` are the only endpoints that don't

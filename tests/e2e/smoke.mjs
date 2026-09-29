@@ -1510,16 +1510,37 @@ const answerText = async (fragment = '', ms = 8000) => {
   return (await lastEntry('answer'))?.text ?? null;
 };
 const closeAnswerIfOpen = async () => await clearOverlay();
-/** The cost lines of every open panel, as numbers (「调用 N (主 P / 修复 R)」),
+/** The panel's tools live one page behind the conversation (「工具与设置」),
+ *  each one a row further in; the way back is two named buttons. */
+const openSettings = async (panel, row) => {
+  await panel.getByRole('button', { name: '工具与设置', exact: true }).click({ timeout: 2000 });
+  await panel.getByRole('button', { name: row }).click({ timeout: 2000 });
+};
+const backToChat = async (panel) => {
+  await panel.getByRole('button', { name: '返回工具与设置', exact: true }).click({ timeout: 2000 });
+  await panel.getByRole('button', { name: '返回对话', exact: true }).click({ timeout: 2000 });
+};
+/** The cost lines of every open panel, as numbers (「N 次调用 · 主调用 P / 修复 R」),
  *  summed. A call is counted on the panel that carried it out, and which one
  *  that is the host arbitrates — so no single panel is the one to read. */
 const costShown = async () => {
   const panels = ctx.pages().filter((p) => p.url().endsWith('/sidepanel.html'));
-  // The cost line sits in the tools drawer; a closed drawer has no innerText.
-  await Promise.all(panels.map((p) => p.evaluate(() => document.querySelector('details.tools')?.setAttribute('open', '')).catch(() => {})));
-  const lines = await Promise.all(panels.map((p) => p.locator('.stats.cost').innerText().catch(() => '')));
+  // The cost line is on 本次用量; each panel goes there, is read, and comes
+  // back to its conversation. A panel with no calls yet has no line.
+  const lines = await Promise.all(
+    panels.map(async (p) => {
+      try {
+        await openSettings(p, '本次用量');
+        const line = await p.evaluate(() => document.querySelector('.usage-calls')?.textContent ?? '');
+        await backToChat(p);
+        return line;
+      } catch {
+        return '';
+      }
+    }),
+  );
   const sum = (re) => lines.reduce((n, t) => n + Number(t.match(re)?.[1] ?? 0), 0);
-  return { calls: sum(/调用\s*(\d+)/), repairs: sum(/修复\s*(\d+)/) };
+  return { calls: sum(/(\d+)\s*次调用/), repairs: sum(/修复\s*(\d+)/) };
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1812,6 +1833,32 @@ const costShown = async () => {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// 要填字的一步：网页上的卡片只给看；侧栏钉住的这一步带着那段字，能复制
+// ─────────────────────────────────────────────────────────────────────────
+{
+  await clearOverlay();
+  modelHandler = async (route, body) =>
+    await fulfillEnvelope(route, {
+      intent: 'point',
+      route: [{ at: 'Instances 页', goal: '填项目名' }],
+      ref: liveRef(body, 'textbox', 'Project name'),
+      action: 'input',
+      value: 'ci-deploy',
+      why: '项目名填在这里',
+    });
+  await say('帮我把项目名填成 ci-deploy');
+  const shown = await waitUntil(async () => (await viewOf(qaPanel, tabId))?.step?.value === 'ci-deploy', 5000);
+  const onPanel = shown ? await pollText(() => qaPanel.locator('.pinned .value-to-type code'), 3000) : null;
+  check('输入的一步：侧栏钉住的这一步写着要填的字', onPanel === 'ci-deploy', onPanel ?? JSON.stringify((await viewOf(qaPanel, tabId))?.step));
+  // 「复制」 itself is not driven here. The clipboard wants a focused document,
+  // and this panel is a tab: bringing it to the front makes it the active tab,
+  // and a panel follows the active tab — off to a conversation with no step.
+  // The real side panel is not a tab and has the focus the moment it is clicked.
+  check('输入的一步：侧栏上有「复制」按钮', (await qaPanel.locator('.pinned .value-to-type button[aria-label="复制"]').count()) === 1);
+  await endGuideHere();
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Q-9 — 回答引用了密码框：整个回答被拒，浮层一次都没画
 // ─────────────────────────────────────────────────────────────────────────
 {
@@ -1911,7 +1958,7 @@ const costShown = async () => {
 // ─────────────────────────────────────────────────────────────────────────
 {
   await clearOverlay();
-  await qaPanel.evaluate(() => document.querySelector('details.tools')?.setAttribute('open', ''));
+  await openSettings(qaPanel, '检视页面');
   await qaPanel.getByRole('button', { name: '检视元素', exact: true }).click();
   await page.bringToFront();
   const create = await page.evaluate(() => {
@@ -1923,7 +1970,10 @@ const costShown = async () => {
   const pointBtn = qaPanel.getByRole('button', { name: '指给我', exact: true });
   const offered = await waitUntil(async () => await pointBtn.isVisible().catch(() => false), 5000);
   check('10d：检视时选中一个元素 → 侧栏给出「指给我」', offered);
+  // Pointing takes the panel back to the conversation; not getting that far
+  // has to, too, or every check after this one types into a page that is gone.
   if (offered) await pointBtn.click();
+  else await backToChat(qaPanel).catch(() => {});
   const createRect = await rectOf2('create');
   const pointed = await waitUntil(async () => JSON.stringify((await guideState())?.data?.rect) === JSON.stringify(createRect), 5000);
   check('10d：点「指给我」→ 浮层框在选中的那个元素上', pointed, JSON.stringify({ overlay: (await guideState())?.data?.rect, target: createRect }));
@@ -2874,7 +2924,7 @@ const costShown = async () => {
 
   // 逐字比对——call.ts 里这条是硬编码常量（`MODEL_NOT_CONFIGURED`），不是拼出来的文案。
   const EXPECTED_NO_MODEL_MESSAGE =
-    '还没有配置模型：请先在下方「模型配置（BYOK）」里填好端点和 API Key，点「连接」拿到模型列表，选一个之后点「验收并保存」。';
+    '还没有配置模型：请先在「工具与设置 › 模型配置」里填好端点和 API Key，点「连接」拿到模型列表，选一个之后点「验收并保存」。';
   await waitUntil(async () => ((await viewOf(noModelPanel, tabId))?.conversation?.entries ?? []).some((e) => e.kind === 'note'), 6000);
   const errText = ((await viewOf(noModelPanel, tabId))?.conversation?.entries ?? []).filter((e) => e.kind === 'note').at(-1)?.text ?? null;
   check(
@@ -2899,11 +2949,20 @@ const costShown = async () => {
     `实际发出 ${noModelRequestLog.length} 次：${JSON.stringify(noModelRequestLog)}`,
   );
 
+  // 那条提示自己带着去处：宿主记下 `fix: 'model'`，侧栏把它画成一个直达模型配置的按钮。
+  // 取最后一个：这条对话里更早的 401 之类也带着同一个去处。
+  const fixBtn = noModelPanel.getByRole('button', { name: '打开模型配置 →', exact: true }).last();
+  const fixOffered = await waitUntil(async () => await fixBtn.isVisible().catch(() => false), 3000);
+  if (fixOffered) await fixBtn.click();
+  const fixPage = fixOffered ? await noModelPanel.locator('.page-bar h1').innerText().catch(() => '') : '';
+  check('Q-11f：提示下面就是「打开模型配置 →」，一点直接进模型配置页', fixPage === '模型配置', fixOffered ? `到了「${fixPage}」` : '(没有这个按钮)');
+  if (fixOffered) await backToChat(noModelPanel).catch(() => {});
+
   // 既有能力：抽取本页元素——PANEL_EXTRACT 从不经过 agent/provider/provider.ts，不
   // 应受"未配置模型"影响。
-  await noModelPanel.evaluate(() => document.querySelector('details.tools')?.setAttribute('open', ''));
+  await openSettings(noModelPanel, '检视页面');
   await noModelPanel.getByRole('button', { name: '抽取本页元素', exact: true }).click();
-  const extractText = await pollText(() => noModelPanel.locator('.tools .note.ok').first(), 4000);
+  const extractText = await pollText(() => noModelPanel.locator('.settings-page .note.ok').first(), 4000);
   check(
     'Q-11d：既有能力不变——「抽取本页元素」照常返回控件表',
     typeof extractText === 'string' && extractText.includes('抽取到'),
@@ -2911,7 +2970,6 @@ const costShown = async () => {
   );
 
   // 既有能力：检视模式——同样不经过 provider.ts。
-  await noModelPanel.evaluate(() => document.querySelector('details.tools')?.setAttribute('open', ''));
   await noModelPanel.getByRole('button', { name: '检视元素', exact: true }).click();
   const stopBoxNoModel = await page.evaluate(() => {
     const btn = [...document.querySelectorAll('td button')].find((b) => b.textContent.trim() === 'Stop');
@@ -2929,7 +2987,6 @@ const costShown = async () => {
     inspectNoModel?.data?.visible === true,
     `status=${inspectNoModel?.data?.status}`,
   );
-  await noModelPanel.evaluate(() => document.querySelector('details.tools')?.setAttribute('open', ''));
   await noModelPanel.getByRole('button', { name: '取消检视', exact: true }).click();
 
   await ctx.unroute('https://api.openai.com/**');

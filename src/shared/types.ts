@@ -121,3 +121,12 @@ export interface Trace {
 export type WireBinding = 'bound' | 'ambiguous' | 'unbound';
 export type WireEvidence = 'documented' | 'model';
 export type WireCheck = 'pass' | 'unknown' | 'skipped';
+
+/**
+ * Where the user can put a failure right, when it is something they can fix
+ * themselves: `model` — the model configuration (no model, a key refused, a
+ * model that ignores 「必须调用工具」). Carried from the call that failed to the
+ * note the host writes about it, so the panel can offer the way there without
+ * reading its words for clues.
+ */
+export type Fix = 'model';

@@ -2,7 +2,7 @@ import type { Talk } from '@/agent/conversation/entries';
 import type { GuideHistory } from '@/agent/context/user-message';
 import type { Since, ToolCall, TurnOnWire } from '@/agent/context/turn';
 import type { PromptTable } from '@/core/extractor/types';
-import type { Ref } from '@/shared/types';
+import type { Fix, Ref } from '@/shared/types';
 
 /**
  * The wire protocol — design doc §2.6's request/result
@@ -160,6 +160,8 @@ export type EffectOutcome =
       error: string;
       retryable: boolean;
       failureKind: EffectFailureKind;
+      /** Where the user can put it right, when it is theirs to fix. */
+      fix?: Fix;
       providerCalls: number;
       /** Present whenever the endpoint answered at all. A draw that came back
        *  and was then refused was still billed, and the panel's cost display

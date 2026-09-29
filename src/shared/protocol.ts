@@ -1,5 +1,6 @@
 import type { EffectRequest, EffectResult } from '@/agent/thread/effect';
 import type { ExtractProfile, ProjectBudget, PromptItem, PromptTable } from '@/core/extractor/types';
+import type { Appearance } from './appearance';
 import type { AskOption, AskWants, GuideRouteHop, Rect, Ref, Trace, WaitUntil } from './types';
 
 /**
@@ -246,6 +247,12 @@ export const RPC_TYPES = [
   // stopped, or takes it down. It writes nothing of the page's, and its
   // buttons only report back to the host.
   'SAY',
+  // Added deliberately for the user's choice of look (CONTEXT.md `Appearance`),
+  // with the diff the whitelist exists to force: it tells our own overlay which
+  // style and shade to paint in. The content script cannot read storage, so the
+  // host hands it over. It changes the colours of our overlay and nothing of the
+  // page's.
+  'THEME',
 ] as const;
 
 export type RpcType = (typeof RPC_TYPES)[number];
@@ -285,6 +292,9 @@ export interface ContentRpcMap {
   /** Show a card on the overlay with something the user has to read (or
    *  answer), or take it down (`null`). */
   SAY: { req: { message: OverlayMessage | null }; res: null };
+  /** The look to paint the overlay in. Sent before anything is painted and
+   *  whenever the user changes it; 跟随系统 is resolved on the page. */
+  THEME: { req: { appearance: Appearance }; res: null };
 }
 
 /** Compile-time proof that the runtime whitelist and the type map cannot drift. */

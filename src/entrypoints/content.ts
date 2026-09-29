@@ -9,6 +9,7 @@ import { Overlay } from '@/core/overlay/overlay';
 import { presenterDom, rectOf } from '@/core/overlay/dom';
 import { domWaitPorts, waitForText } from '@/core/wait/wait-for-text';
 import { createPresenter } from '@/core/overlay/presenter';
+import { DEFAULT_APPEARANCE, type Appearance } from '@/shared/appearance';
 import type { ContentRequest, ContentResponse, GuideStep, HighlightAck } from '@/shared/protocol';
 import { emit, onRequest } from '@/shared/rpc';
 import type { Ref } from '@/shared/types';
@@ -26,6 +27,9 @@ export default defineContentScript({
   main() {
     let overlay: Overlay | null = null;
     let off: (() => void) | null = null;
+    /** The look the host last told us (`THEME`). This script cannot read
+     *  storage, so until the host says, it is the default. */
+    let appearance: Appearance = DEFAULT_APPEARANCE;
 
     /**
      * Two instances can legitimately land in one page: Chrome injects this
@@ -85,7 +89,7 @@ export default defineContentScript({
           overlay?.say(null);
           emit({ type: 'CROSS_SITE_DECIDED', confirmed: go });
         },
-      });
+      }, appearance);
       return overlay;
     };
 
@@ -265,7 +269,7 @@ export default defineContentScript({
       const ui = ensureOverlay();
       const onMove = (e: PointerEvent) => {
         const hit = itemAt(e.clientX, e.clientY);
-        ui.outline(hit ? rectOf(hit.el) : null);
+        ui.outline(hit ? rectOf(hit.el) : null, hit ? { role: hit.item.role, name: hit.item.name } : undefined);
       };
       // Capture phase and cancelled: the author is pointing at a control, and
       // letting the click through would navigate away from the page they are
@@ -362,6 +366,12 @@ export default defineContentScript({
 
         case 'SAY':
           if (req.message || overlay) ensureOverlay().say(req.message);
+          return { ok: true, data: null };
+
+        case 'THEME':
+          // Kept for the overlay not made yet; repainted on the one that is.
+          appearance = req.appearance;
+          overlay?.setAppearance(appearance);
           return { ok: true, data: null };
       }
     });

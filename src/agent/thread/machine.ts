@@ -210,7 +210,10 @@ function handleEffectResult(
       return askAgain({ ...cleared, transportFails: 1 }, input.nextEffectId, nextRev);
     // Twice in a row is not a hiccup. The user is told, and offered the one
     // thing that costs them nothing to try: the same call again.
-    return { state: closed, effects: [notify(FAILURE_TEXT[input.outcome.failureKind](input.outcome.error), trip || undefined)] };
+    return {
+      state: closed,
+      effects: [notify(FAILURE_TEXT[input.outcome.failureKind](input.outcome.error), trip || undefined, input.outcome.fix)],
+    };
   }
 
   // Re-derived here, not trusted from the panel (§8.3, "判定权在 Host"). The

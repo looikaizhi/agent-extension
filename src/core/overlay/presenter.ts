@@ -383,7 +383,8 @@ export function createPresenter(ports: PresenterPorts): Presenter {
       detail: cmd.step.detail,
       value: cmd.step.value,
       ...(cmd.mode === 'explain' ? { outline: true } : {}),
-      looking: `找的是：${d.role}｜${d.name}${d.scope ? `（在「${d.scope}」内）` : ''}${d.nth !== undefined ? `（第 ${d.nth} 个）` : ''}`,
+      target: { role: d.role, name: d.name },
+      looking: `在找：${d.role}「${d.name}」${d.scope ? ` · ${d.scope}` : ''}${d.nth !== undefined ? ` · 第 ${d.nth} 个` : ''}`,
     };
   }
 

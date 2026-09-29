@@ -70,6 +70,7 @@ export async function runCallModelEffect(
         error: r.failure.error,
         retryable: r.failure.retryable,
         failureKind: r.failure.kind,
+        ...(r.failure.fix ? { fix: r.failure.fix } : {}),
         providerCalls: r.providerCalls,
         // A draw that came back and was refused still cost its tokens. Dropping
         // the figure here is what made a rejected envelope look free.

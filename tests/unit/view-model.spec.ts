@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { describeProviderError, ProviderError } from '@/agent/provider/transport';
-import { type CallRecord, summarizeCost } from '@/entrypoints/sidepanel/view-model';
+import {
+  bindingTone,
+  type CallRecord,
+  checkTone,
+  evidenceTone,
+  statusOf,
+  summarizeCost,
+} from '@/entrypoints/sidepanel/view-model';
 
 /**
  * Pure logic behind `App.tsx`: the cost line, and how a provider error is said.
@@ -110,5 +117,27 @@ describe('describeProviderError', () => {
     expect(describeProviderError(new Error('boom'))).toContain('boom');
     expect(describeProviderError('a bare string')).toContain('a bare string');
     expect(describeProviderError(null)).not.toContain('[object');
+  });
+});
+
+describe('statusOf', () => {
+  it('此刻在做什么，从 Pending 读', () => {
+    expect(statusOf({ kind: 'thinking' }, false)).toEqual({ text: '思考中', tone: 'acc' });
+    expect(statusOf({ kind: 'running_tool', tool: 'observe' }, false)).toEqual({ text: '正在看页面', tone: 'acc' });
+    expect(statusOf({ kind: 'waiting_for_user', what: 'ask' }, false)).toEqual({ text: '等你回答', tone: 'warn' });
+    expect(statusOf({ kind: 'waiting_for_user', what: 'cross_site' }, true)).toEqual({ text: '等你确认', tone: 'warn' });
+  });
+
+  it('什么都没在做：屏上有一步就是在引导，没有就什么都不说', () => {
+    expect(statusOf({ kind: 'idle' }, true)).toEqual({ text: '引导中', tone: 'acc' });
+    expect(statusOf({ kind: 'idle' }, false)).toBeNull();
+  });
+});
+
+describe('三轴的圆点', () => {
+  it('每个取值一个语气：稳了、值得再看一眼、失败、还没问、没打算问', () => {
+    expect([evidenceTone('documented'), evidenceTone('model')]).toEqual(['ok', 'warn']);
+    expect([checkTone('pass'), checkTone('unknown'), checkTone('skipped')]).toEqual(['ok', 'open', 'muted']);
+    expect([bindingTone('bound'), bindingTone('ambiguous'), bindingTone('unbound')]).toEqual(['ok', 'warn', 'err']);
   });
 });

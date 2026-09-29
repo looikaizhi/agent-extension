@@ -280,10 +280,13 @@ describe('架构护栏', () => {
     // overlay's card, telling the user to open the side panel so a model call
     // can run — it writes to nothing of the page's. `SAY` joined in 10c: it
     // puts a question, an answer, a cross-site confirmation or a closing note
-    // on that same card of ours, and nothing of the page's.
+    // on that same card of ours, and nothing of the page's. `THEME` joined with
+    // the user's choice of look: it tells our overlay which style and shade to
+    // paint in, because the content script cannot read storage — it recolours
+    // our overlay and nothing of the page's.
     const { RPC_TYPES } = await import('@/shared/protocol');
     expect([...RPC_TYPES].sort()).toEqual(
-      ['CLEAR', 'DEBUG_GET_OVERLAY_STATE', 'EXTRACT', 'HIGHLIGHT', 'INSPECT', 'PING', 'SAY', 'WAIT_FOR', 'WAITING_FOR_PANEL'].sort(),
+      ['CLEAR', 'DEBUG_GET_OVERLAY_STATE', 'EXTRACT', 'HIGHLIGHT', 'INSPECT', 'PING', 'SAY', 'THEME', 'WAIT_FOR', 'WAITING_FOR_PANEL'].sort(),
     );
     for (const banned of ['EXECUTE', 'CLICK', 'FILL', 'TYPE', 'SUBMIT', 'NAVIGATE', 'EVAL']) {
       expect(RPC_TYPES as readonly string[]).not.toContain(banned);

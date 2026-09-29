@@ -58,11 +58,13 @@ import type {
   SessionId,
 } from '@/shared/protocol';
 import { PANEL_PORT, sessionIdForTab, tabIdForSession } from '@/shared/protocol';
-import type { Ref } from '@/shared/types';
+import type { Fix, Ref } from '@/shared/types';
 import { buildOutline } from '@/shared/outline';
 import { ensureInjected, enterFrames, sendToEveryFrame, sendToTab } from '@/shared/rpc';
 import { MODEL_NOT_CONFIGURED, modelIsConfigured } from '@/agent/provider/call';
 import { loadConfig } from '@/shared/settings';
+import type { Appearance } from '@/shared/appearance';
+import { loadAppearance, onAppearanceChanged } from '@/shared/appearance-store';
 
 /**
  * The host process: it translates agent events into renderer commands, and page
@@ -340,7 +342,22 @@ async function sayWaitingForPanel(tabId: number, waiting: boolean): Promise<void
   await chrome.action.setBadgeText({ tabId, text: waiting ? '!' : '' }).catch(() => {});
   if (waiting) await chrome.action.setBadgeBackgroundColor({ tabId, color: '#d93025' }).catch(() => {});
   await chrome.action.setTitle({ tabId, title: waiting ? WAITING_TITLE : DEFAULT_TITLE }).catch(() => {});
+  if (waiting) await themeTab(tabId);
   await sendToTab(tabId, { type: 'WAITING_FOR_PANEL', waiting });
+}
+
+/**
+ * The user's look (CONTEXT.md `Appearance`), onto every document of the tab,
+ * before anything is painted there: the content script cannot read storage, and
+ * one that has never been told paints the default.
+ */
+async function themeTab(tabId: number): Promise<void> {
+  await sendToEveryFrame(tabId, { type: 'THEME', appearance: await loadAppearance() });
+}
+
+/** A change of look, onto every tab — so a card already on screen follows at once. */
+async function themeEveryTab(appearance: Appearance): Promise<void> {
+  for (const tab of await chrome.tabs.query({})) if (tab.id !== undefined) await sendToEveryFrame(tab.id, { type: 'THEME', appearance });
 }
 
 /** One extraction of the page as it is right now, or `null` if it cannot be read. */
@@ -453,8 +470,15 @@ async function renderGuideOutcome(
   /** Something to read that is not a step: it goes into the conversation, and
    *  onto the overlay's card now — or, when this reduction ends the run, once
    *  the run has been settled (the clearing would take it with it). */
-  const note = async (text: string, detail?: string, canRetry?: true) => {
-    await addEntry(tabId, { at: Date.now(), kind: 'note', text, ...(detail ? { detail } : {}), ...(canRetry ? { canRetry } : {}) });
+  const note = async (text: string, detail?: string, canRetry?: true, fix?: Fix) => {
+    await addEntry(tabId, {
+      at: Date.now(),
+      kind: 'note',
+      text,
+      ...(detail ? { detail } : {}),
+      ...(canRetry ? { canRetry } : {}),
+      ...(fix ? { fix } : {}),
+    });
     if (outcome.ending) closingNote = text;
     else await say(tabId, { kind: 'note', title: '提示', text });
   };
@@ -637,7 +661,7 @@ async function renderGuideOutcome(
             : `引导在原地打转，已经停下：${effect.why}`;
       await note(text);
     } else if (effect.kind === 'notify') {
-      await note(effect.message, undefined, effect.canRetry);
+      await note(effect.message, undefined, effect.canRetry, effect.fix);
     } else if (effect.kind === 'cancel') {
       broadcastEffectAbort(effect.effectId);
     }
@@ -670,6 +694,7 @@ async function showThinking(tabId: number, outcome: GuideReduction, usage?: { pr
 /** The overlay's card (ticket 10c): the same words the side panel shows, for a
  *  user looking at the page — or `null` to take it down. */
 async function say(tabId: number, message: OverlayMessage | null): Promise<void> {
+  if (message) await themeTab(tabId);
   await sendToTab(tabId, { type: 'SAY', message });
 }
 
@@ -703,6 +728,7 @@ async function conversationView(tabId: number): Promise<ConversationView> {
             entryId: entry.id,
             title: shown.step.title,
             ...(shown.step.detail !== undefined ? { detail: shown.step.detail } : {}),
+            ...(shown.step.value !== undefined ? { value: shown.step.value } : {}),
             index: shown.index,
             total: shown.total,
           }
@@ -763,6 +789,7 @@ async function outlineAcrossFrames(
     const frameId = sourceFor(table, ref)?.frameId ?? 0;
     byFrame.set(frameId, [...(byFrame.get(frameId) ?? []), item]);
   }
+  await themeTab(tabId);
   for (const [frameId, items] of byFrame) {
     const outline = buildOutline(items, title);
     if (!outline) continue;
@@ -819,6 +846,7 @@ async function redrawGuide(tabId: number) {
  */
 async function paintStep(tabId: number, threadId: ThreadId, state: ThreadState, effect: PresentEffect) {
   const route = routeFor(state.table, effect.step.ref);
+  await themeTab(tabId);
   return await sendToTab(
     tabId,
     {
@@ -895,6 +923,7 @@ async function outlineByHand(tabId: number, handed: GuideStep): Promise<boolean>
   // which is how picking a control inside an embedded console still paints
   // inside that console.
   const route = routeFor(table, handed.ref);
+  await themeTab(tabId);
   const painted = await sendToTab(
     tabId,
     {
@@ -964,7 +993,7 @@ async function startGuide(tabId: number, req: { goal: string }) {
   // e2e fixture was small enough to hide that.
   const cfg = await loadConfig();
   if (!modelIsConfigured(cfg)) {
-    await addEntry(tabId, { at: Date.now(), kind: 'note', text: MODEL_NOT_CONFIGURED });
+    await addEntry(tabId, { at: Date.now(), kind: 'note', text: MODEL_NOT_CONFIGURED, fix: 'model' });
     return false;
   }
 
@@ -1004,6 +1033,7 @@ async function startGuide(tabId: number, req: { goal: string }) {
 
 export default defineBackground(() => {
   watchPanelPorts();
+  onAppearanceChanged((appearance) => void themeEveryTab(appearance));
   chrome.runtime.onInstalled.addListener(() => {
     chrome.sidePanel
       .setPanelBehavior({ openPanelOnActionClick: true })
@@ -1213,6 +1243,7 @@ export default defineBackground(() => {
             code: 'no_content_script',
             message: '本页面不允许扩展运行（或尚未授权该站点）',
           });
+        if (on) await themeTab(tabId);
         sendResponse(await sendToTab(tabId, { type: 'INSPECT', on }));
       })();
       return true;

@@ -1,6 +1,6 @@
 import type { PageSince } from '@/agent/context/turn';
 import type { PromptItem, PromptTable } from '@/core/extractor/types';
-import type { Ref } from '@/shared/types';
+import type { Fix, Ref } from '@/shared/types';
 import type { GuideHistoryEntry, InflightEffect, MachineEffect, StepAction, StepEffect, ThreadState, Turn, WorldAt } from './thread';
 import { judgeArrival } from '@/agent/thread/judge';
 import { sameView } from '@/shared/view';
@@ -141,7 +141,12 @@ export function stampEffect(history: readonly GuideHistoryEntry[], index: number
   return history.map((h, i) => (i === index ? { ...h, effect } : h));
 }
 
-export const notify = (message: string, canRetry?: true): MachineEffect => ({ kind: 'notify', message, ...(canRetry ? { canRetry } : {}) });
+export const notify = (message: string, canRetry?: true, fix?: Fix): MachineEffect => ({
+  kind: 'notify',
+  message,
+  ...(canRetry ? { canRetry } : {}),
+  ...(fix ? { fix } : {}),
+});
 
 /**
  * CONTEXT.md's `Presentation`, as the host names it: one name for each step that

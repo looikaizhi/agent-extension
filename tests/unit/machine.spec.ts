@@ -1259,6 +1259,15 @@ describe('machine.ts · step — 侧栏否决的信封不再一律说「调用�
     expect(effectsOfKind(effects, 'notify')).toEqual([{ kind: 'notify', message: '调用失败：API Key 被拒' }]);
   });
 
+  it('Q7-6b. 用户自己能改好的失败：说的时候带上去哪里改（侧栏据此给出「打开模型配置」）', () => {
+    const { effects } = step(baseState({ inflight }), {
+      kind: 'effect_result', effectId: 'fx-1', at,
+      outcome: { ok: false, error: 'API Key 被拒', retryable: false, failureKind: 'transport', fix: 'model', providerCalls: 1 },
+      nextEffectId: 'fx-2',
+    });
+    expect(effectsOfKind(effects, 'notify')).toEqual([{ kind: 'notify', message: '调用失败：API Key 被拒', fix: 'model' }]);
+  });
+
   it('Q7-7. 用户点「再试一次」：同一趟原样再问，不是新开一趟', () => {
     const prior = baseState({ callCount: 2 });
     const { state, effects } = step(prior, { kind: 'retry', nextEffectId: 'fx-9' });

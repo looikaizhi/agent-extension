@@ -17,7 +17,7 @@
  * and the tests without dragging a module graph behind them.
  */
 
-import type { GuideRouteHop, WireBinding, WireCheck, WireEvidence } from './types';
+import type { Fix, GuideRouteHop, WireBinding, WireCheck, WireEvidence } from './types';
 
 /**
  * One round of the model's thinking, as the panel discloses it: the tool it
@@ -70,6 +70,9 @@ export interface ConversationEntry {
    *  call can be made again, and the panel says so. Never on anything the
    *  model said — an answer is not something to retry. */
   canRetry?: true;
+  /** On a note about something the user can put right themselves: where. The
+   *  panel offers the way there (「打开模型配置 →」). */
+  fix?: Fix;
   /** Unique within its conversation, and stable — the panel keys on it. */
   id: string;
   at: number;
@@ -156,6 +159,10 @@ export interface PinnedStep {
   entryId: string;
   title: string;
   detail?: string;
+  /** For a step to fill in: the text to type. The panel offers it to copy —
+   *  the page's own card can only show it (`architecture.spec.ts`: nothing on
+   *  the page side may touch the clipboard). */
+  value?: string;
   index: number;
   /** Always `null` now: the model answers one step at a time, so nobody —
    *  itself included — knows how many are left. Kept as a field because the

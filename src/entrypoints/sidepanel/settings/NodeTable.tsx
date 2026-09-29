@@ -6,13 +6,7 @@ import type { PromptTable } from '@/core/extractor/types';
  * the authoring surface for fixed plans — which is why U-10 (recording) could
  * be cut without losing the ability to write them.
  */
-export function NodeTable({
-  table,
-  onPick,
-}: {
-  table: PromptTable;
-  onPick: (ref: string) => void;
-}) {
+export function NodeTable({ table, onPick }: { table: PromptTable; onPick: (ref: string) => void }) {
   let lastPath = ' ';
   const rows: ReactNode[] = [];
 
@@ -28,12 +22,7 @@ export function NodeTable({
         );
     }
     rows.push(
-      <button
-        className="node"
-        key={it.ref}
-        onClick={() => onPick(it.ref)}
-        title={`${it.ref} · 点击高亮`}
-      >
+      <button className="node" key={it.ref} onClick={() => onPick(it.ref)} title={`${it.ref} · 在页面上指给我`}>
         <span className="role">{it.role}</span>
         <span className="name">{it.name || <i>（无名称）</i>}</span>
         {it.nth !== undefined && <span className="nth">#{it.nth}</span>}
@@ -48,8 +37,11 @@ export function NodeTable({
   }
 
   return (
-    <section className="nodes">
-      <h2>页面元素</h2>
+    <section className="card nodes">
+      <div className="card-head">
+        <h3>页面元素</h3>
+        <span className="hint">点一行，就在页面上指给你</span>
+      </div>
       {rows.length ? rows : <p className="empty">没有可交互控件。</p>}
     </section>
   );

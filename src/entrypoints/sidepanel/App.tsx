@@ -2,13 +2,24 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ConversationView } from '@/shared/conversation';
 import { actionForRole, type ElementDescriptor } from '@/shared/protocol';
 import { emptyConversation } from '@/shared/conversation';
-import { Conversation } from './Conversation';
-import { Prose } from './Prose';
-import { Tools } from './Tools';
+import { Composer } from './chat/Composer';
+import { Conversation } from './chat/Conversation';
+import { EmptyState } from './chat/EmptyState';
+import { PageHeader } from './chat/PageHeader';
+import { PinnedStep } from './chat/PinnedStep';
+import { Inspect } from './settings/Inspect';
+import { ModelConfig } from './settings/ModelConfig';
+import { SettingsHome, type SettingsPage } from './settings/SettingsHome';
+import { Usage } from './settings/Usage';
+import { Icon } from './ui/Icon';
 import { draftTextOf } from './streaming';
 import { loadConfig } from '@/shared/settings';
 import { recoverInflightOnMount, startEffectListener } from './effects';
-import type { CallRecord } from './view-model';
+import { statusOf, type CallRecord } from './view-model';
+
+/** Which page the panel shows. Everything that runs lives above this, so
+ *  leaving the conversation stops nothing. */
+type Page = 'chat' | 'settings' | SettingsPage;
 
 /**
  * The side panel: one conversation per tab, and the step pinned above it.
@@ -27,10 +38,12 @@ import type { CallRecord } from './view-model';
 export function App() {
   const [tabId, setTabId] = useState<number | null>(null);
   const [url, setUrl] = useState('');
+  const [title, setTitle] = useState('');
   const [view, setView] = useState<ConversationView | null>(null);
   const [text, setText] = useState('');
   const [draft, setDraft] = useState('');
   const [costCalls, setCostCalls] = useState<CallRecord[]>([]);
+  const [page, setPage] = useState<Page>('chat');
   const bottom = useRef<HTMLDivElement | null>(null);
 
   /**
@@ -57,6 +70,7 @@ export function App() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     setTabId(tab?.id ?? null);
     setUrl(tab?.url ?? '');
+    setTitle(tab?.title ?? '');
   }, []);
 
   useEffect(() => {
@@ -141,7 +155,7 @@ export function App() {
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: 'end' });
-  }, [view?.conversation.rev, draft]);
+  }, [view?.conversation.rev, draft, page]);
 
   const send = useCallback(async () => {
     const said = text.trim();
@@ -159,6 +173,9 @@ export function App() {
         tabId,
         step: { descriptor, expectedUserAction: actionForRole(descriptor.role), title, detail },
       });
+      // What it pointed at is said in the conversation, so that is where the
+      // user goes next.
+      setPage('chat');
       await pull(tabId);
     },
     [tabId, pull],
@@ -174,72 +191,78 @@ export function App() {
   );
 
   const pending = view?.pending ?? { kind: 'idle' as const };
-  const crossSite = pending.kind === 'waiting_for_user' && pending.what === 'cross_site';
+  const step = view?.step ?? null;
+  // Nothing said on this tab yet and nothing under way: the panel says what it
+  // is for instead of showing an empty list.
+  const empty = view !== null && view.conversation.entries.length === 0 && !step && pending.kind === 'idle';
+  const placeholder =
+    pending.kind === 'idle'
+      ? '想做什么，或者想问这一页什么？'
+      : pending.kind === 'waiting_for_user' && pending.what === 'ask'
+        ? '直接打字回答它'
+        : '引导在走，你也可以直接说';
+
+  const toSettings = () => setPage('settings');
+  if (page !== 'chat')
+    return (
+      <div className="panel settings-panel">
+        {page === 'settings' ? (
+          <SettingsHome calls={costCalls.length} onBack={() => setPage('chat')} onOpen={setPage} />
+        ) : page === 'model' ? (
+          <ModelConfig onBack={toSettings} />
+        ) : page === 'inspect' ? (
+          <Inspect tabId={tabId} onBack={toSettings} onPointAt={(d, title, detail) => void pointAt(d, title, detail)} />
+        ) : (
+          <Usage calls={costCalls} onBack={toSettings} />
+        )}
+      </div>
+    );
 
   return (
     <div className="panel">
-      <header>
-        <h1>页面引导</h1>
-        <p className="url" title={url}>
-          {url || '（无活动标签页）'}
-        </p>
-      </header>
+      <PageHeader title={title} url={url} status={statusOf(pending, step !== null)} />
 
-      {/* The step the user is meant to be doing, kept above the conversation
-          where it cannot scroll away. 跳到目标 stays on the page's own card:
-          it hands the keyboard over, and the user is looking at the page. */}
-      {view?.step && (
-        <section className="pinned">
-          <div className="step-n">{view.step.total === null ? `第 ${view.step.index + 1} 步` : `步骤 ${view.step.index + 1} / ${view.step.total}`}</div>
-          <div className="step-title">{view.step.title}</div>
-          {view.step.detail && (
-            <div className="why">
-              <Prose text={view.step.detail} />
-            </div>
-          )}
-          <div className="row">
-            <button onClick={() => void act({ type: 'END_GUIDE' })}>结束引导</button>
-          </div>
-        </section>
+      {step && <PinnedStep step={step} onEnd={() => void act({ type: 'END_GUIDE' })} />}
+
+      {empty ? (
+        <EmptyState onExample={setText} />
+      ) : (
+        view && (
+          <Conversation
+            conversation={view.conversation}
+            pending={pending}
+            draft={draft}
+            {...(view.storageFull ? { storageFull: true as const } : {})}
+            {...(view.earlier ? { earlier: view.earlier } : {})}
+            {...(step ? { currentEntryId: step.entryId } : {})}
+            onRetry={() => void act({ type: 'RETRY_GUIDE' })}
+            onOpenModel={() => setPage('model')}
+            crossSiteActions={
+              <div className="row actions">
+                <button className="primary" onClick={() => void act({ type: 'CROSS_SITE_DECISION', confirmed: true })}>
+                  继续，带我去
+                </button>
+                <button onClick={() => void act({ type: 'CROSS_SITE_DECISION', confirmed: false })}>先不去</button>
+              </div>
+            }
+            endRef={bottom}
+          />
+        )
       )}
 
-      {view && (
-        <Conversation
-          conversation={view.conversation}
-          pending={pending}
-          draft={draft}
-          {...(view.storageFull ? { storageFull: true as const } : {})}
-          {...(view.earlier ? { earlier: view.earlier } : {})}
-          onRetry={() => void act({ type: 'RETRY_GUIDE' })}
-          endRef={bottom}
-        />
-      )}
+      <Composer
+        text={text}
+        onText={setText}
+        onSend={() => void send()}
+        placeholder={placeholder}
+        {...(!step && pending.kind !== 'idle' ? { onEnd: () => void act({ type: 'END_GUIDE' }) } : {})}
+      />
 
-      {crossSite && (
-        <div className="row cross-site">
-          <button className="primary" onClick={() => void act({ type: 'CROSS_SITE_DECISION', confirmed: true })}>
-            继续，带我去
-          </button>
-          <button onClick={() => void act({ type: 'CROSS_SITE_DECISION', confirmed: false })}>先不去</button>
-        </div>
-      )}
-
-      <section className="composer">
-        <input
-          value={text}
-          placeholder={pending.kind === 'idle' ? '想做什么，或者想问这一页什么？' : '引导在走，你也可以直接说'}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && void send()}
-        />
-        <button className="primary" disabled={!text.trim()} onClick={() => void send()}>
-          发送
-        </button>
-        {!view?.step && pending.kind !== 'idle' && (
-          <button onClick={() => void act({ type: 'END_GUIDE' })}>结束</button>
-        )}
-      </section>
-
-      <Tools tabId={tabId} costCalls={costCalls} onPointAt={(d, title, detail) => void pointAt(d, title, detail)} />
+      <button className="to-settings" onClick={toSettings}>
+        <Icon name="sliders" size={13} />
+        <span>工具与设置</span>
+        <Icon name="next" size={12} />
+      </button>
     </div>
   );
 }

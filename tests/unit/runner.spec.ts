@@ -155,6 +155,17 @@ describe('guide/runner.ts · failureKind — 三种失败不是同一件事', ()
     }
     const result = await runGuideToEnd(CTX, DEFAULT_CONFIG, signal(), throwing as never);
     expect(result.failure).toMatchObject({ kind: 'transport', retryable: true });
+    // 网络抖一下不是用户能在设置里改好的事。
+    expect(result.failure?.fix).toBeUndefined();
+  });
+
+  it('5b. Key 被拒 → 带上去哪里改：模型配置', async () => {
+    async function* throwing(): AsyncGenerator<ModelDelta> {
+      throw new ProviderError('Key 被拒绝（HTTP 401）', 'auth', false);
+      yield finish();
+    }
+    const result = await runGuideToEnd(CTX, DEFAULT_CONFIG, signal(), throwing as never);
+    expect(result.failure).toMatchObject({ kind: 'transport', retryable: false, fix: 'model' });
   });
 
   it('6. 两次都给不出信封 → parse，且只修一次不成环', async () => {
@@ -416,6 +427,8 @@ describe('guide/runner.ts · 端点被判定为不认强制工具调用时', () 
     expect(r.providerCalls).toBe(0);
     expect(r.failure).toMatchObject({ kind: 'transport', retryable: false });
     expect(r.failure?.error).toContain('忽略');
+    // 换模型是用户自己能做的事：失败上带着去哪里做。
+    expect(r.failure?.fix).toBe('model');
   });
 
   it.each(['unknown', 'supported'] as const)('开关是「%s」→ 照发，行为与今天完全一致', async (state) => {

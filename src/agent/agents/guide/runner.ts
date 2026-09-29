@@ -7,6 +7,7 @@ import type { EffectFailureKind, EffectUsage } from '@/agent/thread/effect';
 import { guideAgent, type GuideContext } from './agent';
 import type { GuideAgentEnvelope } from './registry';
 import type { NonceCache } from '@/agent/context/nonce';
+import type { Fix } from '@/shared/types';
 
 /**
  * The guide agent's run loop, in one readable pass: build messages → send →
@@ -62,7 +63,7 @@ export interface RunResult {
    * completely different things to the user, which is why the host used to
    * greet all three with 「调用失败」.
    */
-  failure?: { kind: EffectFailureKind; error: string; retryable: boolean };
+  failure?: { kind: EffectFailureKind; error: string; retryable: boolean; fix?: Fix };
   /** The function the model called. The host needs it to re-derive the
    *  envelope: `raw` is the arguments text and carries no intent. */
   tool?: string;
@@ -88,6 +89,8 @@ const explain = (message: string, finishReason?: string): string =>
   finishReason === 'length' ? `${message}（端点报告输出被截断：finish_reason=length）` : message;
 
 const isRetryable = (err: unknown): boolean => (err instanceof ProviderError ? err.retryable : true);
+/** A key refused or no model at all is the user's to fix, in the model configuration. */
+const fixFor = (err: unknown): { fix?: Fix } => (err instanceof ProviderError && err.kind === 'auth' ? { fix: 'model' } : {});
 
 /**
  * Within one request the last `usage` wins; across requests they add.
@@ -160,7 +163,7 @@ export async function* runGuide(
   const send = async (
     messages: readonly ModelMessage[],
     tools?: readonly ToolSpec[],
-  ): Promise<Said | { error: string; retryable: boolean }> => {
+  ): Promise<Said | { error: string; retryable: boolean; fix?: Fix }> => {
     calls += 1;
     let text = '';
     let mine: EffectUsage | undefined;
@@ -223,7 +226,7 @@ export async function* runGuide(
     } catch (err) {
       // Whatever the stream managed to report before it broke was still spent.
       usage = addUsage(usage, mine);
-      return { error: describeProviderError(err), retryable: isRetryable(err) };
+      return { error: describeProviderError(err), retryable: isRetryable(err), ...fixFor(err) };
     }
     usage = addUsage(usage, mine);
     const first = [...byIndex.entries()].sort((a, b) => a[0] - b[0])[0]?.[1];
@@ -286,6 +289,7 @@ export async function* runGuide(
         kind: 'transport',
         error: '这个端点会忽略「必须调用工具」，本产品在它上面跑不动——换一个模型或端点再验收一次；如果确认是误判，在设置里按「仍然按可用处理」。',
         retryable: false,
+        fix: 'model',
       },
     };
   }

@@ -1,5 +1,6 @@
 import type { ModelUsage } from '@/agent/provider/types';
 import { ProviderError } from '@/agent/provider/transport';
+import type { Pending } from '@/shared/conversation';
 import type { WireBinding, WireCheck, WireEvidence } from '@/shared/types';
 
 /**
@@ -140,4 +141,115 @@ export function describeBinding(binding: WireBinding): string {
     case 'unbound':
       return '此刻指不出来';
   }
+}
+
+/**
+ * How sure each axis value reads, as the dot beside it. Separate from the words
+ * on purpose: the words stay the single description of the axis, the tone only
+ * says whether it is settled (`ok`), worth a second look (`warn`), a failure
+ * (`err`), not asked yet (`open`) or deliberately not asked (`muted`).
+ */
+export type Tone = 'ok' | 'warn' | 'err' | 'open' | 'muted';
+
+export function evidenceTone(evidence: WireEvidence): Tone {
+  switch (evidence) {
+    case 'documented':
+      return 'ok';
+    case 'model':
+      return 'warn';
+  }
+}
+
+export function checkTone(check: WireCheck): Tone {
+  switch (check) {
+    case 'pass':
+      return 'ok';
+    case 'unknown':
+      return 'open';
+    case 'skipped':
+      return 'muted';
+  }
+}
+
+export function bindingTone(binding: WireBinding): Tone {
+  switch (binding) {
+    case 'bound':
+      return 'ok';
+    case 'ambiguous':
+      return 'warn';
+    case 'unbound':
+      return 'err';
+  }
+}
+
+/* ═══════════ 此刻在做什么 ═══════════ */
+
+/**
+ * The one line at the top saying what the guide is doing right now, read off
+ * `Pending` (never a flag of the panel's own). `null` when nothing is under
+ * way and nothing is on screen — there is nothing to say.
+ */
+export function statusOf(pending: Pending, stepOnScreen: boolean): { text: string; tone: 'acc' | 'warn' } | null {
+  switch (pending.kind) {
+    case 'thinking':
+      return { text: '思考中', tone: 'acc' };
+    case 'running_tool':
+      return { text: '正在看页面', tone: 'acc' };
+    case 'waiting_for_panel':
+      return { text: '等侧栏', tone: 'warn' };
+    case 'waiting_for_user':
+      return pending.what === 'ask' ? { text: '等你回答', tone: 'warn' } : { text: '等你确认', tone: 'warn' };
+    case 'idle':
+      return stepOnScreen ? { text: '引导中', tone: 'acc' } : null;
+  }
+}
+
+/* ═══════════ 检视：选中的元素要靠什么才定位得到 ═══════════ */
+
+/**
+ * The descriptor ladder's rung, said in words (`authorDescriptor`): the higher
+ * the rung, the more the pick leans on where the element sits rather than what
+ * it is called — and the more brittle guiding by it will be.
+ */
+export function describeRung(rung: string): string {
+  switch (rung) {
+    case 'name':
+      return '按名称就能定位';
+    case 'scope':
+      return '加上所在区域才能定位';
+    case 'outer-scope':
+      return '加上更外一层区域才能定位';
+    case 'nth':
+      return '要靠排第几个才能定位';
+    default:
+      return rung;
+  }
+}
+
+/* ═══════════ 本次用量：每一次调用 ═══════════ */
+
+export interface CallRow {
+  /** 1-based, in the order the calls were made. */
+  n: number;
+  kind: CallRecord['kind'];
+  /** What this call spent; `merged` when its figure is summed onto call
+   *  `mergedInto`; `null` when the endpoint reported nothing. */
+  usage: { prompt: number; completion: number; estimated: boolean } | 'merged' | null;
+  mergedInto?: number;
+}
+
+/**
+ * The same records `summarizeCost` folds, one row each. A repair round's
+ * figure comes back summed onto the call it repaired (`CallRecord.usage`), so
+ * the row says which one that is rather than showing a zero.
+ */
+export function callRows(calls: readonly CallRecord[]): CallRow[] {
+  let lastPrimary = 0;
+  return calls.map((c, i) => {
+    const n = i + 1;
+    if (c.kind === 'primary') lastPrimary = n;
+    if (c.usage === 'merged') return { n, kind: c.kind, usage: 'merged', mergedInto: lastPrimary };
+    if (!c.usage) return { n, kind: c.kind, usage: null };
+    return { n, kind: c.kind, usage: { prompt: c.usage.prompt, completion: c.usage.completion, estimated: c.usage.estimated === true } };
+  });
 }
