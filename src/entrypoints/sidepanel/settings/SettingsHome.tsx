@@ -3,7 +3,6 @@ import { modelIsConfigured } from '@/agent/provider/call';
 import { loadConfig } from '@/shared/settings';
 import { Icon } from '../ui/Icon';
 import { AppearanceSettings } from './Appearance';
-import { PageBar } from './PageBar';
 
 export type SettingsPage = 'model' | 'inspect' | 'usage';
 
@@ -28,12 +27,18 @@ export function SettingsHome({
 
   return (
     <div className="settings-page">
-      <PageBar title="工具与设置" parent="页面引导" backLabel="返回对话" onBack={onBack} />
+      <div className="home-bar">
+        <button className="back-to-chat" onClick={onBack}>
+          <Icon name="back" size={14} />
+          返回对话
+        </button>
+        <span className="home-title">工具与设置</span>
+      </div>
       <AppearanceSettings />
       <nav className="settings-rows" aria-label="更多设置">
         <button onClick={() => onOpen('model')}>
-          <span className="row-title">模型配置</span>
-          {configured !== null && <span className={`row-meta${configured ? '' : ' warn'}`}>{configured ? '已配置' : '未配置'}</span>}
+          <span className="row-title">模型配置（BYOK）</span>
+          {configured !== null && <span className="row-meta">{configured ? '已配置' : '未配置'}</span>}
           <Icon name="next" size={14} />
         </button>
         <button onClick={() => onOpen('inspect')}>

@@ -126,7 +126,8 @@ export interface Preset {
    * local presets answer for themselves.
    */
   models: readonly string[];
-  /** Shown verbatim in the form — a preset that silently fails is worse than none. */
+  /** Shown in the form — a preset that silently fails is worse than none.
+   *  Backticks mark what the user types somewhere else, set as code. */
   note?: string;
   /** Fields this endpoint needs in every chat request beyond the OpenAI shape
    *  (`provider.ts` adds them). */
@@ -224,7 +225,7 @@ export const PRESETS: readonly Preset[] = [
     models: ['qwen2.5:7b', 'llama3.1:8b'],
     // Without this the preset's success rate is near zero and the failure looks
     // like a network error, which sends people hunting in the wrong place.
-    note: 'Ollama 默认拒绝来自扩展的跨源请求。启动前设置 OLLAMA_ORIGINS=chrome-extension://* 。',
+    note: 'Ollama 默认拒绝来自扩展的跨源请求。启动前设置 `OLLAMA_ORIGINS=chrome-extension://*`。',
   },
   {
     id: 'lmstudio',

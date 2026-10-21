@@ -3,7 +3,7 @@ import type { ThreadState } from '@/agent/thread/thread';
 import { present } from '@/agent/thread/transitions';
 import type { PromptTable } from '@/core/extractor/types';
 import { descriptorOf } from '@/core/descriptor/bind';
-import { hostOf, sameHost } from '@/core/security/link-safety';
+import { hostOf, sameHost, structuralRedFlags, type RedFlag } from '@/core/security/link-safety';
 import type { GuideStep, UserAction } from '@/shared/protocol';
 import type { GuideExpectAfter, GuideRouteHop, Never, Ref } from '@/shared/types';
 import type { GuideContext } from '../agent';
@@ -74,6 +74,31 @@ export interface PointEnvelope {
  * why the remedy accepts `select` alongside `input`.
  */
 const VALUE_ENTRY_ROLES = new Set(['textbox', 'searchbox', 'combobox']);
+
+/**
+ * Each structural red flag in a sentence the model can act on.
+ *
+ * Said as a fact about the address rather than as an accusation: the checks
+ * answer "what shape is this URL", never "who owns it" (P-1). The model's way
+ * out is named too — a refusal with no alternative is one the model can only
+ * satisfy by guessing again.
+ */
+/**
+ * 指路这条路径上只问这两条：它们的共同点是**伪装**——地址在屏幕上看着像一个地方，
+ * 实际去的是另一个地方。跨站确认卡恰好挡不住这一类，因为它能展示的就是那个看着没问题的主机名。
+ *
+ * 另外两条留给 `fetchDoc`：`private_network` 担心的是**我们**去够用户的内网，而指路时用户本来
+ * 就站在那儿（自己 `localhost:3000` 上的应用，每个链接都是「内网」）；`scheme` 会误伤 `mailto:`，
+ * 而指着它说「点这里给支持发邮件」是正当的。
+ */
+const DISGUISE_FLAGS: ReadonlySet<RedFlag> = new Set<RedFlag>(['userinfo', 'homograph']);
+
+const RED_FLAG_WHY: Record<RedFlag, string> = {
+  userinfo: '地址里带着 `用户名@` 这一段，`@` 前面看着像官方站，真正要去的是 `@` 后面那个主机',
+  scheme: '它不是 http/https，引导不会把用户带到这样的地址上',
+  private_network: '它指向本机或内网，那不是这一页的用户能去的地方',
+  homograph: '主机名里有非 ASCII 字符或是 `xn--` 编码，屏幕上可能和某个常见域名长得一模一样，我们读不准它到底是谁',
+};
 
 /**
  * R-d's membership set — `GUIDE_STEP_ACTIONS` above, as a `Set<string>` so
@@ -304,6 +329,43 @@ export const point: GuideIntentModule<PointEnvelope> = {
         `ref「${envelope.ref}」是一个用来填内容的控件，只点它不会有任何反应：` +
         '要么把 action 写成 input（并在 value 里给出要填的文字）或 select，要么改指别的控件'
       );
+    }
+
+    // The two *disguise* flags on the step itself. `structuralRedFlags` was
+    // written once and shared, but until now only `fetchDoc` (06) asked it;
+    // pointing did not.
+    //
+    // What the gap let through: `sameHost` sees `https://аpple.com` (Cyrillic
+    // а) as a cross-site hop and shows the confirmation card — and the card
+    // prints 「到 аpple.com」, a hostname the user cannot tell from the real
+    // one *on screen*. Same for `userinfo`, which reads as the official host
+    // right up to the `@`. These are the two the card cannot defend against,
+    // because defending would mean the user adjudicating two strings that look
+    // identical.
+    //
+    // **Only those two**, not all four, and the e2e said why: `private_network`
+    // refused every step in the fixture suite, which serves from `127.0.0.1`.
+    // That is not a test artefact — a user guiding themselves through their own
+    // app on `localhost:3000` is an ordinary case, and every link on it is
+    // "private". V-4 belongs to `fetchDoc`, where the worry is *we* reach into
+    // the user's network; here the user is already standing there. `scheme` is
+    // out for a smaller reason: `mailto:` links are everywhere and pointing at
+    // one is legitimate ("click this to mail support").
+    //
+    // Refused rather than confirmed, because neither is a judgement about *who*
+    // owns the address — both are facts about its shape (P-1, "is this party
+    // imitating that one", stays deferred).
+    const href = table.items.find((i) => i.ref === envelope.ref)?.href;
+    if (href) {
+      let flag: RedFlag | null = null;
+      try {
+        flag = structuralRedFlags(new URL(href));
+      } catch {
+        // Unparseable: `sameHost` already declines to vouch for it and the
+        // cross-site card will ask. Not this rule's business.
+      }
+      if (flag && DISGUISE_FLAGS.has(flag))
+        return `ref「${envelope.ref}」指向的地址有问题——${RED_FLAG_WHY[flag]}。改指别的控件，或者用 ask 把这件事交回给用户`;
     }
     return null;
   },

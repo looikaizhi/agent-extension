@@ -166,7 +166,7 @@ export function App() {
   }, [text, tabId, pull]);
 
   const pointAt = useCallback(
-    async (descriptor: ElementDescriptor, title: string, detail: string) => {
+    async (descriptor: ElementDescriptor, title: string, detail: string, stay = false) => {
       if (tabId === null) return;
       await chrome.runtime.sendMessage({
         type: 'POINT_AT',
@@ -174,8 +174,9 @@ export function App() {
         step: { descriptor, expectedUserAction: actionForRole(descriptor.role), title, detail },
       });
       // What it pointed at is said in the conversation, so that is where the
-      // user goes next.
-      setPage('chat');
+      // user goes next — unless they are going down the element table, where
+      // the next row is what they came for.
+      if (!stay) setPage('chat');
       await pull(tabId);
     },
     [tabId, pull],
@@ -195,11 +196,17 @@ export function App() {
   // Nothing said on this tab yet and nothing under way: the panel says what it
   // is for instead of showing an empty list.
   const empty = view !== null && view.conversation.entries.length === 0 && !step && pending.kind === 'idle';
+  const asking = pending.kind === 'waiting_for_user' && pending.what === 'ask';
+  // An answer is typed, never picked for the user (K-6); naming one of the
+  // candidates only shows what an answer looks like.
+  const example = asking ? view?.conversation.entries.findLast((e) => e.kind === 'ask')?.options?.at(-1)?.label : undefined;
   const placeholder =
     pending.kind === 'idle'
       ? '想做什么，或者想问这一页什么？'
-      : pending.kind === 'waiting_for_user' && pending.what === 'ask'
-        ? '直接打字回答它'
+      : asking
+        ? example
+          ? `回答它，比如：${example}`
+          : '直接打字回答它'
         : '引导在走，你也可以直接说';
 
   const toSettings = () => setPage('settings');
@@ -211,7 +218,7 @@ export function App() {
         ) : page === 'model' ? (
           <ModelConfig onBack={toSettings} />
         ) : page === 'inspect' ? (
-          <Inspect tabId={tabId} onBack={toSettings} onPointAt={(d, title, detail) => void pointAt(d, title, detail)} />
+          <Inspect tabId={tabId} onBack={toSettings} onPointAt={(d, title, detail, stay) => void pointAt(d, title, detail, stay)} />
         ) : (
           <Usage calls={costCalls} onBack={toSettings} />
         )}
@@ -255,6 +262,7 @@ export function App() {
         onText={setText}
         onSend={() => void send()}
         placeholder={placeholder}
+        asking={asking}
         {...(!step && pending.kind !== 'idle' ? { onEnd: () => void act({ type: 'END_GUIDE' }) } : {})}
       />
 

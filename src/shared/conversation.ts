@@ -73,6 +73,9 @@ export interface ConversationEntry {
   /** On a note about something the user can put right themselves: where. The
    *  panel offers the way there (「打开模型配置 →」). */
   fix?: Fix;
+  /** On the note that asks before a step leaves the site: the two hosts, so
+   *  the panel can show where the step goes from and to. */
+  crossSite?: { from: string; to: string };
   /** Unique within its conversation, and stable — the panel keys on it. */
   id: string;
   at: number;

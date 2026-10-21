@@ -44,6 +44,7 @@ function table(items: ItemSpec[]): PromptTable {
       name: i.name,
       path: i.path ?? [],
       ...(i.sensitive ? { sensitive: true as const } : {}),
+      ...(i.href ? { href: i.href } : {}),
     })),
   };
 }
@@ -238,6 +239,81 @@ describe('引导 agent 的校验 — point / R-a…R-e', () => {
     const t = table([{ ref: 'e8', role: 'button', name: '删除实例' }]);
     const envelope: PointEnvelope = { intent: 'point', route: [], ref: 'e8' as Ref, action: 'tap', why: '英文接口下常见的越界动作词' };
     expect(guideAgent.validate(envelope, t).kind).toBe('violation');
+  });
+
+  /**
+   * V-1…V-4 on the step itself. They were written once and shared between
+   * `read_doc` and pointing, but only `read_doc` ever asked them — so a
+   * homograph host reached the cross-site card, which prints the hostname and
+   * asks the user to decide between two strings that look identical.
+   *
+   * Refused, not confirmed: all four are facts about the URL's shape, and no
+   * guide has a reason to send someone to any of them.
+   */
+  describe('引导 agent 的校验 — point 的目标地址（V-1…V-4）', () => {
+    const point = (href: string): [PromptTable, PointEnvelope] => [
+      table([{ ref: 'e2', role: 'link', name: '官方文档', href }]),
+      { intent: 'point', route: [], ref: 'e2' as Ref, action: 'click', why: '看起来像官方文档的链接' },
+    ];
+
+    it('16d. 同形异义主机名（西里尔 а）→ violation：卡片印出来的域名和真的一模一样，不能让用户去分辨', () => {
+      const [t, e] = point('https://аpple.com/docs');
+      const r = guideAgent.validate(e, t);
+      expect(r.kind).toBe('violation');
+      // 话里要说出「读不准它是谁」，模型才有改指别处的理由。
+      if (r.kind === 'violation') expect(r.reason).toContain('xn--');
+    });
+
+    it('16e. `xn--` 编码的主机名 → violation（同一件事的编码后形态）', () => {
+      const [t, e] = point('https://xn--pple-43d.com/docs');
+      expect(guideAgent.validate(e, t).kind).toBe('violation');
+    });
+
+    it('16f. 地址里带 userinfo → violation：`@` 前面看着像官方站', () => {
+      const [t, e] = point('https://console.example.test@evil.test/');
+      expect(guideAgent.validate(e, t).kind).toBe('violation');
+    });
+
+    /**
+     * 这两条**有意不在**指路这条路径上，尽管 `structuralRedFlags` 会报它们。
+     *
+     * `private_network`：e2e 整套夹具服务在 `127.0.0.1` 上，接上之后每一步都被拒——
+     * 而那不是测试环境的怪癖。用户在自己 `localhost:3000` 的应用上被引导是正常场景，
+     * 那一页上每个链接都是「内网」。这条属于 `fetchDoc`：那里担心的是*我们*去够用户的内网，
+     * 而指路时用户本来就站在那儿。
+     *
+     * `scheme`：`mailto:` 链接到处都是，指着它说「点这里给支持发邮件」是正当的引导。
+     */
+    it('16g. 非 http/https 照旧放行 —— mailto: 是正当的一步，这条留给 fetchDoc', () => {
+      const [t, e] = point('mailto:support@example.test');
+      expect(guideAgent.validate(e, t).kind).toBe('ok');
+    });
+
+    it('16h. 指向内网照旧放行 —— 用户在自己 localhost 应用上被引导是正常场景', () => {
+      const [t, e] = point('http://127.0.0.1:5173/settings');
+      expect(guideAgent.validate(e, t).kind).toBe('ok');
+    });
+
+    it('16i. 普通的跨站链接照旧放行 —— 那是跨站确认卡的事，不是拒绝的理由', () => {
+      const [t, e] = point('https://docs.other.test/guide');
+      expect(guideAgent.validate(e, t)).toEqual({ kind: 'ok', envelope: e });
+    });
+
+    it('16j. 同站链接照旧放行', () => {
+      const [t, e] = point('https://example.test/help');
+      expect(guideAgent.validate(e, t).kind).toBe('ok');
+    });
+
+    it('16k. 解析不出来的地址不在这条规则里拒绝 —— sameHost 本来就不为它背书，交给卡片去问', () => {
+      const [t, e] = point('not a url');
+      expect(guideAgent.validate(e, t).kind).toBe('ok');
+    });
+
+    it('16l. 没有 href 的控件（按钮）不受这条规则影响', () => {
+      const t = table([{ ref: 'e3', role: 'button', name: '提交' }]);
+      const e: PointEnvelope = { intent: 'point', route: [], ref: 'e3' as Ref, action: 'click', why: '普通按钮' };
+      expect(guideAgent.validate(e, t).kind).toBe('ok');
+    });
   });
 
   it('16. ref 指向 sensitive 元素 → violation（R-e）', () => {

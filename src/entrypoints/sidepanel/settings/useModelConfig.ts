@@ -22,7 +22,18 @@ export interface StepNote {
   kind: 'busy' | 'ok' | 'error' | 'idle';
   text: string;
   from: 'connect' | 'verify';
+  /** The endpoint's own words, shown apart (`VerifyResult.quote`). */
+  quote?: readonly string[];
+  /** What to make of them, after. */
+  after?: string;
 }
+
+/** A result's words, as a note from `from`. */
+const noteOf = (
+  kind: StepNote['kind'],
+  from: StepNote['from'],
+  r: { message: string; quote?: readonly string[]; after?: string },
+): StepNote => ({ kind, text: r.message, from, ...(r.quote ? { quote: r.quote } : {}), ...(r.after ? { after: r.after } : {}) });
 
 /**
  * The model configuration's behaviour, apart from how it is laid out: two steps
@@ -177,7 +188,7 @@ export function useModelConfig() {
   const verify = useCallback(async () => {
     setNote({ kind: 'busy', text: `正在用「${cfg.model}」做一次最小真调用…`, from: 'verify' });
     const r = await verifyModel(cfg);
-    setNote({ kind: r.ok ? 'ok' : 'error', text: r.message, from: 'verify' });
+    setNote(noteOf(r.ok ? 'ok' : 'error', 'verify', r));
     setWall(r.wall ?? null);
     // What the probe learned is stored whether or not the verdict was good:
     // an endpoint measured as ignoring forced tool calls is refused before the
@@ -199,7 +210,7 @@ export function useModelConfig() {
   const disableThinking = useCallback(async () => {
     setNote({ kind: 'busy', text: '正在试这个端点认哪种写法…', from: 'verify' });
     const r = await disableThinkingAndVerify(cfg);
-    setNote({ kind: r.ok ? 'ok' : 'error', text: r.message, from: 'verify' });
+    setNote(noteOf(r.ok ? 'ok' : 'error', 'verify', r));
     setWall(null);
     // Nothing measured, nothing written — the configuration is left exactly as
     // the user had it rather than carrying a field that never worked.

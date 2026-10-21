@@ -2,6 +2,7 @@ import { useId, type ReactNode } from 'react';
 import { useCombobox } from 'downshift';
 import { isLocalEndpoint } from '@/agent/provider/call';
 import { PRESETS, type ForcedToolChoice, type ProtocolId } from '@/shared/settings';
+import { Prose } from '../Prose';
 import { Icon } from '../ui/Icon';
 import { PageBar } from './PageBar';
 import { useModelConfig, type StepNote } from './useModelConfig';
@@ -25,7 +26,7 @@ const FORCED_TOOL_CHOICE_NOTE: Record<ForcedToolChoice, { text: string; tone: 'o
   unknown: { text: '「必须调用工具」这一条还没在这个模型上验收过——引导照常会试。', tone: 'open' },
   supported: { text: '已实测：这个模型认「必须调用工具」。', tone: 'ok' },
   unsupported: {
-    text: '已实测：这个模型忽略「必须调用工具」。引导的每一步都要靠它，所以它的每一次调用都会被提前拦下——在这个端点上换一个模型，或者按下面那个出口。',
+    text: '已实测：这个模型忽略「必须调用工具」，它的每次调用都会被提前拦下。',
     tone: 'err',
   },
 };
@@ -37,9 +38,16 @@ const FORCED_TOOL_CHOICE_NOTE: Record<ForcedToolChoice, { text: string; tone: 'o
 export function ModelConfig({ onBack }: { onBack: () => void }) {
   const m = useModelConfig();
   const { cfg, preset, note } = m;
-  const busy = note?.kind === 'busy';
+  const connecting = note?.kind === 'busy' && note.from === 'connect';
+  const verifying = note?.kind === 'busy' && note.from === 'verify';
+  // Step 2 measures a model *on this endpoint*: until the endpoint has
+  // answered — now, or when it was saved — there is nothing to measure on.
+  const reachable = m.models !== null || m.configured === true;
   const ids = { preset: useId(), protocol: useId(), url: useId(), key: useId(), window: useId() };
   const verdict = FORCED_TOOL_CHOICE_NOTE[m.verdict];
+  // The way back out of 「跑不动」 sits with the sentence that said it, when
+  // that sentence is on screen; otherwise under the stored verdict.
+  const overrideInNote = note?.from === 'verify' && note.kind === 'error' && m.verdict === 'unsupported';
 
   return (
     <div className="settings-page">
@@ -48,15 +56,27 @@ export function ModelConfig({ onBack }: { onBack: () => void }) {
         parent="工具与设置"
         backLabel="返回工具与设置"
         onBack={onBack}
-        aside={m.configured !== null && <span className={`chip${m.configured ? ' ok' : ''}`}>{m.configured ? '已配置' : '未配置'}</span>}
+        aside={
+          m.configured !== null &&
+          (m.configured ? (
+            <span className="chip ok saved">
+              <Icon name="check" size={11} weight={3} />
+              已保存配置
+            </span>
+          ) : (
+            <span className="chip">未配置</span>
+          ))
+        }
       />
 
-      <p className="callout quiet">
-        <Icon name="lock" />
-        <span>Key 只存在这台设备的扩展存储里，不会同步到云端，只会发往你在下面填的端点。</span>
-      </p>
+      {m.configured === false && (
+        <p className="callout quiet">
+          <Icon name="lock" weight={2} />
+          <span>Key 只存在这台设备的扩展存储里，不会同步到云端，只会发往你在下面填的端点。</span>
+        </p>
+      )}
 
-      <section className="card">
+      <section className="card step-card">
         <div className="card-head">
           <span className="step-n">第 1 步</span>
           <h3>连上端点</h3>
@@ -79,10 +99,12 @@ export function ModelConfig({ onBack }: { onBack: () => void }) {
           </span>
         </div>
         {preset.note && (
-          <p className="callout warn">
+          <div className="callout warn">
             <Icon name="warn" />
-            <span>{preset.note}</span>
-          </p>
+            <div className="callout-body">
+              <Prose text={preset.note} />
+            </div>
+          </div>
         )}
         <div>
           <div className="label" id={ids.protocol}>
@@ -98,7 +120,9 @@ export function ModelConfig({ onBack }: { onBack: () => void }) {
         </div>
         <div>
           <label htmlFor={ids.url}>端点</label>
-          <input id={ids.url} className="mono" spellCheck={false} value={cfg.baseURL} onChange={(e) => m.setBaseURL(e.target.value)} />
+          <span className="field">
+            <input id={ids.url} className="mono" spellCheck={false} value={cfg.baseURL} onChange={(e) => m.setBaseURL(e.target.value)} />
+          </span>
         </div>
         <div>
           <label htmlFor={ids.key}>API Key</label>
@@ -114,21 +138,32 @@ export function ModelConfig({ onBack }: { onBack: () => void }) {
               onChange={(e) => m.setApiKey(e.target.value)}
             />
             <button className="icon-btn" aria-label={m.showKey ? '隐藏 Key' : '显示 Key'} aria-pressed={m.showKey} onClick={m.toggleKey}>
-              <Icon name="eye" size={15} />
+              <Icon name="eye" size={15} weight={2} />
             </button>
           </span>
         </div>
-        {/* 只要地址和 Key——模型名是端点的属性，问出来就不会过期。 */}
-        <div className="row center">
-          <button className="primary" disabled={busy} onClick={() => void m.connect()}>
-            {m.models ? '重新连接' : '连接'}
-          </button>
-          {!m.models && <span className="hint">只要地址和 Key，模型列表问端点要</span>}
-        </div>
-        {note?.from === 'connect' && <StepCallout note={note} />}
+        {/* 只要地址和 Key——模型名是端点的属性，问出来就不会过期。连上之后，说完
+            结果再给「重新连接」；没连上之前，这一步只有这一个按钮。 */}
+        {m.models === null && !(note?.from === 'connect' && note.kind !== 'busy') ? (
+          <div className="row center">
+            <button className="primary big" disabled={connecting} onClick={() => void m.connect()}>
+              {connecting && <span className="spinner on-primary" />}
+              {connecting ? '正在连接…' : '连接'}
+            </button>
+            <span className="hint">只要地址和 Key，模型列表问端点要</span>
+          </div>
+        ) : (
+          <>
+            {note?.from === 'connect' && <StepCallout note={note} />}
+            <button className="again" disabled={connecting} onClick={() => void m.connect()}>
+              {connecting && <span className="spinner" />}
+              {connecting ? '正在连接…' : m.models === null ? '连接' : '重新连接'}
+            </button>
+          </>
+        )}
       </section>
 
-      <section className="card">
+      <section className={`card step-card${reachable ? '' : ' off'}`}>
         <div className="card-head">
           <span className="step-n">第 2 步</span>
           <h3>选模型并验收</h3>
@@ -142,9 +177,6 @@ export function ModelConfig({ onBack }: { onBack: () => void }) {
           verdicts={cfg.verdictByModel}
           onChange={m.pickModel}
         />
-        {m.models === null && preset.models.length > 0 && (
-          <p className="hint">列表里现在是预设自带的名字，可能已经过期——点「连接」换成这个端点真有的。</p>
-        )}
         {/* 量过的那几个，单独列出来——一份 424 条的下拉里，用户自己验收过的才是
             他真正要在里面挑的那一小撮。跑不动的也留着：知道哪个试过而不行，跟
             知道哪个行一样有用。 */}
@@ -154,7 +186,7 @@ export function ModelConfig({ onBack }: { onBack: () => void }) {
             <div className="chips">
               {m.measured.map(([name, v]) => (
                 <button key={name} className={`chip ${v === 'supported' ? 'ok' : 'err'}`} disabled={name === cfg.model} onClick={() => m.pickModel(name)}>
-                  <Icon name={v === 'supported' ? 'check' : 'ban'} size={10} />
+                  <Icon name={v === 'supported' ? 'check' : 'ban'} size={10} weight={v === 'supported' ? 3 : 2.8} />
                   {name}
                 </button>
               ))}
@@ -163,55 +195,60 @@ export function ModelConfig({ onBack }: { onBack: () => void }) {
         )}
         {/* 对着选定的这一个模型发一次真调用——探测本来就是对着某一个模型发的，
             模型没选就无从发起，所以这两步必须分开。 */}
-        <div className="row">
-          <button className="primary" disabled={busy} onClick={() => void m.verify()}>
-            验收并保存
-          </button>
-        </div>
+        <button className="primary big verify" disabled={!reachable || verifying} onClick={() => void m.verify()}>
+          验收并保存
+        </button>
         {note?.from === 'verify' && (
           <StepCallout note={note} {...(m.wall === 'busy' ? { tone: 'warn' as const } : {})}>
             {/* 思考模式那堵墙：用户不知道 thinking 是什么，也不该知道两家厂商的
-                字段名拼得不一样——按钮替他试出来。端点原话已经在上面那句里。 */}
+                字段名拼得不一样——按钮替他试出来。 */}
             {(m.wall === 'thinking' || m.wall === 'refused') && (
               <button className="primary" onClick={() => void m.disableThinking()}>
                 关掉思考，再试一次
               </button>
             )}
+            {overrideInNote && <button onClick={() => void m.overrideVerdict()}>仍然按可用处理</button>}
           </StepCallout>
         )}
-        <p className={`verdict ${verdict.tone}`}>
-          <span className="dot" />
-          <span>{verdict.text}</span>
-        </p>
-        {m.verdict === 'unsupported' && (
-          <div className="row">
-            <button onClick={() => void m.overrideVerdict()}>仍然按可用处理</button>
-          </div>
+        {reachable && (
+          <p className={`verdict ${verdict.tone}`}>
+            {verdict.tone === 'ok' ? <Icon name="check" size={12} weight={3} /> : <span className="dot" />}
+            <span>{verdict.text}</span>
+          </p>
+        )}
+        {m.verdict === 'unsupported' && !overrideInNote && (
+          <button className="again" onClick={() => void m.overrideVerdict()}>
+            仍然按可用处理
+          </button>
         )}
         {/* 折叠着，但摘要里写明现在到底替他加了什么——产品替用户改过的东西，
             用户要能看见，也要能改回去。 */}
-        <details className="fields">
-          <summary>
-            <span className="fields-id">
-              <span>这个模型的额外请求字段</span>
-              <code>{m.fieldsText || '无'}</code>
+        {reachable && (
+          <details className="fields">
+            <summary>
+              <span className="fields-id">
+                <span>这个模型的额外请求字段</span>
+                <code>{m.fieldsText ? spaced(m.fieldsText) : '无'}</code>
+              </span>
+              <Icon name="down" />
+            </summary>
+            <span className={`field${m.fieldsError ? ' invalid' : ''}`}>
+              <input
+                className="mono"
+                aria-label="额外请求字段"
+                value={m.fieldsText}
+                spellCheck={false}
+                placeholder='{"enable_thinking": false}'
+                onChange={(e) => m.editFields(e.target.value)}
+              />
             </span>
-            <Icon name="down" />
-          </summary>
-          <input
-            className={`mono${m.fieldsError ? ' invalid' : ''}`}
-            aria-label="额外请求字段"
-            value={m.fieldsText}
-            spellCheck={false}
-            placeholder='{"enable_thinking": false}'
-            onChange={(e) => m.editFields(e.target.value)}
-          />
-          {m.fieldsError && <p className="note error">{m.fieldsError}</p>}
-          <p className="hint">只发给「{cfg.model || '（还没选模型）'}」这一个模型；换个模型就换一套。多数模型不需要任何字段。</p>
-        </details>
+            {m.fieldsError && <p className="fields-error">{m.fieldsError}</p>}
+            <p className="hint">只发给「{cfg.model || '（还没选模型）'}」这一个模型；换个模型就换一套。多数模型不需要任何字段。</p>
+          </details>
+        )}
       </section>
 
-      <section className="card">
+      <section className="card window-card">
         <h3>
           <label htmlFor={ids.window}>上下文窗口</label>
         </h3>
@@ -233,7 +270,11 @@ export function ModelConfig({ onBack }: { onBack: () => void }) {
   );
 }
 
-/** What the step just said, under the step that said it. */
+/** JSON the way a person reads it: a space after each colon and comma. */
+const spaced = (json: string): string => json.replace(/":/g, '": ').replace(/,"/g, ', "');
+
+/** What the step just said, under the step that said it: the sentence, the
+ *  endpoint's own words set apart, what to make of them, and what to do. */
 function StepCallout({ note, tone, children }: { note: StepNote; tone?: 'warn'; children?: ReactNode }) {
   const t = tone ?? { busy: 'busy', ok: 'ok', idle: 'quiet', error: 'err' }[note.kind];
   return (
@@ -241,10 +282,18 @@ function StepCallout({ note, tone, children }: { note: StepNote; tone?: 'warn'; 
       {note.kind === 'busy' ? (
         <span className="spinner" />
       ) : (
-        <Icon name={note.kind === 'ok' ? 'check' : note.kind === 'idle' ? 'info' : tone === 'warn' ? 'warn' : 'alert'} />
+        <Icon name={note.kind === 'ok' ? 'check' : note.kind === 'idle' ? 'info' : tone === 'warn' ? 'warn' : 'alert'} weight={note.kind === 'ok' ? 2.6 : 2.2} />
       )}
       <div className="callout-body">
-        <span>{note.text}</span>
+        <Prose text={note.text} />
+        {note.quote && (
+          <div className="quote">
+            {note.quote.map((line, i) => (
+              <div key={i}>{line}</div>
+            ))}
+          </div>
+        )}
+        {note.after && <p className="after">{note.after}</p>}
         {children}
       </div>
     </div>
@@ -309,6 +358,7 @@ function ModelPicker({
           <Icon name="down" size={14} />
         </button>
       </span>
+      {/* In the flow rather than over it: what follows moves down, as the design has it. */}
       <div className="combo-menu" hidden={!open}>
         <div className="combo-head">{listed ? '这个端点列出的' : '预设自带的名字'}</div>
         <ul {...getMenuProps()}>
@@ -333,12 +383,12 @@ function VerdictBadge({ verdict }: { verdict: ForcedToolChoice }) {
   if (verdict === 'unknown') return null;
   return verdict === 'supported' ? (
     <span className="verdict-badge ok">
-      <Icon name="check" size={10} />
+      <Icon name="check" size={10} weight={3} />
       验收过
     </span>
   ) : (
     <span className="verdict-badge err">
-      <Icon name="ban" size={10} />
+      <Icon name="ban" size={10} weight={2.8} />
       跑不动
     </span>
   );

@@ -1,3 +1,4 @@
+import { redact } from '@/core/security/redact';
 import type { Ref } from '@/shared/types';
 import { ENTRANCE_LANDMARK_ROLES, LANDMARK_ROLES, PRIMARY_INTERACTIVE_ROLES } from './roles';
 import type { LocatorView, ProjectBudget, PromptItem, PromptTable, UINode } from './types';
@@ -86,7 +87,11 @@ export function describeAll(view: LocatorView): readonly Described[] {
       name: truncate(node.name, NAME_MAX_LEN),
       path: pathOf(node, byRef, headings),
     };
+    // 地标的 role，只为渲染。`pathOf` 的第一层若来自地标，这里就是它的 role。
+    const lm = landmarkChain(node, byRef)[0];
+    if (lm?.name && item.path[0] === lm.name) item.landmark = lm.role;
     if (node.state) item.state = node.state;
+    if (node.nearby) item.nearby = node.nearby;
     // Marked when the name is not text the user can read on screen — not the
     // same split as accessible-name status. `placeholder` renders as grey
     // text in an empty input, so it stays unmarked alongside `label` /
@@ -435,9 +440,43 @@ function ambiguityOf(items: readonly PromptItem[]): number {
  * silently
  * reordering controls costs the thing document order exists to preserve.
  */
+/**
+ * 名字说不清楚时，补上这个链接去处的最后两段路径。
+ *
+ * **只给名字失效的那些补**：带 `nth`（同 path+role+name 不唯一）或带 `nameSource`
+ * （名字不是屏幕上能读到的字）。22 个夹具 355 条控件里这样的占 11%，repo-home 上 39 条，
+ * 代价约 196 token（+5.5%）。名字本身说得清楚的时候，去处是纯重复——全量带是 +89%，
+ * 四分之三买不到信息。这跟 `~` 标记是同一个思路：**只在名字失效的地方花钱**。
+ *
+ * **只给路径，不给主机。** 设计文档 §8.2 禁的是「把一页作者写的目的地做成菜单递给模型」，
+ * 主机名正是那张菜单；而承载消歧信息的几乎总是尾部——`/instances/i-0abc123` 里的资源 id、
+ * `/settings/billing` 里的 `billing`。所以边界仍然在：模型看得出两个同名链接不是一回事，
+ * 但拿不到一份可以从中挑一个请求目标的地址清单。跨站与否照旧由宿主用完整 `href` 判（S-07）。
+ */
+function hrefTail(it: PromptItem): string {
+  if (it.nth === undefined && it.nameSource === undefined) return '';
+  if (!it.href) return '';
+  let segs: string[];
+  try {
+    segs = new URL(it.href).pathname.split('/').filter(Boolean);
+  } catch {
+    return '';
+  }
+  if (!segs.length) return '';
+  return `→/${segs.slice(-2).join('/')}`;
+}
+
 export function toPromptText(table: PromptTable, fresh?: ReadonlySet<Ref>): string {
-  const lines: string[] = [`page ${JSON.stringify(pageLabel(table.url))}`];
-  if (table.title) lines.push(`title ${JSON.stringify(truncate(table.title, NAME_MAX_LEN))}`);
+  // 页面来的每一个字符串都从这里进入提示词。写成一个局部函数而不是逐处调用，
+  // 是为了让「有没有漏掉一处」变成看得见的事：这个文件里凡是把 table 上的文字
+  // 写进 `lines` 的地方，都应当套着它。行为上的保证在 `tests/unit/redact.spec.ts`
+  // ——那份测试把密钥塞进名字、标题、组标题、URL 和框架标题，再断言一条都没漏出去。
+  //
+  // URL 也过：查询串里带 `?token=…` 的页面不罕见，而 `pageLabel` 会把它原样带上。
+  const say = (s: string) => redact(s);
+
+  const lines: string[] = [`page ${JSON.stringify(say(pageLabel(table.url)))}`];
+  if (table.title) lines.push(`title ${JSON.stringify(say(truncate(table.title, NAME_MAX_LEN)))}`);
   // Said out loud, because the reader cannot tell otherwise. `prune` cuts the
   // document's tail once the budget is spent, and a live run had 45 of 98 calls
   // reading a table that had been cut — with nothing in the text to say so. The
@@ -456,7 +495,7 @@ export function toPromptText(table: PromptTable, fresh?: ReadonlySet<Ref>): stri
   if (table.frames?.length)
     lines.push(
       `frames 这一页里嵌着 ${table.frames.length} 个框架，里面的东西我看不到：` +
-        table.frames.map((f) => [f.label && JSON.stringify(f.label), f.host].filter(Boolean).join(' · ') || '（没有标题）').join('；'),
+        table.frames.map((f) => [f.label && JSON.stringify(say(f.label)), f.host && say(f.host)].filter(Boolean).join(' · ') || '（没有标题）').join('；'),
     );
   // 已经读进来的框架：它们的控件就在下面这张表里，ref 以 f 开头。不说这一句，
   // 模型会把 `f3e12` 当成打错的 ref——它见过的 ref 一直是 `e12` 这个形状。
@@ -471,14 +510,22 @@ export function toPromptText(table: PromptTable, fresh?: ReadonlySet<Ref>): stri
     let shared = 0;
     while (shared < prev.length && shared < it.path.length && prev[shared] === it.path[shared]) shared += 1;
     // Only the levels this item does not already share with the previous one.
-    for (let i = shared; i < it.path.length; i += 1)
-      lines.push(`${'  '.repeat(i)}${flatten(it.path[i] ?? '')}:`);
+    for (let i = shared; i < it.path.length; i += 1) {
+      // 第一层若是地标，把它的 role 一起写出来：`navigation "Repository":`。
+      // `banner` / `navigation` / `complementary` / `main` 对「下一步该往哪走」的含义
+      // 完全不同，而光看标题文字读不出来——「About」既可能是一个补充说明区，
+      // 也可能是一个导航项。每个组标题多几个字符，全页量级在 100 token 以内。
+      const label = say(flatten(it.path[i] ?? ''));
+      lines.push(i === 0 && it.landmark ? `${it.landmark} ${JSON.stringify(label)}:` : `${'  '.repeat(i)}${label}:`);
+    }
 
     const mark = it.nameSource ? '~' : '';
     const tail = [
       it.nth !== undefined ? `#${it.nth}` : '',
       it.state?.length ? `[${it.state.join(',')}]` : '',
       it.sensitive ? '!secret' : '',
+      say(hrefTail(it)),
+      it.nearby ? `· ${say(it.nearby)}` : '',
       // Only ever set when the page did not navigate — see `CallModelParams`.
       // A click that opens a menu leaves the reader with the same few hundred
       // rows and no clue which dozen of them just appeared; measured live, one
@@ -489,7 +536,7 @@ export function toPromptText(table: PromptTable, fresh?: ReadonlySet<Ref>): stri
       .filter(Boolean)
       .join(' ');
     lines.push(
-      `${'  '.repeat(it.path.length)}${it.ref} ${it.role} ${mark}${JSON.stringify(it.name)}${tail ? ` ${tail}` : ''}`,
+      `${'  '.repeat(it.path.length)}${it.ref} ${it.role} ${mark}${JSON.stringify(say(it.name))}${tail ? ` ${tail}` : ''}`,
     );
     prev = it.path;
   }

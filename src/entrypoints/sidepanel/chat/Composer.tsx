@@ -10,19 +10,22 @@ export function Composer({
   onText,
   onSend,
   placeholder,
+  asking,
   onEnd,
 }: {
   text: string;
   onText: (text: string) => void;
   onSend: () => void;
   placeholder: string;
+  /** The model has asked something back: the box is where the answer goes. */
+  asking?: boolean;
   /** 结束, when something is under way with no step on screen to end it from. */
   onEnd?: () => void;
 }) {
   return (
-    <section className="composer">
+    <section className={`composer${asking ? ' asking' : ''}`}>
       <label className="composer-field">
-        <span className="sr-only">对引导说</span>
+        <span className="sr-only">{asking ? '回答引导' : '对引导说'}</span>
         <input
           value={text}
           placeholder={placeholder}

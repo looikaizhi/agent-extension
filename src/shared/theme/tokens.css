@@ -5,16 +5,15 @@
  * 自己的 shadow root。两边都只看元素上的 `data-style` 与 `data-shade`
  * （`applyAppearance` 写的），所以换主题永远是换这两个属性，不是换样式表。
  *
- * 引导层跑在别人的页面里，只能用系统字体：shadow root 里声明的 @font-face 不生效，
- * 页面的 CSP 也可能拦外部字体。下面的字体栈在两边都成立——Geist 装了就用，
- * 没装落回系统字体。
+ * 夜航的 Geist / Geist Mono 以自己的名字注册进文档（`theme/fonts.ts`，侧栏和引导层
+ * 各注册一次）；景深用系统字体。中文两边都落到系统字体上。
  */
 
 /* ───────── 风格：字体、圆角、标注写法 ───────── */
 
 [data-style='hud'] {
-  --font: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-  --font-mono: 'Geist Mono', 'SF Mono', ui-monospace, Menlo, monospace;
+  --font: 'PG Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'PG Geist Mono', 'SF Mono', ui-monospace, Menlo, monospace;
   --font-label: var(--font-mono);
   --ls-label: 0.06em;
   --r-card: 12px;
@@ -27,6 +26,15 @@
   --r-card-o: 12px;
   /* 引导层卡片背后：夜航的卡片不透明，不用虚化。 */
   --o-blur: none;
+  /* 页头、网站图标、思考过程的收起样式、状态标签、空状态的大图标。 */
+  --hd-pad: 0;
+  --hd-r: 0;
+  --fav-size: 30px;
+  --fav-r: 8px;
+  --tg-h: 18px;
+  --tg-pad: 0;
+  --st-pad: 0 8px;
+  --r-big: 12px;
 }
 
 [data-style='depth'] {
@@ -44,6 +52,15 @@
   --r-card-o: 20px;
   /* 景深的卡片是半透明的：背后不虚化，页面上的字会透过来。 */
   --o-blur: blur(24px) saturate(1.4);
+  /* 页头、网站图标、思考过程的收起样式、状态标签、空状态的大图标。 */
+  --hd-pad: 6px 12px 6px 6px;
+  --hd-r: 999px;
+  --fav-size: 28px;
+  --fav-r: 50%;
+  --tg-h: 26px;
+  --tg-pad: 0 10px;
+  --st-pad: 0;
+  --r-big: 50%;
 }
 
 [data-shade='day'] {
@@ -134,6 +151,12 @@
   --ring-halo: rgba(184, 242, 58, 0.7);
   --tag-bg: #0b0e13;
   --tag-fg: #b8f23a;
+  /* 页头与网站图标的底和边，思考过程收起时的底。 */
+  --hd-b: transparent;
+  --hd-bg: transparent;
+  --fav-b: #DDE2EA;
+  --fav-bg: #FFFFFF;
+  --tg-bg: transparent;
 }
 
 /* ───────── 夜航 · 黑夜 ───────── */
@@ -217,6 +240,12 @@
   --ring-halo: rgba(184, 242, 58, 0.12);
   --tag-bg: #b8f23a;
   --tag-fg: #0b0e13;
+  /* 页头与网站图标的底和边，思考过程收起时的底。 */
+  --hd-b: transparent;
+  --hd-bg: transparent;
+  --fav-b: #252C38;
+  --fav-bg: #12161D;
+  --tg-bg: transparent;
 }
 
 /* ───────── 景深 · 白天 ───────── */
@@ -300,6 +329,12 @@
   --ring-halo: rgba(61, 90, 254, 0.12);
   --tag-bg: #3d5afe;
   --tag-fg: #ffffff;
+  /* 页头与网站图标的底和边，思考过程收起时的底。 */
+  --hd-b: rgba(255, 255, 255, 0.95);
+  --hd-bg: rgba(255, 255, 255, 0.72);
+  --fav-b: transparent;
+  --fav-bg: #FFFFFF;
+  --tg-bg: rgba(15, 23, 42, 0.05);
 }
 
 /* ───────── 景深 · 黑夜 ───────── */
@@ -383,4 +418,10 @@
   --ring-halo: rgba(79, 95, 255, 0.2);
   --tag-bg: #4f5fff;
   --tag-fg: #ffffff;
+  /* 页头与网站图标的底和边，思考过程收起时的底。 */
+  --hd-b: rgba(255, 255, 255, 0.08);
+  --hd-bg: rgba(255, 255, 255, 0.05);
+  --fav-b: transparent;
+  --fav-bg: rgba(255, 255, 255, 0.1);
+  --tg-bg: rgba(255, 255, 255, 0.06);
 }

@@ -625,12 +625,17 @@ async function renderGuideOutcome(
         {
           at: Date.now(),
           kind: 'note',
-          text: '这一步会离开当前站点',
-          detail: `你正要从 ${effect.from} 前往 ${effect.to}。`,
+          text: '下一步在另一个网站',
+          detail: `要去的是 ${effect.to}，不在你现在这个网站上。确认之后我在那边接着指。`,
+          crossSite: { from: effect.from, to: effect.to },
         },
         true,
       );
-      await say(tabId, { kind: 'cross_site', title: '这一步会离开当前站点', text: `你正要从 ${effect.from} 前往 ${effect.to}。` });
+      await say(tabId, {
+        kind: 'cross_site',
+        title: '下一步在另一个网站',
+        text: `要去的是 **${effect.to}**，不在你现在这个网站上。确认之后我在那边接着指。`,
+      });
     } else if (effect.kind === 'done') {
       // The guide is over. The model's `done` (`guide/output/done.ts`) and the
       // repeat backstop (`guide/output/point.ts`) both end the thread and empty

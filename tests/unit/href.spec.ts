@@ -13,7 +13,7 @@ const withItems = (items: PromptItem[]): PromptTable => ({
   omitted: 0, degraded: false, ambiguity: 0, stats, items,
 });
 
-describe('href 进元素表，但绝不进提示词', () => {
+describe('href 进元素表；只有名字失效时才露出一截去处', () => {
   // 跨站确认要在**跳转之前**念出目的地，所以宿主必须知道「下一步会去哪」。
   // 模型不能给（S-07：永远输出 ref，永远不输出 URL），只能由页面自己说——被
   // 抽取的那个链接元素背书它自己的地址。
@@ -56,6 +56,58 @@ describe('href 进元素表，但绝不进提示词', () => {
     const text = toPromptText(table);
     expect(text).toContain('page "console.example.test/app?tab=logs"');
     expect(text).not.toContain('other-example');
+  });
+
+  /**
+   * 定向那一条（2026-10-01）：名字本身说不清楚时，补上去处的**最后两段路径**。
+   *
+   * 判据是 `nth`（同 path+role+name 不唯一）或 `nameSource`（名字不是屏幕上的字）。
+   * 22 个夹具 355 条控件里这样的占 11%，repo-home 上 39 条、实测 +206 token（+6.0%）。
+   * 上面那几条测试的夹具两者都没有，所以它们照旧全绿——**边界正是画在这里**。
+   */
+  const weak: PromptItem = {
+    ref: 'e9' as Ref, role: 'link', name: '详情', path: [], nth: 2,
+    href: 'https://console.example.test/instances/i-0abc123',
+  };
+
+  it('6. 名字失效的条目补一截去处 —— 两条同名链接因此分得开', () => {
+    const text = toPromptText(withItems([weak]));
+    expect(text).toContain('→/instances/i-0abc123');
+  });
+
+  it('7. 只给路径的最后两段，不给主机 —— §8.2 禁的是「一张可挑的目的地清单」', () => {
+    const text = toPromptText(withItems([{ ...weak, href: 'https://evil.example.test/a/b/c/d' }]));
+    expect(text).toContain('→/c/d');
+    expect(text).not.toContain('evil.example.test');
+    expect(text).not.toContain('/a/b/c/d');
+  });
+
+  it('8. 名字够用的条目照旧一个字都不给 —— 这才是省下来的那 94%', () => {
+    const text = toPromptText(withItems([link]));
+    expect(text).not.toContain('→');
+  });
+
+  it('9. nameSource 也算名字失效（图标按钮、拿 title 当名字的链接）', () => {
+    const icon: PromptItem = {
+      ref: 'e7' as Ref, role: 'link', name: 'Settings', path: [], nameSource: 'title',
+      href: 'https://console.example.test/org/settings',
+    };
+    expect(toPromptText(withItems([icon]))).toContain('→/org/settings');
+  });
+
+  it('10. 地址解析不了、或根本没有路径段，就什么都不加（不抛）', () => {
+    expect(toPromptText(withItems([{ ...weak, href: 'not a url' }]))).not.toContain('→');
+    expect(toPromptText(withItems([{ ...weak, href: 'https://a.test/' }]))).not.toContain('→');
+    const { href: _drop, ...noHref } = weak;
+    expect(toPromptText(withItems([noHref as PromptItem]))).not.toContain('→');
+  });
+
+  it('11. 去处也过脱敏 —— 路径里带 token 的回调地址不罕见', () => {
+    const cb: PromptItem = {
+      ref: 'e5' as Ref, role: 'link', name: '继续', path: [], nth: 1,
+      href: 'https://console.example.test/cb/ghp_abcdefghijklmnopqrstuvwxyz123456',
+    };
+    expect(toPromptText(withItems([cb]))).not.toContain('ghp_abcdefghijklmnopqrstuvwxyz123456');
   });
 
   it('3. 一屏几十条链接也不会把地址漏进提示词（省 token 的那一半）', () => {

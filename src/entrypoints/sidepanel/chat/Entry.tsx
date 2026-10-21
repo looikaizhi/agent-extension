@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { ConversationEntry, EntryStep } from '@/shared/conversation';
+import { stepLabels } from '@/shared/progress';
 import { Prose } from '../Prose';
 import { Icon, type IconName } from '../ui/Icon';
 import {
@@ -9,8 +10,8 @@ import {
   describeCheck,
   describeEvidence,
   evidenceTone,
+  type Tone,
 } from '../view-model';
-import { stepLabels } from '@/shared/progress';
 import { Thinking } from './Thinking';
 
 const OUTCOME: Record<NonNullable<EntryStep['outcome']>, { text: string; tone: 'ok' | 'warn' | 'err' | 'muted'; icon: IconName }> = {
@@ -47,7 +48,7 @@ export function Entry({
     case 'said':
       return <div className="entry said">{entry.text}</div>;
     case 'step':
-      return <StepEntry entry={entry} current={current === true} />;
+      return current ? <CurrentStep entry={entry} /> : <PastStep entry={entry} />;
     case 'answer':
       return (
         <div className="entry answer">
@@ -55,8 +56,10 @@ export function Entry({
             <Icon name="message" size={13} />
             回答
           </div>
-          <Prose text={entry.text} />
-          {entry.detail && <Prose text={entry.detail} />}
+          <div className="body">
+            <Prose text={entry.text} />
+            {entry.detail && <Prose text={entry.detail} />}
+          </div>
           <Thinking rounds={entry.rounds ?? []} />
         </div>
       );
@@ -67,14 +70,19 @@ export function Entry({
             <Icon name="question" size={13} />
             想确认一下
           </div>
-          <Prose text={entry.text} />
-          {entry.detail && <Prose text={entry.detail} />}
+          <div className="body">
+            <Prose text={entry.text} />
+            {entry.detail && <Prose text={entry.detail} />}
+          </div>
           {entry.options && entry.options.length > 0 && (
             // Every candidate, none picked for the user (K-6): the answer is
             // theirs to type.
             <ul className="options">
               {entry.options.map((o) => (
-                <li key={o.ref}>{o.label}</li>
+                <li key={o.ref}>
+                  <Icon name="key" size={14} weight={2} />
+                  <span className="option">{o.label}</span>
+                </li>
               ))}
             </ul>
           )}
@@ -83,90 +91,167 @@ export function Entry({
         </div>
       );
     case 'note':
-      // The host itself: a refusal, a failure, how a run ended. A call that
-      // never got through (`canRetry`) is said as a failure, one the user
-      // has to fix in the settings as a warning with the way there; the rest
-      // are just said.
-      return (
-        <div className={`entry note${entry.fix ? ' fix' : entry.canRetry ? ' failed' : ''}`}>
-          <Icon name={entry.fix ? 'warn' : entry.canRetry ? 'alert' : actions ? 'globe' : 'info'} size={16} />
-          <div className="note-body">
-            <Prose text={entry.text} />
-            {entry.detail && (
-              <div className="note-detail">
-                <Prose text={entry.detail} />
-              </div>
-            )}
-            {onRetry && (
-              <button className="retry" onClick={onRetry}>
-                <Icon name="refresh" size={13} />
-                再试一次
-              </button>
-            )}
-            {entry.fix === 'model' && onOpenModel && (
-              <button className="link" onClick={onOpenModel}>
-                打开模型配置 →
-              </button>
-            )}
-            {actions}
-          </div>
-        </div>
+      return entry.crossSite ? (
+        <CrossSite entry={entry} actions={actions} />
+      ) : (
+        <Note entry={entry} {...(onRetry ? { onRetry } : {})} {...(onOpenModel ? { onOpenModel } : {})} />
       );
   }
 }
 
-function StepEntry({ entry, current }: { entry: ConversationEntry; current: boolean }) {
+/**
+ * The host itself: a refusal, a failure, how a run ended. A call that never
+ * got through (`canRetry`) is said as a failure; one the user has to put right
+ * in the settings (`fix`) as a warning with the way there; the rest are just
+ * said.
+ */
+function Note({ entry, onRetry, onOpenModel }: { entry: ConversationEntry; onRetry?: () => void; onOpenModel?: () => void }) {
+  const tone = entry.fix ? 'fix' : entry.canRetry ? 'failed' : 'plain';
+  return (
+    <div className={`entry note ${tone}`}>
+      <Icon name={tone === 'fix' ? 'warn' : tone === 'failed' ? 'alert' : 'info'} size={18} weight={2} />
+      <div className="note-body">
+        <div className="note-text">
+          <Prose text={entry.text} />
+        </div>
+        {entry.detail && (
+          <div className="note-detail">
+            <Prose text={entry.detail} />
+          </div>
+        )}
+        {onRetry && (
+          <button className="retry" onClick={onRetry}>
+            <Icon name="refresh" size={13} />
+            再试一次
+          </button>
+        )}
+        {entry.fix === 'model' && onOpenModel && (
+          <button className="link" onClick={onOpenModel}>
+            打开模型配置 →
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The step about to leave the site: where from, where to, and — while the run
+ *  waits on it — the two answers. */
+function CrossSite({ entry, actions }: { entry: ConversationEntry; actions?: ReactNode }) {
+  const hosts = entry.crossSite!;
+  return (
+    <div className={`entry cross-site${actions ? ' waiting' : ''}`}>
+      <div className="kind">
+        <Icon name="globe" size={13} weight={2} />
+        要换一个网站
+      </div>
+      <div className="cross-title">{entry.text}</div>
+      {entry.detail && (
+        <div className="cross-text">
+          <Prose text={entry.detail} />
+        </div>
+      )}
+      <div className="hosts">
+        <span className="from">{hosts.from}</span>
+        <Icon name="right" size={14} />
+        <span className="to">{hosts.to}</span>
+      </div>
+      {actions}
+    </div>
+  );
+}
+
+/** A step that is behind the user now: what it was, and what became of it. */
+function PastStep({ entry }: { entry: ConversationEntry }) {
   const step = entry.step;
   const label = step ? stepLabels(step.index, step.total) : null;
   const outcome = step?.outcome ? OUTCOME[step.outcome] : null;
   return (
-    <div className={`entry step${current ? ' current' : ''}`}>
-      {label && (
-        <div className="step-n">
-          <span className="for-hud">{label.hud}</span>
-          <span className="for-depth">{label.depth}</span>
-          {current && ' · 进行中'}
+    <div className={`entry step past${outcome ? ` ${outcome.tone}` : ''}`}>
+      {outcome && (
+        <span className="badge">
+          <Icon name={outcome.icon} size={12} weight={step?.outcome === 'used' ? 3 : 2.6} />
+        </span>
+      )}
+      <div className="step-body">
+        {label && <StepLabel label={label} />}
+        <div className="step-title">{entry.text}</div>
+        {outcome && (
+          <div className={`outcome ${outcome.tone}`}>
+            {step?.outcome === 'not_found' && <span className="spinner" />}
+            {outcome.text}
+          </div>
+        )}
+        <Thinking rounds={entry.rounds ?? []} />
+      </div>
+    </div>
+  );
+}
+
+/** The step on screen now: its reason, the model's route, and the three axes. */
+function CurrentStep({ entry }: { entry: ConversationEntry }) {
+  const step = entry.step;
+  const label = step ? stepLabels(step.index, step.total) : null;
+  const outcome = step?.outcome ? OUTCOME[step.outcome] : null;
+  return (
+    <div className="entry step current">
+      {label && <StepLabel label={label} suffix=" · 进行中" />}
+      <div className="step-title">{entry.text}</div>
+      {entry.detail && (
+        <div className="step-detail">
+          <Prose text={entry.detail} />
         </div>
       )}
-      <div className="step-title">{entry.text}</div>
-      {entry.detail && <Prose text={entry.detail} />}
       {outcome && (
         <div className={`outcome ${outcome.tone}`}>
-          <Icon name={outcome.icon} size={13} />
+          {step?.outcome === 'not_found' && <span className="spinner" />}
           {outcome.text}
         </div>
       )}
-      {/* 整体路标：模型这次给的，原样展示，不拼接也不去重。 */}
+      {/* 整体路标：模型这次给的「前方的路」，原样展示，不拼接也不去重。第一站就是
+          用户此刻所在的这一步。 */}
       {entry.route && entry.route.length > 0 && (
         <ol className="route">
           {entry.route.map((hop, i) => (
-            <li key={i}>
-              <span className="mark">{String(i + 1).padStart(2, '0')}</span>
-              <span>
+            <li key={i} className={i === 0 ? 'here' : ''}>
+              <span className="mark for-hud">{String(i + 1).padStart(2, '0')}</span>
+              <span className="mark for-depth" />
+              <span className="hop">
                 <b>{hop.at}</b>：{hop.goal}
               </span>
             </li>
           ))}
         </ol>
       )}
-      {/* 三轴各自独立，互不合并（§5.7）：每个都有自己的一句话和一个圆点。 */}
+      {/* 三轴各自独立，互不合并（§5.7）：每个都有自己的名字、一句话和一个圆点。 */}
       {entry.axes && (
         <div className="axes">
-          <span className={`axis ${evidenceTone(entry.axes.evidence)}`} title="依据">
-            <span className="dot" />
-            {describeEvidence(entry.axes.evidence)}
-          </span>
-          <span className={`axis ${checkTone(entry.axes.check)}`} title="到达">
-            <span className="dot" />
-            {describeCheck(entry.axes.check)}
-          </span>
-          <span className={`axis ${bindingTone(entry.axes.binding)}`} title="绑定">
-            <span className="dot" />
-            {describeBinding(entry.axes.binding)}
-          </span>
+          <Axis name="依据" tone={evidenceTone(entry.axes.evidence)} text={describeEvidence(entry.axes.evidence)} />
+          <Axis name="到达" tone={checkTone(entry.axes.check)} text={describeCheck(entry.axes.check)} />
+          <Axis name="绑定" tone={bindingTone(entry.axes.binding)} text={describeBinding(entry.axes.binding)} />
         </div>
       )}
       <Thinking rounds={entry.rounds ?? []} />
     </div>
+  );
+}
+
+function StepLabel({ label, suffix = '' }: { label: { hud: string; depth: string }; suffix?: string }) {
+  return (
+    <div className="step-n">
+      <span className="for-hud">{label.hud + suffix}</span>
+      <span className="for-depth">{label.depth + suffix}</span>
+    </div>
+  );
+}
+
+function Axis({ name, tone, text }: { name: string; tone: Tone; text: string }) {
+  return (
+    <span className={`axis ${tone}`}>
+      <span className="dot" />
+      <span className="axis-name">{name}</span>
+      <span className="axis-sep for-depth">·</span>
+      {text}
+    </span>
   );
 }

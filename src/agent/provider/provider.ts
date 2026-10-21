@@ -44,7 +44,15 @@ export interface ListResult {
 /** Step 2: one real call with the model that was chosen. */
 export interface VerifyResult {
   ok: boolean;
+  /** Shown to the user verbatim. When there is a `quote`, this is the
+   *  sentence that leads into it. */
   message: string;
+  /** The endpoint's own words, set apart from what is said around them — a
+   *  paraphrase of a refused keyword is not something its author can act on.
+   *  One line per thing it said. */
+  quote?: readonly string[];
+  /** What to make of the quote, said after it. */
+  after?: string;
   /**
    * What the probe learned about this endpoint, to be stored with the rest of
    * its configuration. Absent when the probe never ran — a wrong key or an
@@ -235,7 +243,9 @@ export async function verifyModel(cfg: ProviderConfig): Promise<VerifyResult> {
         ok: false,
         forcedToolChoice: 'unknown',
         wall: 'thinking',
-        message: `${THINKING_WALL}\n端点原话：${words}`,
+        message: `「${cfg.model}」拒绝了这次调用，端点只回了这一句：`,
+        quote: [words],
+        after: `${THINKING_WALL}点下面的按钮，我替你试着关掉它再验一次。`,
       };
 
     // It refused and did not say why — the common case on an aggregator,
@@ -247,7 +257,9 @@ export async function verifyModel(cfg: ProviderConfig): Promise<VerifyResult> {
         ok: false,
         forcedToolChoice: 'unknown',
         wall: 'refused',
-        message: `「${cfg.model}」拒绝了这次调用，端点只回了这一句：${words}\n最常见的原因是这个模型开着「思考模式」——点下面的按钮，我替你试着关掉它再验一次。`,
+        message: `「${cfg.model}」拒绝了这次调用，端点只回了这一句：`,
+        quote: [words],
+        after: '最常见的原因是这个模型开着「思考模式」——点下面的按钮，我替你试着关掉它再验一次。',
       };
 
     return {
@@ -282,7 +294,11 @@ const THINKING_OFF: readonly Record<string, unknown>[] = [{ enable_thinking: fal
 
 export interface FixResult {
   ok: boolean;
+  /** As `VerifyResult.message`: the sentence, leading into `quote` when there is one. */
   message: string;
+  /** What each spelling got back, one line each, when neither was accepted. */
+  quote?: readonly string[];
+  after?: string;
   /** The fields to store under this model. Present only when they worked —
    *  half-fixing a configuration is worse than not touching it. */
   fields?: Record<string, unknown>;
@@ -314,7 +330,7 @@ export async function disableThinkingAndVerify(cfg: ProviderConfig): Promise<Fix
         ok: true,
         fields,
         forcedToolChoice: r.forcedToolChoice,
-        message: `已经关掉思考（这个端点认的是 ${JSON.stringify(fields)} 这种写法），${r.message}`,
+        message: `已经关掉思考（这个端点认的是 \`${spelled(fields)}\` 这种写法），验收通过。`,
       };
     // `refused` counts as the same wall: an endpoint that drops the upstream
     // reason (measured on an aggregator's streaming path) gives exactly this
@@ -324,16 +340,22 @@ export async function disableThinkingAndVerify(cfg: ProviderConfig): Promise<Fix
       return {
         ok: false,
         message: r.message,
+        ...(r.quote ? { quote: r.quote } : {}),
+        ...(r.after ? { after: r.after } : {}),
         // The field is kept only when something was actually measured through
         // it. `unsupported` is a measurement; a busy endpoint or a timeout is
         // not, and storing a field that nothing has confirmed would leave the
         // configuration carrying a guess.
         ...(r.forcedToolChoice === 'unsupported' ? { fields, forcedToolChoice: r.forcedToolChoice } : {}),
       };
-    refusals.push(`${JSON.stringify(fields)} → ${r.message.split('\n').pop() ?? r.message}`);
+    refusals.push(`${spelled(fields)} → ${r.quote?.[0] ?? r.message}`);
   }
   return {
     ok: false,
-    message: `两种写法都试过了，这个模型还是拒绝，所以一个字段都没写进去。原因不一定是思考模式——在这个端点上换一个模型会省事得多。\n${refusals.join('\n')}`,
+    message: '两种写法都试过了，这个模型还是拒绝，所以一个字段都没写进去。原因不一定是思考模式——在这个端点上换一个模型会省事得多。',
+    quote: refusals,
   };
 }
+
+/** A request field the way a person reads it: `{"thinking": {"type": "disabled"}}`. */
+const spelled = (fields: Record<string, unknown>): string => JSON.stringify(fields).replace(/":/g, '": ').replace(/,"/g, ', "');

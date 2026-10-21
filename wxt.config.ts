@@ -11,7 +11,11 @@ export default defineConfig({
     description: '在陌生的 Web 控制台上，一步步指出你该点哪里。只指路，不开车。',
     // Top Layer (popover) is a platform contract, not a progressive enhancement.
     minimum_chrome_version: '120',
-    permissions: ['scripting', 'sidePanel', 'storage'],
+    // `favicon` reads the site's icon out of Chrome's own cache for the panel
+    // header (`_favicon/`): no request goes to the site. Measured with
+    // `management.getPermissionWarningsByManifest`: it adds no warning beside
+    // the <all_urls> grant below.
+    permissions: ['scripting', 'sidePanel', 'storage', 'favicon'],
     // Deliberate, and the heaviest install-time warning Chrome has: "read and
     // change all your data on all websites". Decided 2026-08-07.
     //

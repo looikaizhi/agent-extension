@@ -616,7 +616,7 @@ describe('toPromptText —— 喂给模型的那份', () => {
         { maxNodes: 150 },
       ),
     );
-    expect(out.split('\n').filter((l) => l === 'Instances:').length).toBe(1);
+    expect(out.split('\n').filter((l) => l === 'region "Instances":').length).toBe(1);
     expect(out).toContain('  b1 button "Stop"');
     expect(out).toContain('  b2 button "Start"');
     expect(out.indexOf('Instances:')).toBeLessThan(out.indexOf('b1 button "Stop"'));
@@ -671,7 +671,7 @@ describe('toPromptText —— 喂给模型的那份', () => {
         { maxNodes: 150 },
       ),
     );
-    expect(out).toBe([...HEAD, 'Instances:', '  i-0abc:', '    e1 button "Stop"'].join('\n'));
+    expect(out).toBe([...HEAD, 'region "Instances":', '  i-0abc:', '    e1 button "Stop"'].join('\n'));
   });
 
   /* ——— page / title：模型判断「页面有没有变」的唯一依据 ——— */
@@ -733,7 +733,9 @@ describe('toPromptText —— 喂给模型的那份', () => {
         { maxNodes: 150 },
       ),
     );
-    expect(out).toContain('Real Fake::');
+    // 地标那一层现在连 role 一起写，名字也因此被引号包起来——换行既被 `flatten`
+    // 抹平，又被引号转义，伪造缩进这条路比改动前更窄。
+    expect(out).toContain('region "Real Fake:":');
     expect(out.split('\n').filter((l) => l === '  Fake::')).toHaveLength(0);
   });
 
@@ -756,15 +758,15 @@ describe('toPromptText —— 喂给模型的那份', () => {
     );
     const expected = [
       ...HEAD,
-      'A:',
+      'region "A":',
       '  a1 button "One"',
-      'B:',
+      'region "B":',
       '  b1 button "Two"',
-      'A:',
+      'region "A":',
       '  a2 button "Three"',
     ].join('\n');
     expect(out).toBe(expected);
-    expect(out.split('\n').filter((l) => l === 'A:')).toHaveLength(2);
+    expect(out.split('\n').filter((l) => l === 'region "A":')).toHaveLength(2);
   });
 });
 

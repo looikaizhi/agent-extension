@@ -159,7 +159,7 @@ describe('verifyModel() —— 第 2 步：对着选定的那一个模型', () =
     vi.stubGlobal('fetch', endpoint({ probe: { status: 400, body: JSON.stringify({ error: { message: "unsupported keyword: 'strict'" } }) } }));
     const r = await verifyModel(REMOTE);
     expect(r).toMatchObject({ ok: false, forcedToolChoice: 'unknown' });
-    expect(r.message).toContain("unsupported keyword: 'strict'");
+    expect(r.quote).toEqual([expect.stringContaining("unsupported keyword: 'strict'")]);
   });
 
   it('还没选模型 → 一趟都不发，也不写开关', async () => {
@@ -325,8 +325,10 @@ describe('verifyModel() —— 三种「不行」，三句不同的话', () => {
     vi.stubGlobal('fetch', endpointSeq([THINKING_WALL_400]));
     const r = await verifyModel(REMOTE);
     expect(r).toMatchObject({ ok: false, wall: 'thinking', forcedToolChoice: 'unknown' });
-    expect(r.message).toContain('思考模式');
-    expect(r.message).toContain('does not support being set to required');
+    expect(r.after).toContain('思考模式');
+    // The endpoint's words stand apart, unedited — the page sets them in a box.
+    expect(r.quote).toHaveLength(1);
+    expect(r.quote?.[0]).toContain('does not support being set to required');
   });
 
   it('端点忙（429）：说清这不是配置的问题，也不写开关', async () => {
@@ -344,8 +346,8 @@ describe('verifyModel() —— 三种「不行」，三句不同的话', () => {
     vi.stubGlobal('fetch', endpointSeq([{ status: 400, body: JSON.stringify({ error: { message: "unsupported keyword: 'strict'" } }) }]));
     const r = await verifyModel(REMOTE);
     expect(r.wall).toBe('refused');
-    expect(r.message).toContain("unsupported keyword: 'strict'");
-    expect(r.message).not.toContain(THINKING_WALL);
+    expect(r.quote?.[0]).toContain("unsupported keyword: 'strict'");
+    expect(`${r.message}${r.after ?? ''}`).not.toContain(THINKING_WALL);
   });
 });
 
@@ -380,6 +382,9 @@ describe('disableThinkingAndVerify() —— 不猜是哪种写法，试出来', 
     expect(r.ok).toBe(false);
     expect(r.fields).toBeUndefined();
     expect(r.message).toContain('一个字段都没写');
+    // One line per spelling tried, each with what the endpoint said to it.
+    expect(r.quote).toHaveLength(2);
+    expect(r.quote?.[0]).toMatch(/^\{"enable_thinking": false\} → /);
     expect(sentFields(f)).toHaveLength(2);
   });
 
@@ -417,8 +422,8 @@ describe('verifyModel() —— 端点把原因吞掉的时候', () => {
     );
     const r = await verifyModel(REMOTE);
     expect(r).toMatchObject({ ok: false, wall: 'refused' });
-    expect(r.message).toContain('openai_error');
-    expect(r.message).toContain('最常见的原因');
+    expect(r.quote?.[0]).toContain('openai_error');
+    expect(r.after).toContain('最常见的原因');
   });
 
   it('这种「不知道为什么」的拒绝，按钮照样会试到第二种写法', async () => {

@@ -1,0 +1,273 @@
+{
+  "run": "smoke-probe",
+  "startedAt": "2026-09-30T16:51:13.289Z",
+  "finishedAt": "2026-09-30T16:51:15.030Z",
+  "plugins": [
+    "skill"
+  ],
+  "model": {
+    "baseURL": "https://api.deepseek.com/v1",
+    "model": "deepseek-flash"
+  },
+  "fingerprint": "5e94eb575811bb69",
+  "passes": 1,
+  "corpus": {
+    "source": "evals/decision/raw/try-batch.ndjson",
+    "states": 3,
+    "fingerprints": [
+      "4da37ec4e7575086"
+    ],
+    "hash": "069d46db76eba538"
+  },
+  "annotations": {
+    "file": "evals/decision/annotations.json",
+    "count": 123,
+    "hash": "b371c1b40c88f156"
+  },
+  "report": {
+    "summary": {
+      "states": 3,
+      "annotated": 0,
+      "runs": 3,
+      "transport": 0,
+      "parseFailures": 0,
+      "violations": 0,
+      "parseFailureRate": 0,
+      "violationRate": 0,
+      "offTable": 0,
+      "sensitive": 0,
+      "intent": null,
+      "firstStep": null,
+      "passK": [],
+      "stability": {
+        "alwaysRight": 0,
+        "alwaysWrong": 0,
+        "mixed": 0
+      }
+    },
+    "intents": {
+      "done": 2,
+      "read_doc": 1
+    },
+    "tokens": {
+      "prompt": 19441,
+      "completion": 379,
+      "cached": 8960
+    },
+    "cost": null,
+    "latency": {
+      "medianMs": 1640,
+      "p90Ms": 1725
+    },
+    "retried": 0,
+    "unknownAnnotations": [
+      "t11/aliyun-ecs-regions/P1/1",
+      "t11/aliyun-ecs-regions/P1/2",
+      "t11/aliyun-ecs-regions/P1/3",
+      "t11/aliyun-ecs-regions/P2/1",
+      "t11/aliyun-ecs-regions/P2/2",
+      "t11/aliyun-ecs-regions/P2/3",
+      "t11/aliyun-rds-billing/P1/1",
+      "t11/aliyun-rds-billing/P1/2",
+      "t11/aliyun-rds-billing/P1/3",
+      "t11/aliyun-rds-billing/P2/1",
+      "t11/aliyun-rds-billing/P2/2",
+      "t11/aliyun-sls-query/P1/1",
+      "t11/aliyun-sls-query/P1/2",
+      "t11/aliyun-sls-query/P1/3",
+      "t11/gh-branches/P2/1",
+      "t11/gh-branches/P2/2",
+      "t11/gh-branches/P2/3",
+      "t11/gh-branches/P2/4",
+      "t11/gh-branches/P2/5",
+      "t11/gh-branches/P2/6",
+      "t11/gh-branches/P2/7",
+      "t11/gh-branches/P2/8",
+      "t11/gh-commits/P2/1",
+      "t11/gh-commits/P2/2",
+      "t11/gh-commits/P2/3",
+      "t11/gh-commits/P2/4",
+      "t11/gh-commits/P2/5",
+      "t11/gh-commits/P2/6",
+      "t11/gh-contributing/P1/1",
+      "t11/gh-contributing/P1/2",
+      "t11/gh-contributing/P1/3",
+      "t11/gh-contributing/P1/4",
+      "t11/gh-contributing/P1/5",
+      "t11/gh-contributing/P1/6",
+      "t11/gh-contributing/P1/7",
+      "t11/gh-docs-site/P2/1",
+      "t11/gh-docs-site/P2/2",
+      "t11/gh-docs-site/P2/3",
+      "t11/gh-docs-site/P2/4",
+      "t11/gh-docs-site/P2/5",
+      "t11/gh-docs-site/P2/6",
+      "t11/gh-docs-site/P2/7",
+      "t11/gh-issues/P1/1",
+      "t11/gh-issues/P1/2",
+      "t11/gh-issues/P1/3",
+      "t11/gh-issues/P1/4",
+      "t11/gh-issues/P1/5",
+      "t11/gh-issues/P1/6",
+      "t11/gh-issues/P1/7",
+      "t11/gh-issues/P2/1",
+      "t11/gh-issues/P2/2",
+      "t11/gh-issues/P2/3",
+      "t11/gh-issues/P2/4",
+      "t11/gh-issues/P2/5",
+      "t11/gh-issues/P2/6",
+      "t11/gh-issues/P2/7",
+      "t11/gh-issues/P2/8",
+      "t11/gh-issues/P2/9",
+      "t11/gh-license/P1/1",
+      "t11/gh-license/P1/2",
+      "t11/gh-license/P1/3",
+      "t11/gh-license/P1/4",
+      "t11/gh-license/P1/5",
+      "t11/gh-license/P2/1",
+      "t11/gh-license/P2/2",
+      "t11/gh-license/P2/3",
+      "t11/gh-license/P2/4",
+      "t11/gh-pulls/P1/1",
+      "t11/gh-pulls/P1/2",
+      "t11/gh-pulls/P1/3",
+      "t11/gh-pulls/P1/4",
+      "t11/gh-pulls/P1/5",
+      "t11/gh-pulls/P1/6",
+      "t11/gh-pulls/P1/7",
+      "t11/gh-pulls/P1/8",
+      "t11/gh-pulls/P2/1",
+      "t11/gh-pulls/P2/2",
+      "t11/gh-pulls/P2/3",
+      "t11/gh-pulls/P2/4",
+      "t11/gh-pulls/P2/5",
+      "t11/gh-pulls/P2/6",
+      "t11/gh-pulls/P2/7",
+      "t11/gh-pulls/P2/8",
+      "t11/gh-releases/P1/1",
+      "t11/gh-releases/P1/2",
+      "t11/gh-releases/P1/3",
+      "t11/gh-releases/P1/4",
+      "t11/gh-releases/P1/5",
+      "t11/gh-releases/P1/6",
+      "t11/gh-releases/P1/7",
+      "t11/gh-releases/P2/1",
+      "t11/gh-releases/P2/2",
+      "t11/gh-releases/P2/3",
+      "t11/gh-releases/P2/4",
+      "t11/gh-releases/P2/5",
+      "t11/gh-releases/P2/6",
+      "t11/gh-releases/P2/7",
+      "t11/gh-releases/P2/8",
+      "t11/gh-releases/P2/9",
+      "t11/gh-repo-address/P1/1",
+      "t11/gh-repo-address/P1/2",
+      "t11/gh-repo-address/P1/3",
+      "t11/gh-repo-address/P1/4",
+      "t11/gh-repo-address/P1/5",
+      "t11/gh-repo-address/P1/6",
+      "t11/gh-repo-address/P1/7",
+      "t11/gitee-closed-issues/P2/1",
+      "t11/gitee-closed-issues/P2/2",
+      "t11/gitee-closed-issues/P2/3",
+      "t11/gitee-core-pom/P2/1",
+      "t11/gitee-core-pom/P2/2",
+      "t11/gitee-core-pom/P2/3",
+      "t11/gitee-core-pom/P2/4",
+      "t11/gitee-merged-pulls/P1/1",
+      "t11/gitee-merged-pulls/P1/2",
+      "t11/gitee-merged-pulls/P1/3",
+      "t11/gitee-org/P1/1",
+      "t11/gitee-org/P1/2",
+      "t11/gitee-org/P1/3",
+      "t11/gitee-org/P1/4",
+      "t11/gitee-org/P2/1",
+      "t11/gitee-org/P2/2",
+      "t11/gitee-org/P2/3"
+    ]
+  },
+  "gate": {
+    "baseline": "merged-2",
+    "baselineStates": 134,
+    "pass": true,
+    "checks": [
+      {
+        "name": "解析失败率不高于基线",
+        "pass": true,
+        "detail": "本次 —，基线 —"
+      },
+      {
+        "name": "校验失败率不高于基线",
+        "pass": true,
+        "detail": "本次 —，基线 —"
+      },
+      {
+        "name": "指向表外或敏感控件为 0",
+        "pass": true,
+        "detail": "指向表外 0 次，指向敏感控件 0 次"
+      },
+      {
+        "name": "意图准确率没有显著变差",
+        "pass": true,
+        "detail": "两边没有共同的、有标注的状态，这一道判不了"
+      },
+      {
+        "name": "第一步准确率没有显著变差",
+        "pass": true,
+        "detail": "两边没有共同的、有标注的状态，这一道判不了"
+      }
+    ],
+    "states": {
+      "baseline": 0,
+      "candidate": 3,
+      "common": 0
+    }
+  },
+  "replays": [
+    {
+      "state": "t09/aliyun-ecs-billing-switch/P1/3",
+      "pass": 1,
+      "raw": "{\"evidence\": \"content_on_page\", \"why\": \"用户问的是「怎么操作」，属于了解做法/规则这一类。他现在已经落在《弹性计算 Agent Credits 计费规则》这一页，页面正文把计费方式、Credit 资源包、超限策略、购买与用量查看等说明都列了出来，并提供了「计费方式」「产品详情」「超限策略」「弹性计算 Agent 控制台」等相关入口，说明如何计费和在哪里查看/变更用量已经交代清楚，这一步的疑问在这一页上得到解答。\"}",
+      "tool": "done",
+      "usage": {
+        "prompt": 6374,
+        "completion": 149,
+        "total": 6523,
+        "cachedPrompt": 3072
+      },
+      "providerCalls": 1,
+      "ms": 1640,
+      "attempts": 1
+    },
+    {
+      "state": "t09/aliyun-ecs-billing-switch/P2/2",
+      "pass": 1,
+      "raw": "{\"via_ref\": \"e31\", \"query\": \"包年包月转按量付费 操作步骤 限制条件\"}",
+      "tool": "read_doc",
+      "usage": {
+        "prompt": 6487,
+        "completion": 64,
+        "total": 6551,
+        "cachedPrompt": 2944
+      },
+      "providerCalls": 1,
+      "ms": 1119,
+      "attempts": 1
+    },
+    {
+      "state": "t09/aliyun-ecs-billing-switch/P2/3",
+      "pass": 1,
+      "raw": "{\"evidence\": \"content_on_page\", \"why\": \"用户问的是「包年包月怎么改成按量付费」——要的是方法/规则说明，不是要我替他操作。上一页我指向的「包年包月转按量付费」文档已经打开，当前页就是该文档所在页面，页面导航中「转换计费方式 → 实例」下明确列出「包年包月转按量付费」（e31 / e65），转换前提、限制与操作步骤就在这一页的正文里。方法已经呈现在这一页上，无需再执行任何控制台操作，故判定完成。\"}",
+      "tool": "done",
+      "usage": {
+        "prompt": 6580,
+        "completion": 166,
+        "total": 6746,
+        "cachedPrompt": 2944
+      },
+      "providerCalls": 1,
+      "ms": 1725,
+      "attempts": 1
+    }
+  ]
+}

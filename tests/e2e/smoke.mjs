@@ -78,7 +78,9 @@ const check = (name, pass, detail = '') => {
     content_script_matches: (m.content_scripts ?? []).flatMap((c) => c.matches ?? []),
   };
   const expected = {
-    permissions: ['scripting', 'sidePanel', 'storage'],
+    // `favicon`: the panel header shows the site's icon out of Chrome's own
+    // cache (2026-09-29); measured to add no install warning beside <all_urls>.
+    permissions: ['favicon', 'scripting', 'sidePanel', 'storage'],
     host_permissions: ['<all_urls>'],
     optional_host_permissions: [],
     content_script_matches: ['<all_urls>'],
@@ -3339,11 +3341,11 @@ const costShown = async () => {
   );
   await page.waitForTimeout(1200);
 
-  await waitForEntry('note', '离开当前站点', 5000, listener);
+  await waitForEntry('note', '另一个网站', 5000, listener);
   const ask = await lastEntry('note', listener);
   check(
     '跨站的那一步先弹确认，卡片同时念出「从哪」和「去哪」的完整 hostname',
-    String(ask?.detail).includes('127.0.0.1') && String(ask?.detail).includes('docs.elsewhere-example.test'),
+    ask?.crossSite?.from === '127.0.0.1' && ask?.crossSite?.to === 'docs.elsewhere-example.test' && String(ask?.detail).includes('docs.elsewhere-example.test'),
     JSON.stringify(ask),
   );
   check('确认之前不把这一步画到屏上——用户还没同意离开', (await overlayStatus('shown', 400)) !== 'shown');

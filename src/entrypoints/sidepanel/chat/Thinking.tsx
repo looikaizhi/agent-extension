@@ -1,4 +1,5 @@
 import type { ConversationRound } from '@/shared/conversation';
+import { Icon } from '../ui/Icon';
 
 const TOOL_NAME: Record<string, string> = {
   observe: '重新看了一眼页面',
@@ -14,8 +15,12 @@ const count = (n: number) => n.toLocaleString('en-US');
 
 /**
  * 思考过程: what each round did — which tool, the model's own reason, what came
- * back, what it cost. Folded by default; the turn still under way shows it open
- * and says it is not finished (`live`).
+ * back, what it cost.
+ *
+ * Two ways of saying it. A turn still under way (`live`) shows its rounds as
+ * they land, open, each line labelled (为什么 / 读的是 / 结果). A turn that has
+ * landed folds them away under a quieter line — 夜航 a 「▸」, 景深 a pill — and
+ * opened, reads as a footnote: the reason in italics, what came back.
  */
 export function Thinking({
   rounds,
@@ -29,24 +34,30 @@ export function Thinking({
 }) {
   if (rounds.length === 0) return null;
   return (
-    <details className="thinking" {...(open ? { open: true } : {})}>
+    <details className={`thinking${live ? ' live' : ''}`} {...(open ? { open: true } : {})}>
       <summary>
         {live && <span className="spinner" />}
-        {`思考过程 · ${rounds.length} 步${live ? '，还在继续' : ''}`}
+        {!live && <span className="tg for-hud">▸ </span>}
+        <span className="summary-text">{`思考过程 · ${rounds.length} 步${live ? '，还在继续' : ''}`}</span>
+        <Icon name="down" size={12} />
       </summary>
       <ol>
         {rounds.map((r, i) => (
           <li key={i}>
             <span className="n">{i + 1}</span>
-            <div>
-              <b>{TOOL_NAME[r.tool] ?? r.tool}</b>
-              {r.asked && <span className="asked">{r.asked}</span>}
-              {r.why && <span className="why">{r.why}</span>}
-              {r.got && <span className="got">{r.got}</span>}
+            <div className="round">
+              <div className="what">{TOOL_NAME[r.tool] ?? r.tool}</div>
+              {r.asked && (
+                <div className="asked">
+                  读的是：<span className="mono">{r.asked}</span>
+                </div>
+              )}
+              {r.why && <div className="why">{live ? `为什么：${r.why}` : r.why}</div>}
+              {r.got && <div className="got">结果：{r.got}</div>}
               {r.usage && (
-                <span className="usage">
+                <div className="usage">
                   {count(r.usage.prompt)} + {count(r.usage.completion)} token
-                </span>
+                </div>
               )}
             </div>
           </li>

@@ -123,20 +123,29 @@ export function resolveState(el: Element, profile: ExtractProfile): UIState[] | 
 
   if (input.disabled === true || aria('disabled') === 'true') s.push('disabled');
 
+  // 下面这一组每一条都能挡掉一次**白走的步**，所以不分 profile，一律发。
+  //
+  // 它们以前整组关在 `profile !== 'interactive'` 后面，而产品从头到尾只用
+  // `'interactive'`（`background.ts` 两处 EXTRACT 都是）——也就是说除了 `disabled`，
+  // 这些状态**一次都没到过模型手里**。其中 `collapsed` 尤其可惜：实测里有一趟引导把同一个
+  // 按钮点了五次，而它要的控件就在那个按钮展开的面板里；`collapsed` 正是那一句「里面还有东西」。
+  const expanded = aria('expanded');
+  if (expanded === 'true') s.push('expanded');
+  else if (expanded === 'false') s.push('collapsed');
+
+  const checked = aria('checked');
+  if (checked === 'true' || input.checked === true) s.push('checked');
+  else if (checked === 'mixed') s.push('mixed');
+
+  if (aria('selected') === 'true') s.push('selected');
+  const current = aria('current');
+  if (current && current !== 'false') s.push('current');
+  if (aria('readonly') === 'true' || input.readOnly === true) s.push('readonly');
+
+  // 这三条留在 `+context`：它们说的是「这个表单域本身怎么样」，而不是
+  // 「该不该指这一个控件」。前者是填表时的细节，后者才是引导每一步要答的问题。
   if (profile !== 'interactive') {
-    const expanded = aria('expanded');
-    if (expanded === 'true') s.push('expanded');
-    else if (expanded === 'false') s.push('collapsed');
-
-    const checked = aria('checked');
-    if (checked === 'true' || input.checked === true) s.push('checked');
-    else if (checked === 'mixed') s.push('mixed');
-
-    if (aria('selected') === 'true') s.push('selected');
-    const current = aria('current');
-    if (current && current !== 'false') s.push('current');
     if (aria('required') === 'true' || input.required === true) s.push('required');
-    if (aria('readonly') === 'true' || input.readOnly === true) s.push('readonly');
     const invalid = aria('invalid');
     if (invalid && invalid !== 'false') s.push('invalid');
     if (aria('busy') === 'true') s.push('busy');

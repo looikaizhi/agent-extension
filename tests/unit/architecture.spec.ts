@@ -92,6 +92,11 @@ const detect = {
   impure: (f: Facts) =>
     ['Date', 'process', 'performance'].some((n) => f.names.has(n)) ||
     f.calls.some((c) => ['now', 'random'].includes(lastSegment(c.chain))),
+  /** 渲染元素表的那个文件有没有把值级脱敏接上（S-03 第二层）。 */
+  //  `names` 里只要有 import 绑定就会命中，所以第二个条件问的是「真的调用了」，
+  //  不是「名字出现过」——只留一个 import 的文件正是这条守卫要抓的那种。
+  redacts: (f: Facts) =>
+    f.imports.some((i) => /security\/redact$/.test(i.module)) && f.calls.some((c) => lastSegment(c.chain) === 'redact'),
   runner: runnerImport,
 };
 
@@ -380,6 +385,20 @@ describe('架构护栏', () => {
     );
     expect(offending(pageSide, detect.extensionStorage)).toEqual([]);
     alive('扩展存储', detect.extensionStorage);
+  });
+
+  it('元素表的渲染必须接上值级脱敏（S-03 第二层）', () => {
+    // `isSensitive` 开头有一道 `entry` 闸门——只看输入类元素。它对「页面上*显示*出来的
+    // 密钥」完全无感，而可访问名会把那串东西原样带进表：`<button aria-label="复制 sk-…">`
+    // 的名字就是那串东西，名字只做长度截断。所以渲染那一步必须过 `redact`。
+    //
+    // 这一条是**绊线**，不是证明：它只挡住「把调用连同 import 一起删掉」。真正的门是
+    // `tests/unit/redact.spec.ts` 里「接入点」那一组——它把密钥塞进名字、标题、组标题、
+    // URL 与框架标题，再断言发出去的文本里一条都没有。那一组不关心内部怎么写，
+    // 所以挪动调用点不会让它误绿。
+    const render = scope('元素表渲染', (f) => f.endsWith(join('core', 'extractor', 'project.ts')));
+    expect(offending(render, (f) => !detect.redacts(f))).toEqual([]);
+    alive('值级脱敏', detect.redacts);
   });
 
   it('注进页面框架里的那段探针只许看尺寸：不碰 chrome.*，不碰存储，不碰密钥', () => {
@@ -982,6 +1001,10 @@ describe('架构守卫的反向验证：每一条都要能抓到已知违例', (
     expect(detect.keyNearLogs(on('console.log(cfg.apiKey)'))).toBe(true);
     expect(detect.keyNearLogs(on('broadcast({ type: "X", key: cfg.apiKey })'))).toBe(true);
     expect(detect.keyNearLogs(on('const headers = { Authorization: `Bearer ${cfg.apiKey}` };'))).toBe(false);
+    // 值级脱敏：import 与调用都在才算接上；只留其中一个都是「看起来接了」。
+    expect(detect.redacts(on("import { redact } from '@/core/security/redact';\nconst t = redact(it.name);"))).toBe(true);
+    expect(detect.redacts(on("import { redact } from '@/core/security/redact';\nconst t = it.name;"))).toBe(false);
+    expect(detect.redacts(on('const t = redact(it.name);'))).toBe(false);
   });
 });
 

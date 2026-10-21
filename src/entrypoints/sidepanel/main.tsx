@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { applyAppearance, type Appearance } from '@/shared/appearance';
 import { loadAppearance, onAppearanceChanged } from '@/shared/appearance-store';
+import { addHudFonts } from '@/shared/theme/fonts';
 import '@/shared/theme/tokens.css';
 import './panel.css';
 
@@ -15,6 +16,7 @@ const follow = (a: Appearance) => {
   unfollow = applyAppearance(document.documentElement, a);
 };
 
+addHudFonts(document);
 void loadAppearance().then((a) => {
   follow(a);
   onAppearanceChanged(follow);

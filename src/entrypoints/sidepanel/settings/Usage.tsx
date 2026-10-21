@@ -59,23 +59,25 @@ export function Usage({ calls, onBack }: { calls: readonly CallRecord[]; onBack:
               </span>
             </div>
             {cost.unknownCostCalls > 0 && (
-              <p className="callout warn">
-                <Icon name="warn" />
+              <p className="unreported">
+                <Icon name="warn" size={13} />
                 <span>{cost.unknownCostCalls} 次调用没返回用量，没算进合计</span>
               </p>
             )}
           </section>
 
-          <section className="card">
-            <div className="label">每次调用</div>
+          <section className="card calls-card">
+            <h3>每次调用</h3>
             <ol className="call-rows">
               {callRows(calls).map((r) => (
-                <li key={r.n}>
+                // A repair round's figure is on the call it repaired, so its
+                // whole row steps back.
+                <li key={r.n} className={r.usage === 'merged' ? 'merged' : ''}>
                   <span className="call-n">#{r.n}</span>
                   <span className="call-what">
                     {r.kind === 'primary' ? '主调用' : '修复'}
                     {r.usage === 'merged' && ` · 用量合并在 #${r.mergedInto}`}
-                    {r.usage && r.usage !== 'merged' && r.usage.estimated && <span className="chip warn">估算</span>}
+                    {r.usage && r.usage !== 'merged' && r.usage.estimated && <span className="estimated">估算</span>}
                   </span>
                   <span className={`call-num${r.usage === null ? ' warn' : ''}`}>
                     {r.usage === 'merged' ? '—' : r.usage === null ? '没返回用量' : `${n(r.usage.prompt)} + ${n(r.usage.completion)}`}
@@ -85,7 +87,7 @@ export function Usage({ calls, onBack }: { calls: readonly CallRecord[]; onBack:
             </ol>
           </section>
 
-          <p className="hint">估算值按字符数折算，只在端点没报用量时用。只算这个侧栏发出的调用。</p>
+          <p className="usage-foot">估算值按字符数折算，只在端点没报用量时用。只算这个侧栏发出的调用。</p>
         </>
       )}
     </div>

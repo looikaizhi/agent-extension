@@ -86,21 +86,22 @@ export function Conversation({
 
       {/* The turn that has not landed yet: what it has done so far, and what
           it is writing. Both are drafts — the host's entry replaces them. */}
-      {working && (
-        <div className="entry working">
-          <Thinking rounds={rounds} open live />
-          {draft ? (
-            <div className="draft">
-              <Prose text={draft} />
-            </div>
-          ) : (
-            <div className="dots">
-              <span className="spinner" />
-              {pending.kind === 'running_tool' ? '正在看页面…' : '正在想…'}
-            </div>
-          )}
-        </div>
-      )}
+      {working &&
+        (rounds.length > 0 || draft ? (
+          <div className="entry working">
+            <Thinking rounds={rounds} open live />
+            {draft && (
+              <div className="draft">
+                <Prose text={draft} />
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="entry working dots">
+            <span className="spinner" />
+            {pending.kind === 'running_tool' ? '正在看页面…' : '正在想…'}
+          </div>
+        ))}
       <div ref={endRef} />
     </div>
   );

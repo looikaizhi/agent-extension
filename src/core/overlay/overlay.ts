@@ -2,6 +2,7 @@ import { applyAppearance, type Appearance } from '@/shared/appearance';
 import { progressCells, stepLabels } from '@/shared/progress';
 import type { OverlayMessage } from '@/shared/protocol';
 import { readProse, type ProseInline, type ProseLine } from '@/shared/prose';
+import { addHudFonts } from '@/shared/theme/fonts';
 import tokens from '@/shared/theme/tokens.css?inline';
 import type { Rect } from '@/shared/types';
 import { bounds, PAD, placeCard, placePeek, veilPath } from './geometry';
@@ -128,6 +129,7 @@ export class Overlay {
     this.root = this.host.attachShadow({ mode: 'closed' });
     this.root.innerHTML = TEMPLATE;
     document.documentElement.appendChild(this.host);
+    addHudFonts(document);
 
     this.veil = this.root.querySelector('.veil')!;
     this.ringLayer = this.root.querySelector('.rings')!;
@@ -311,7 +313,7 @@ export class Overlay {
   private placeCard(rect: Rect | null, pointing: boolean): void {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const cw = Math.min(340, vw - 16);
+    const cw = Math.min(336, vw - 16);
     this.card.style.width = `${cw}px`;
     const at = placeCard(rect, vw, vh, cw, this.card.offsetHeight || 130);
     this.card.style.left = `${at.left}px`;
@@ -444,24 +446,26 @@ const NOTICE: Partial<Record<OverlayStatus, string>> = {
  */
 const svg = (paths: string) =>
   `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
-const ALERT = svg('<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5M12 16.5v.01"/>');
-const WARN = svg('<path d="M12 4L2.5 20h19L12 4z"/><path d="M12 10v4.5M12 17.5v.01"/>');
-const INFO = svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.01"/>');
+/** The side panel, as the browser toolbar draws it: where the guide is waiting. */
+const PANEL = svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>').replace('stroke-width="2.2"', 'stroke-width="2"');
 
 const NOTICE_ICON: Partial<Record<OverlayStatus, string>> = {
   offscreen_up: svg('<path d="M12 19V5"/><path d="M6 11l6-6 6 6"/>'),
   offscreen_down: svg('<path d="M12 5v14"/><path d="M6 13l6 6 6-6"/>'),
   occluded: svg('<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>'),
-  lost: ALERT,
+  // Looked for and not found.
+  lost: svg('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>'),
   // `settling` shows a spinner instead (CSS).
-  ambiguous: WARN,
+  // Several candidates, laid out side by side.
+  ambiguous: svg('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
 };
 
 const MESSAGE_ICON: Record<OverlayMessage['kind'], string> = {
   ask: svg('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .8-1 1.5v.4M12 16.8v.01"/>'),
   answer: svg('<path d="M4 5h16v11H9l-5 4V5z"/>'),
   cross_site: svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18"/>'),
-  note: INFO,
+  // The guide stopped here.
+  note: svg('<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>'),
 };
 
 /** 夜航's four corner marks, and its label over the target. */
@@ -505,9 +509,9 @@ const WAITING_FOR_PANEL_TEXT = '引导在等侧栏：模型要在侧栏里调用
  * Every colour, radius and typeface comes from the theme tokens (shared with the
  * side panel), keyed on `.theme`'s `data-style` / `data-shade` — switching the
  * look is `setAppearance`, never a second stylesheet. What differs between the
- * two looks in shape rather than colour is written under `[data-style]`. System
- * fonts only: an @font-face declared inside a shadow root does not apply, and
- * the page's CSP may block a font from anywhere else.
+ * two looks in shape rather than colour is written under `[data-style]`. 夜航's
+ * typefaces are added to the page's document (`theme/fonts.ts`): an @font-face
+ * declared inside a shadow root does not apply.
  */
 const TEMPLATE = `
 <style>${tokens}</style>
@@ -637,7 +641,11 @@ const TEMPLATE = `
 
   .row { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
   .kbd { margin-left: auto; font-family: var(--font-label); font-size: 10.5px; color: var(--o-muted); }
-  :host(:not([data-status='shown'])) .kbd { display: none; }
+  /* Said once, on the plain step: with text to type or the guide waiting on
+     the panel, the card has more pressing things to say. */
+  :host(:not([data-status='shown'])) .kbd,
+  .card:has(.value:not([hidden])) .kbd,
+  .card:has(.waiting:not([hidden])) .kbd { display: none; }
   button {
     font: inherit; font-size: 13px; height: 34px; padding: 0 14px; border-radius: var(--r-ctl); cursor: pointer;
     border: 1px solid var(--g-b); background: var(--g-bg); color: var(--g-fg);
@@ -649,7 +657,9 @@ const TEMPLATE = `
   button:focus-visible { outline: 2px solid var(--f-focus); outline-offset: 2px; }
 
   /* The message card: what is not a step, in the corner. */
-  .message { right: 16px; bottom: 16px; width: min(360px, calc(100vw - 32px)); padding: 14px 16px 16px; }
+  .message { right: 16px; bottom: 16px; width: min(336px, calc(100vw - 32px)); padding: 14px 16px 16px; }
+  /* Where a step would take the user, set like an address. */
+  .message[data-kind='cross_site'] .m-text strong { font-family: var(--font-mono); font-weight: 600; }
   .m-head { display: flex; align-items: center; gap: 8px; }
   .m-icon { width: 26px; height: 26px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
             border-radius: var(--r-icon); background: var(--acc-soft); color: var(--acc-t); }
@@ -688,7 +698,7 @@ const TEMPLATE = `
     <div class="detail"></div>
     <div class="value" hidden><span class="v-label">照着填</span><span class="v-text"></span></div>
     <div class="notice"><span class="spin"></span><span class="n-icon"></span><span class="n-text"></span></div>
-    <div class="waiting" hidden>${INFO}<span>${WAITING_FOR_PANEL_TEXT}</span></div>
+    <div class="waiting" hidden>${PANEL}<span>${WAITING_FOR_PANEL_TEXT}</span></div>
     <div class="looking"></div>
     <div class="row step-actions">
       <button class="btn-next primary" title="把焦点移到目标上，之后按回车或空格即可触发——扩展不代你操作">跳到目标</button>

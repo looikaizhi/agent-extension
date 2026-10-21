@@ -145,6 +145,9 @@ export function extract(profile: ExtractProfile, frameId = 0): LocatorView {
     const row = rowLabelOf(c.el);
     if (row) node.rowLabel = row;
 
+    const near = nearbyTextOf(c.el, name);
+    if (near) node.nearby = near;
+
     nodes.push(node);
     elOf.set(ref, c.el);
     refOf.set(c.el, ref);
@@ -340,6 +343,62 @@ function rowLabelOf(el: Element): string | undefined {
   for (const cell of row.querySelectorAll('th, td, [role="rowheader"], [role="gridcell"]')) {
     const t = textOf(cell);
     if (t) return t.slice(0, 40);
+  }
+  return undefined;
+}
+
+/** 旁注最多留这么长。够说清「这一块在讲什么」，不够把一段正文搬进来。 */
+const NEARBY_MAX = 80;
+
+/** 里面是不是装着可交互的东西。装着就不是「说明文字」，是另一片控件区。 */
+const HAS_CONTROL = 'a,button,input,select,textarea,summary,[role],[tabindex],[onclick],[contenteditable]';
+
+/**
+ * 一层容器里的「说明文字」：它的直接文字子节点，加上那些**自己不含任何控件**的子元素的文字。
+ *
+ * 两半都要。只取直接文字子节点在真实页面上几乎永远是空的——说明往往写在
+ * `<span>`、`<p>`、`<small>` 里，是控件的兄弟而不是祖先的裸文本。而放开到「整棵子树的文字」
+ * 就会把邻近的控件名一起卷进来，那正是 Playwright 的 aria 快照在表格上同一段字出现五次的原因。
+ * 「不含控件的子元素」这条线把两者分开：散文进来，控件区不进来。
+ */
+function proseOf(el: Element): string {
+  let out = '';
+  for (const n of el.childNodes) {
+    if (n.nodeType === 3) out += ` ${n.nodeValue ?? ''}`;
+    else if (n.nodeType === 1) {
+      const e = n as Element;
+      if (e.matches(HAS_CONTROL) || e.querySelector(HAS_CONTROL)) continue;
+      out += ` ${e.textContent ?? ''}`;
+    }
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}
+
+const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * 控件旁边那句说明：从它自己往上走，取**第一个**说出新东西的祖先。
+ *
+ * 三条约束，每一条都是为了不把 Playwright 那个坑重挖一遍：
+ *
+ * - **只算不含控件的那部分**（`proseOf`）——见上。
+ * - **只走 4 层**。「旁边」必须是旁边；走到 40 层就成了「这一页上有的字」。
+ * - **和名字互相包含就跳过继续往上**。`<a>Code</a>` 那一层的文字就是它自己的名字，
+ *   再写一遍只是重复；跳过去才可能拿到外面那句真正的说明。
+ */
+function nearbyTextOf(el: Element, name: string): string | undefined {
+  const n = norm(name);
+  let cur: Element | null = parentAcross(el);
+  for (let guard = 0; cur && guard < 4; guard++) {
+    // 这一层里除了它自己还有别的控件 —— 那这一层的散文说的是**这一组**，不是这一个，
+    // 到此为止。少了这一条，往上走总会撞到一个大到页面级的祖先，于是每一条控件后面
+    // 都挂着同一段标题：实测 354/355 条都拿到旁注、+2648 token，全是噪音。
+    // AgentOccam 说的「加信息反而变差」就是这个形状。
+    if (cur.querySelectorAll(HAS_CONTROL).length > 1) return undefined;
+    const t = proseOf(cur);
+    const c = norm(t);
+    if (c && (!n || (!c.includes(n) && !n.includes(c)))) return t.slice(0, NEARBY_MAX);
+    cur = parentAcross(cur);
   }
   return undefined;
 }

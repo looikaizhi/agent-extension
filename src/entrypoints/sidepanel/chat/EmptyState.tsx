@@ -18,7 +18,7 @@ export function EmptyState({ onExample }: { onExample: (text: string) => void })
   return (
     <div className="empty-state">
       <span className="empty-mark">
-        <Icon name="pointer" size={22} />
+        <Icon name="pointer" size={24} />
       </span>
       <div className="empty-title">想在这一页做什么？</div>
       <p>说出目标，我在页面上一步一步指给你；也可以直接问这一页的问题。我只指路，不替你点。</p>

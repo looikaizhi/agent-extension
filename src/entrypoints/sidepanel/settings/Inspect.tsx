@@ -21,13 +21,17 @@ export function Inspect({
 }: {
   tabId: number | null;
   onBack: () => void;
-  /** Point at one control the user chose by hand — a fixed plan of one step. */
-  onPointAt: (descriptor: ElementDescriptor, title: string, detail: string) => void;
+  /** Point at one control the user chose by hand — a fixed plan of one step.
+   *  `stay` keeps the panel on this page rather than going back to the
+   *  conversation. */
+  onPointAt: (descriptor: ElementDescriptor, title: string, detail: string, stay?: boolean) => void;
 }) {
   const [table, setTable] = useState<PromptTable | null>(null);
   const [note, setNote] = useState<Note | null>(null);
   const [inspecting, setInspecting] = useState(false);
   const [picked, setPicked] = useState<Picked | null>(null);
+  /** The table row last pointed at, lit on the page right now. */
+  const [lit, setLit] = useState<string | null>(null);
   const inspectingRef = useRef(false);
 
   const inspect = useCallback(
@@ -48,6 +52,7 @@ export function Inspect({
     setTable(null);
     setNote(null);
     setPicked(null);
+    setLit(null);
     return () => {
       if (tabId === null || !inspectingRef.current) return;
       inspectingRef.current = false;
@@ -76,6 +81,7 @@ export function Inspect({
     const res = await chrome.runtime.sendMessage({ type: 'PANEL_EXTRACT', tabId });
     if (!res?.ok) return setNote({ kind: 'error', text: `抽取失败：${res?.message ?? '没有响应'}` });
     setTable(res.data);
+    setLit(null);
     setNote(
       res.data.items.length === 0
         ? { kind: 'error', text: '本页面没有能识别的控件（可能是用 Canvas 画的）。' }
@@ -87,44 +93,55 @@ export function Inspect({
     <div className="settings-page">
       <PageBar title="检视页面" parent="工具与设置" backLabel="返回工具与设置" onBack={onBack} />
 
-      <div className="row">
-        <button onClick={() => void extract()} disabled={note?.kind === 'busy'}>
-          <Icon name="list" />
-          {table ? '重新抽取' : '抽取本页元素'}
-        </button>
-        <button className={inspecting ? 'primary' : ''} aria-pressed={inspecting} onClick={() => inspect(!inspecting)}>
-          <Icon name="crosshair" />
-          {inspecting ? '取消检视' : '检视元素'}
-        </button>
+      {/* 两个等宽的按钮，正在做的那件事是主按钮。检视中，它们和那句提示包在
+          一张卡里——提示说的正是这两个按钮此刻的状态。 */}
+      <div className={`inspect-tools${inspecting ? ' card' : ''}`}>
+        <div className="pair">
+          <button
+            className={table && !inspecting ? 'primary' : ''}
+            onClick={() => void extract()}
+            disabled={note?.kind === 'busy'}
+          >
+            <Icon name={table ? 'refresh' : 'list'} weight={table ? 2.2 : 2} />
+            {table ? '重新抽取' : '抽取本页元素'}
+          </button>
+          <button className={inspecting ? 'primary' : ''} aria-pressed={inspecting} onClick={() => inspect(!inspecting)}>
+            <Icon name="crosshair" />
+            {inspecting ? '取消检视' : '检视元素'}
+          </button>
+        </div>
+        {inspecting && (
+          <p className="callout">
+            <span className="pulse" />
+            <span>把鼠标移到页面上的控件，点击即选中。这一下点击不会传给页面。</span>
+          </p>
+        )}
       </div>
-      {inspecting && (
-        <p className="callout busy">
-          <span className="pulse" />
-          <span>把鼠标移到页面上的控件，点击即选中。这一下点击不会传给页面。</span>
-        </p>
-      )}
 
       {picked && (
-        <section className="card picked">
+        <section className={`card picked${picked.correct ? '' : ' ambiguous'}`}>
           <div className="picked-id">
             <span className="role">{picked.descriptor.role}</span>
             <span className="name">{picked.descriptor.name || '（无名称）'}</span>
           </div>
-          <p className={`outcome ${picked.correct ? 'ok' : 'warn'}`}>
-            <Icon name={picked.correct ? 'check' : 'warn'} />
-            {picked.correct
-              ? `唯一命中 · ${describeRung(picked.rung)}`
-              : `命中 ${picked.matches} 个——这个元素现在无法被唯一定位，照它引导可能指错。`}
+          <p className={`outcome ${picked.correct ? 'ok' : 'err'}`}>
+            <Icon name={picked.correct ? 'check' : 'alert'} size={13} weight={picked.correct ? 2.8 : 2.2} />
+            <span>
+              {picked.correct
+                ? `唯一命中 · ${describeRung(picked.rung)}`
+                : `命中 ${picked.matches} 个——这个元素现在无法被唯一定位，照它引导可能指错。`}
+            </span>
           </p>
-          <div className="row">
-            <button
-              className={picked.correct ? 'primary' : ''}
-              onClick={() => onPointAt(picked.descriptor, picked.descriptor.name || picked.descriptor.role, '（检视时选中）')}
-            >
-              <Icon name="pointer" />
-              {picked.correct ? '指给我' : '仍然指给我'}
+          {picked.correct ? (
+            <button className="primary" onClick={() => onPointAt(picked.descriptor, picked.descriptor.name || picked.descriptor.role, '（检视时选中）')}>
+              <Icon name="pointer" size={13} />
+              指给我
             </button>
-          </div>
+          ) : (
+            <button onClick={() => onPointAt(picked.descriptor, picked.descriptor.name || picked.descriptor.role, '（检视时选中）')}>
+              仍然指给我
+            </button>
+          )}
         </section>
       )}
 
@@ -144,9 +161,14 @@ export function Inspect({
       {table && table.items.length > 0 && (
         <NodeTable
           table={table}
+          lit={lit}
           onPick={(ref) => {
             const item = table.items.find((i) => i.ref === ref);
-            if (item) onPointAt(descriptorOf(item), item.name || item.role, '（从元素表直接选中）');
+            if (!item) return;
+            // Pointed at from the table, the user stays at the table: the row
+            // says it is the one lit on the page, and the next row is a click away.
+            setLit(ref);
+            onPointAt(descriptorOf(item), item.name || item.role, '（从元素表直接选中）', true);
           }}
         />
       )}
@@ -158,9 +180,9 @@ export function Inspect({
 function TableStats({ table, said }: { table: PromptTable; said: string }) {
   const s = table.stats;
   return (
-    <section className="card">
+    <section className="card stats-card">
       <p className="note ok">
-        <Icon name="check" />
+        <Icon name="check" size={13} weight={2.8} />
         {said}
       </p>
       <div className="tiles">

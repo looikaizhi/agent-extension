@@ -15,7 +15,7 @@ export function Progress({ index, total }: { index: number; total: number | null
   const cells = progressCells(index, total);
   const label = stepLabels(index, total);
   return (
-    <div className="progress">
+    <div className={`progress${cells.length === 1 ? ' single' : ''}`}>
       <div className="for-hud progress-hud">
         <span className="step-n">{label.hud}</span>
         <span className="bar" aria-hidden="true">
@@ -24,14 +24,14 @@ export function Progress({ index, total }: { index: number; total: number | null
           ))}
         </span>
       </div>
-      <div className="for-depth progress-depth">
+      <div className={`for-depth progress-depth${cells.length === 1 ? ' single' : ''}`}>
         <span className="stepper" aria-hidden="true">
           {cells.map((c, i) => (
             <Fragment key={i}>
               {i > 0 && <span className={`s-link ${c === 'cur' ? 'done' : c}`} />}
               {c !== 'more' && (
                 <span className={`s-node ${c}`}>
-                  {c === 'done' && <Icon name="check" size={11} />}
+                  {c === 'done' && <Icon name="check" size={12} weight={3} />}
                   {c === 'cur' && <span className="pip" />}
                 </span>
               )}

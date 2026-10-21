@@ -22,6 +22,8 @@
     "eval:sidepanel": "wxt build && node --experimental-transform-types --import ./evals/alias-loader-register.mjs evals/task/live-sidepanel-run.mjs"
   },
   "dependencies": {
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
     "dom-accessibility-api": "0.7.1",
     "downshift": "9.4.0",
     "react": "^19.2.0",

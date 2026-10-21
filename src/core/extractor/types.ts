@@ -17,6 +17,17 @@ export interface UINode {
   state?: UIState[];
   /** Nearest extracted landmark / heading ancestor. Feeds `PromptItem.path[0]`. */
   parent?: Ref;
+  /**
+   * 控件旁边那句说明——它所在的最小语义容器的**直接**文字子节点。
+   *
+   * 和 `rowLabel` 同一类东西：DOM 派生、必须在这里算、喂给投影。区别在于 `rowLabel`
+   * 回答「这是哪一行」，这个回答「这一块在讲什么」。
+   *
+   * **不递归**是这条的全部要害。Playwright 的 aria 快照在表格上爆掉，正是因为 accessible
+   * name 在 row / cell / link 每一层各重算一遍，同一段提交信息在一个表格行里出现五次。
+   * 只取直接文字子节点，一段字就只会出现在离它最近的那一层。
+   */
+  nearby?: string;
   /** Identity of the enclosing table row, if any. Feeds `PromptItem.path[1]`.
    *  DOM-derived, so it must be computed here even though `path` is assembled
    *  in `project()`. This is what separates GitHub's 14 identical row links. */
@@ -115,6 +126,21 @@ export interface PromptItem {
    *  headers rather than per-node fields — an order of magnitude cheaper. */
   path: readonly string[];
   state?: UIState[];
+  /** 控件旁边那句说明（`UINode.nearby`）。渲染成条目行末尾的 `· 说明`。 */
+  nearby?: string;
+  /**
+   * `path[0]` 的 ARIA role，仅当它来自一个地标时。
+   *
+   * 只影响渲染（`toPromptText` 把组标题写成 `navigation "Repository"`），**不进 `Descriptor`、
+   * 不进去重的键**——`scope` 仍然只用 `path` 的文字。这样分开是有意的：`bindStep` 的 scope 是
+   * 子串包含匹配，把 role 混进那根字符串会让一次跨快照重绑多出一个可能变化的因子，
+   * 而这条改动想买的只是「这一块是干什么的」这点语义。
+   *
+   * 为什么只有 `path[0]`：`pathOf` 里能带 role 的只有地标那一层，后面两层是标题文字与行标签。
+   * 没有名字的地标照旧不进 path——给 `<main>` 开一个组会让整页多一级缩进，
+   * 换来的只是一个词。
+   */
+  landmark?: string;
   /** Only when (path, role, name) is still not unique. */
   nth?: number;
   /**
